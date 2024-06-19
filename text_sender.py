@@ -1,19 +1,9 @@
-bl_info = {
-    "name": "Basic GPT-4 Integration with Context",
-    "blender": (3, 0, 0),
-    "category": "3D View",
-    "version": (1, 0, 0),
-    "location": "View3D > Tool Shelf",
-    "description": "Basic integration with GPT-4 for text output with context",
-    "warning": "",
-    "wiki_url": "",
-    "tracker_url": "",
-}
-
 import bpy
 import os
 import re
 import logging
+import math
+import mathutils
 from openai import OpenAI
 from dotenv import load_dotenv
 from bpy.props import StringProperty, PointerProperty, CollectionProperty
@@ -64,7 +54,7 @@ def generate_prompt(messages, current_instruction=None):
     conversation = "\n".join([f"{message['role']}: {message['content']}" for message in messages])
     prompt = f"历史对话记录如下：\n{conversation}"
     if current_instruction:
-        prompt += f"\n在我发给你的信息中，包含了我和你过去的历史对话，请尽量参考之前提到过的信息，现在，请根据当前指令提供回答：\n{current_instruction}"
+        prompt += f"\n在我发给你的信息中，包含了我和你过去的历史对话，请尽量参考之前提到过的信息。现在，请根据当前指令提供回答：\n{current_instruction}"
     return prompt
 
 def generate_text(messages, current_instruction=None):
@@ -72,7 +62,7 @@ def generate_text(messages, current_instruction=None):
         prompt = generate_prompt(messages, current_instruction)
         print(prompt)
         response = client.chat.completions.create(
-            model="gpt-4-turbo",
+            model="gpt-4o",
             messages=[{"role": "user", "content": prompt}],
             max_tokens=2560,
             temperature=1,
@@ -162,12 +152,199 @@ class GPT_PT_panel(Panel):
         layout.prop(scn.gpt_tool, "input_text")
         layout.operator("object.send_to_gpt")
 
-# 定义要注册的类
+# 额外功能：Model 操作和相机设置
+
+def reset_mesh_origin_to_bbx_center():
+    selected_objects = bpy.context.selected_objects
+
+    for obj in selected_objects:
+        bpy.context.view_layer.objects.active = obj
+        bpy.ops.object.location_clear()
+        bbx_corners = [obj.matrix_world @ mathutils.Vector(corner) for corner in obj.bound_box]
+        bbx_center = sum(bbx_corners, mathutils.Vector()) / 8
+        bpy.context.scene.cursor.location = bbx_center
+        bpy.ops.object.origin_set(type='ORIGIN_CURSOR', center='BOUNDS')
+        obj.location = (0, 0, 0)
+    bpy.context.scene.cursor.location = (0, 0, 0)
+
+def move_camera_backwards_by_percentage(percentage):
+    scene = bpy.context.scene
+    camera = scene.camera
+    selected_obj = bpy.context.selected_objects[0]
+    bbx_radius = max(selected_obj.dimensions) / 2
+    move_distance = bbx_radius * percentage
+    camera_direction = camera.matrix_world.to_quaternion() @ mathutils.Vector((0.0, 0.0, -1.0))
+    bpy.data.worlds["World"].node_tree.nodes["Background"].inputs['Color'].default_value = (1, 1, 1, 1)
+    bpy.data.worlds["World"].node_tree.nodes["Background"].inputs['Strength'].default_value = 1
+    camera.data.clip_start = bbx_radius * 0.1
+    camera.data.clip_end = bbx_radius * 100
+    camera.data.lens = 100
+
+def reset_camera(objects, camera):
+    bpy.context.scene.camera = camera
+    for area in bpy.context.screen.areas:
+        if area.type == 'VIEW_3D':
+            area.spaces[0].region_3d.view_perspective = 'CAMERA'
+            area.spaces[0].lock_camera = True
+            break
+    bpy.ops.view3d.camera_to_view_selected()
+    move_camera_backwards_by_percentage(-0.1)
+
+class RotateObjectCW_Z(Operator):
+    bl_idname = "model_viewer.rotate_object_cw_z"
+    bl_label = "Rotate Object CW (Z)"
+
+    def execute(self, context):
+        for obj in context.selected_objects:
+            obj.rotation_euler.z += math.radians(90)
+            bpy.context.view_layer.objects.active = obj
+            bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+        return {'FINISHED'}
+
+class RotateObjectCW_X(Operator):
+    bl_idname = "model_viewer.rotate_object_cw_x"
+    bl_label = "Rotate Object CW (X)"
+
+    def execute(self, context):
+        for obj in context.selected_objects:
+            obj.rotation_euler.x += math.radians(90)
+            bpy.context.view_layer.objects.active = obj
+            bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+        return {'FINISHED'}
+
+class RotateObjectCW_Y(Operator):
+    bl_idname = "model_viewer.rotate_object_cw_y"
+    bl_label = "Rotate Object CW (Y)"
+
+    def execute(self, context):
+        for obj in context.selected_objects:
+            obj.rotation_euler.y += math.radians(90)
+            bpy.context.view_layer.objects.active = obj
+            bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+        return {'FINISHED'}
+    
+class RotateObjectCW_X_Degree(Operator):
+    bl_idname = "model_viewer.rotate_object_cw_x_degree"
+    bl_label = "Rotate Object CW (X) by Degree"
+
+    def execute(self, context):
+        degree = context.scene.rotation_degree
+        for obj in context.selected_objects:
+            obj.rotation_euler.x += math.radians(degree)
+            bpy.context.view_layer.objects.active = obj
+            bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+        return {'FINISHED'}
+
+class RotateObjectCW_Y_Degree(Operator):
+    bl_idname = "model_viewer.rotate_object_cw_y_degree"
+    bl_label = "Rotate Object CW (Y) by Degree"
+
+    def execute(self, context):
+        degree = context.scene.rotation_degree
+        for obj in context.selected_objects:
+            obj.rotation_euler.y += math.radians(degree)
+            bpy.context.view_layer.objects.active = obj
+            bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+        return {'FINISHED'}
+
+class RotateObjectCW_Z_Degree(Operator):
+    bl_idname = "model_viewer.rotate_object_cw_z_degree"
+    bl_label = "Rotate Object CW (Z) by Degree"
+
+    def execute(self, context):
+        degree = context.scene.rotation_degree
+        for obj in context.selected_objects:
+            obj.rotation_euler.z += math.radians(degree)
+            bpy.context.view_layer.objects.active = obj
+            bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+        return {'FINISHED'}
+
+class ResetObjectLocation(Operator):
+    bl_idname = "model_viewer.reset_object_location"
+    bl_label = "Reset Object Location"
+
+    def execute(self, context):
+        reset_mesh_origin_to_bbx_center()
+        return {'FINISHED'}
+
+class ApplyScale(Operator):
+    bl_idname = "model_viewer.apply_scale"
+    bl_label = "Apply Scale"
+
+    def execute(self, context):
+        scale_percentage = context.scene.model_scale_percentage
+        scale_factor = scale_percentage / 100
+
+        for obj in context.selected_objects:
+            obj.scale = (scale_factor, scale_factor, scale_factor)
+            bpy.context.view_layer.objects.active = obj
+            bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+
+        if context.selected_objects:
+            dimensions = context.selected_objects[0].dimensions
+            context.scene.model_dimensions = f"{dimensions.x:.2f} x {dimensions.y:.2f} x {dimensions.z:.2f}"
+
+        context.scene.model_scale_percentage = 100
+        return {'FINISHED'}
+
+def update_model_dimensions(self, context):
+    scale_percentage = context.scene.model_scale_percentage
+    scale_factor = scale_percentage / 100
+
+    for obj in context.selected_objects:
+        dimensions = obj.dimensions
+        scaled_dimensions = dimensions * scale_factor
+        context.scene.model_dimensions = f"{scaled_dimensions.x:.2f} x {scaled_dimensions.y:.2f} x {scaled_dimensions.z:.2f}"
+
+class ModelViewerPanel(Panel):
+    bl_label = "Model Viewer"
+    bl_idname = "OBJECT_PT_model_viewer"
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_category = 'Tool'
+
+    def draw(self, context):
+        layout = self.layout
+        scene = context.scene
+        
+        row = layout.row()
+        row.operator("model_viewer.rotate_object_cw_z", text="顺时针90 (Z)")
+        row.operator("model_viewer.rotate_object_cw_x", text="顺时针90 (X)")
+        row.operator("model_viewer.rotate_object_cw_y", text="顺时针90 (Y)")
+        layout.operator("model_viewer.reset_object_location", text="重置中心")
+
+        row = layout.row()
+        row.prop(scene, "model_scale_percentage", text="Scale (%)")
+
+        row = layout.row()
+        row.label(text=f"Dimensions: {scene.model_dimensions}")
+
+        row = layout.row()
+        row.operator("model_viewer.apply_scale", text="Apply Scale")
+
+        row = layout.row()
+        row.prop(scene, "rotation_degree", text="Rotation Degree")
+        row = layout.row()
+        row.operator("model_viewer.rotate_object_cw_x_degree", text="Rotate X")
+        row.operator("model_viewer.rotate_object_cw_y_degree", text="Rotate Y")
+        row.operator("model_viewer.rotate_object_cw_z_degree", text="Rotate Z")
+
+
+# 注册和注销类
 classes = (
     GPTMessage,
     GPTProperties,
     OBJECT_OT_send_to_gpt,
     GPT_PT_panel,
+    RotateObjectCW_X,
+    RotateObjectCW_Y,
+    RotateObjectCW_Z,
+    RotateObjectCW_X_Degree,
+    RotateObjectCW_Y_Degree,
+    RotateObjectCW_Z_Degree,
+    ResetObjectLocation,
+    ApplyScale,
+    ModelViewerPanel,
 )
 
 def register():
@@ -175,8 +352,22 @@ def register():
         for cls in classes:
             bpy.utils.register_class(cls)
         bpy.types.Scene.gpt_tool = PointerProperty(type=GPTProperties)  # 添加自定义属性组到场景
-        # 初始化对话历史，确保包含全局提示词
-        initialize_conversation(bpy.context.scene.gpt_tool)
+        bpy.types.Scene.model_scale_percentage = bpy.props.FloatProperty(
+            name="Model Scale Percentage",
+            default=100.0,
+            min=0.01,
+            max=10000.0,
+            update=update_model_dimensions
+        )
+        bpy.types.Scene.model_dimensions = bpy.props.StringProperty(
+            name="Model Dimensions",
+            default=""
+        )
+        bpy.types.Scene.rotation_degree = bpy.props.FloatProperty(
+            name="Rotation Degree",
+            description="Degree of rotation",
+            default=0.0
+        )
         logger.info("Registered classes successfully.")
     except Exception as e:
         logger.error(f"Error registering classes: {e}")
@@ -185,10 +376,17 @@ def unregister():
     try:
         for cls in classes:
             bpy.utils.unregister_class(cls)
-        del bpy.types.Scene.gpt_tool  # 从场景中删除自定义属性组
+        del bpy.types.Scene.gpt_tool
+        del bpy.types.Scene.model_scale_percentage
+        del bpy.types.Scene.model_dimensions
+        del bpy.types.Scene.rotation_degree
         logger.info("Unregistered classes successfully.")
     except Exception as e:
         logger.error(f"Error unregistering classes: {e}")
 
 if __name__ == "__main__":
+    try:
+        unregister()
+    except:
+        pass
     register()
