@@ -1,144 +1,194 @@
 bl_info = {
-    "name": "GPT-4 Model Adder with Streaming",  # 插件名称
-    "blender": (3, 0, 0),  # 支持的Blender版本
-    "category": "3D View",  # 插件分类
-    "version": (1, 0, 0),  # 插件版本
-    "location": "View3D > Tool Shelf",  # 插件位置
-    "description": "Add a new model based on GPT-4 input with streaming support",  # 插件描述
-    "warning": "",  # 插件警告信息
-    "wiki_url": "",  # 插件文档URL
-    "tracker_url": "",  # 插件问题追踪URL
+    "name": "Basic GPT-4 Integration with Context",
+    "blender": (3, 0, 0),
+    "category": "3D View",
+    "version": (1, 0, 0),
+    "location": "View3D > Tool Shelf",
+    "description": "Basic integration with GPT-4 for text output with context",
+    "warning": "",
+    "wiki_url": "",
+    "tracker_url": "",
 }
 
-import bpy  # 导入Blender的Python接口
-import os  # 导入操作系统接口
-import re  # 导入正则表达式库
-import openai  # 导入OpenAI接口
-from openai import OpenAI  # 从OpenAI库中导入OpenAI类
-from bpy.props import StringProperty, PointerProperty  # 导入Blender属性定义
-from bpy.types import Panel, Operator, PropertyGroup  # 导入Blender类型
-from dotenv import load_dotenv  # 导入dotenv库以加载环境变量
+import bpy
+import os
+import re
+import logging
+from openai import OpenAI
+from dotenv import load_dotenv
+from bpy.props import StringProperty, PointerProperty, CollectionProperty
+from bpy.types import Panel, Operator, PropertyGroup
+
+# 设置日志记录
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 # 加载环境变量
 load_dotenv(dotenv_path="D:/Tencent_Supernova/code/.env")
-api_key = os.getenv("OPENAI_API_KEY")  # 从环境变量中获取API密钥
-client = OpenAI(api_key=api_key)  # 创建OpenAI客户端
-openai.api_key = api_key  # 设置OpenAI API密钥
+api_key = os.getenv("OPENAI_API_KEY")
+client = OpenAI(api_key=api_key)
+
+# 定义全局提示词
+GLOBAL_PROMPT = """
+你将充当一个智能助手，需要根据用户的指令提供相应的回答。在执行任何操作时，请参考对话历史中提到的内容和上下文。请注意以下几点：
+
+1. 所有的回答都应基于对话历史，并尽量参考之前提到过的信息。
+2. 如果我明确要求生成 Blender 指令，返回的文本应仅包含 Blender 命令，不要包含任何额外的描述性文本、符号或注释。
+3. 在没有明确要求生成 Blender 指令的情况下，你可以提供详细的回答和解释，但请确保回答的内容与对话历史和上下文一致。
+
+例如，如果我要求生成 Blender 指令，你应返回：
+bpy.ops.object.select_all(action='SELECT')
+bpy.ops.object.delete(use_global=False)
+bpy.ops.mesh.primitive_cylinder_add(location=(0, 0, 0))
+"""
+
+class GPTMessage(PropertyGroup):
+    role: StringProperty(name="Role")
+    content: StringProperty(name="Content")
 
 class GPTProperties(PropertyGroup):
     input_text: StringProperty(
-        name="Input Text",  # 属性名称
-        description="Enter command to add a new model"  # 属性描述
+        name="Input Text",
+        description="Enter text to send to GPT-4"
     )
-    my_string: StringProperty(
-        name="Input Text",  # 属性名称
-        description="Enter some text here"  # 属性描述
-    )
+    messages: CollectionProperty(type=GPTMessage)
 
-class OBJECT_OT_gpt_button(Operator):
-    bl_idname = "object.gpt_button"  # 操作ID
-    bl_label = "Add Model"  # 操作标签
+def initialize_conversation(gpt_tool):
+    # 检查对话历史中是否包含全局提示词，如果没有则添加
+    if not any(msg.content == GLOBAL_PROMPT.strip() for msg in gpt_tool.messages):
+        system_message = gpt_tool.messages.add()
+        system_message.role = "system"
+        system_message.content = GLOBAL_PROMPT.strip()
 
-    def sanitize_command(self, command):
-        sanitized_command = re.sub(r'[^\x00-\x7F]+', '', command)  # 移除非ASCII字符
-        sanitized_command = sanitized_command.replace('“', '"').replace('”', '"').replace('‘', "'").replace('’', "'")  # 替换特殊引号
-        return sanitized_command
+def generate_prompt(messages, current_instruction=None):
+    conversation = "\n".join([f"{message['role']}: {message['content']}" for message in messages])
+    prompt = f"历史对话记录如下：\n{conversation}"
+    if current_instruction:
+        prompt += f"\n在我发给你的信息中，包含了我和你过去的历史对话，请尽量参考之前提到过的信息，现在，请根据当前指令提供回答：\n{current_instruction}"
+    return prompt
 
-    def execute_blender_command(self, command):
-        try:
-            sanitized_command = self.sanitize_command(command)  # 清理命令
-            exec(sanitized_command, {'bpy': bpy})  # 执行Blender命令
-            self.report({'INFO'}, "Model added successfully")  # 报告成功信息
-        except Exception as e:
-            self.report({'ERROR'}, f"Failed to add model: {e}")  # 报告错误信息
-
-    def execute(self, context):
-        scn = context.scene
-        input_text = scn.gpt_tool.input_text  # 获取用户输入的文本
-        prompt = f"生成一个Blender命令来添加一个模型：{input_text}"  # 创建提示文本
-
+def generate_text(messages, current_instruction=None):
+    try:
+        prompt = generate_prompt(messages, current_instruction)
+        print(prompt)
         response = client.chat.completions.create(
-            model="gpt-4",  # 使用GPT-4模型
-            messages=[{"role": "user", "content": prompt}],  # 发送用户消息
-            max_tokens=2560,  # 最大令牌数
-            temperature=1,  # 采样温度
-            top_p=1,  # 核心采样参数
-            frequency_penalty=0,  # 频率惩罚
-            presence_penalty=0,  # 存在惩罚
-            stream=True  # 启用流式响应
+            model="gpt-4-turbo",
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=2560,
+            temperature=1,
+            top_p=1,
+            frequency_penalty=0,
+            presence_penalty=0
         )
+        return response.choices[0].message.content
+    except Exception as e:
+        logger.error(f"Error generating text from GPT-4: {e}")
+        return "Error generating response from GPT-4."
 
-        command_buffer = ""
-        try:
-            for chunk in response:  # 处理流式响应
-                if hasattr(chunk.choices[0].delta, 'content'):
-                    command_buffer += chunk.choices[0].delta.content
-                    if '\n' in command_buffer:
-                        commands = command_buffer.split('\n')
-                        for cmd in commands[:-1]:
-                            self.execute_blender_command(cmd)
-                        command_buffer = commands[-1]
-            # 处理剩余的命令
-            if command_buffer:
-                self.execute_blender_command(command_buffer)
-        except Exception as e:
-            self.report({'ERROR'}, f"Streaming error: {e}")  # 报告流式错误
+def sanitize_command(command):
+    try:
+        # 移除Markdown代码块标记
+        if command.startswith("```") and command.endswith("```"):
+            command = command[3:-3].strip()
+            if command.startswith("python"):
+                command = command[6:].strip()
+        # 移除所有非ASCII字符并处理引号问题
+        sanitized_command = re.sub(r'[^\x00-\x7F]+', '', command)
+        sanitized_command = sanitized_command.replace('“', '"').replace('”', '"').replace('‘', "'").replace('’', "'")
+        return sanitized_command
+    except Exception as e:
+        logger.error(f"Error sanitizing command: {e}")
+        return command
 
-        return {'FINISHED'}
+def execute_blender_command(command):
+    try:
+        sanitized_command = sanitize_command(command)
+        logger.info(f"Executing sanitized command: {sanitized_command}")
+        exec(sanitized_command, {'bpy': bpy})
+        logger.info("命令执行成功")
+    except Exception as e:
+        logger.error(f"命令执行失败: {e}")
 
-class OBJECT_OT_send_button(Operator):
-    bl_idname = "object.send_button"  # 操作ID
-    bl_label = "Send"  # 操作标签
+class OBJECT_OT_send_to_gpt(Operator):
+    bl_idname = "object.send_to_gpt"
+    bl_label = "Send to GPT-4"
 
     def execute(self, context):
-        scn = context.scene
-        print(scn.gpt_tool.my_string)  # 打印用户输入的文本
+        try:
+            scn = context.scene
+            gpt_tool = scn.gpt_tool
+            input_text = gpt_tool.input_text
+            
+            if input_text:
+                # 初始化对话历史，确保包含全局提示词
+                initialize_conversation(gpt_tool)
+                
+                # 将用户输入添加到对话历史中
+                user_message = gpt_tool.messages.add()
+                user_message.role = "user"
+                user_message.content = input_text
+                
+                # 将对话历史转换为列表
+                messages = [{"role": msg.role, "content": msg.content} for msg in gpt_tool.messages]
+                logger.info(f"Messages: {messages}")
+                
+                # 生成GPT-4响应
+                response_text = generate_text(messages, input_text)
+                logger.info(f"GPT-4 Response: {response_text}")
+                
+                # 将GPT-4响应添加到对话历史中
+                gpt_message = gpt_tool.messages.add()
+                gpt_message.role = "assistant"
+                gpt_message.content = response_text
+                
+                # 执行GPT-4生成的Blender指令
+                execute_blender_command(response_text)
+            else:
+                logger.warning("No input text provided.")
+        except Exception as e:
+            logger.error(f"Error in OBJECT_OT_send_to_gpt.execute: {e}")
         return {'FINISHED'}
 
 class GPT_PT_panel(Panel):
-    bl_label = "GPT-4 Model Adder with Streaming"  # 面板标签
-    bl_idname = "GPT_PT_panel"  # 面板ID
-    bl_space_type = 'VIEW_3D'  # 面板空间类型
-    bl_region_type = 'UI'  # 面板区域类型
-    bl_category = 'Tool'  # 面板分类
+    bl_label = "GPT-4 Integration with Context"
+    bl_idname = "GPT_PT_panel"
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_category = 'Tool'
 
     def draw(self, context):
         layout = self.layout
         scn = context.scene
-        layout.prop(scn.gpt_tool, "input_text")  # 添加输入框
-        layout.operator(OBJECT_OT_gpt_button.bl_idname)  # 添加按钮操作
-
-class TEXT_PT_panel(Panel):
-    bl_label = "Text Input Panel"  # 面板标签
-    bl_idname = "TEXT_PT_panel"  # 面板ID
-    bl_space_type = 'VIEW_3D'  # 面板空间类型
-    bl_region_type = 'UI'  # 面板区域类型
-    bl_category = 'Tool'  # 面板分类
-    
-    def draw(self, context):
-        layout = self.layout
-        scn = context.scene
-        layout.prop(scn.gpt_tool, "my_string")  # 添加输入框
-        layout.operator(OBJECT_OT_send_button.bl_idname)  # 添加按钮操作
+        layout.prop(scn.gpt_tool, "input_text")
+        layout.operator("object.send_to_gpt")
 
 # 定义要注册的类
 classes = (
+    GPTMessage,
     GPTProperties,
-    OBJECT_OT_gpt_button,
+    OBJECT_OT_send_to_gpt,
     GPT_PT_panel,
-    OBJECT_OT_send_button,
-    TEXT_PT_panel,
 )
 
 def register():
-    for cls in classes:
-        bpy.utils.register_class(cls)  # 注册类
-    bpy.types.Scene.gpt_tool = PointerProperty(type=GPTProperties)  # 在场景中添加自定义属性
+    try:
+        for cls in classes:
+            bpy.utils.register_class(cls)
+        bpy.types.Scene.gpt_tool = PointerProperty(type=GPTProperties)  # 添加自定义属性组到场景
+        # 初始化对话历史，确保包含全局提示词
+        initialize_conversation(bpy.context.scene.gpt_tool)
+        logger.info("Registered classes successfully.")
+    except Exception as e:
+        logger.error(f"Error registering classes: {e}")
 
 def unregister():
-    for cls in classes:
-        bpy.utils.unregister_class(cls)  # 注销类
-    del bpy.types.Scene.gpt_tool  # 删除自定义属性
+    try:
+        for cls in classes:
+            bpy.utils.unregister_class(cls)
+        del bpy.types.Scene.gpt_tool  # 从场景中删除自定义属性组
+        logger.info("Unregistered classes successfully.")
+    except Exception as e:
+        logger.error(f"Error unregistering classes: {e}")
 
 if __name__ == "__main__":
-    register()  # 执行注册函数
+    register()
