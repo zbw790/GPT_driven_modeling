@@ -15,14 +15,20 @@ from model_viewer_module import (
     ApplyScale, ModelViewerPanel, update_model_dimensions
 )
 from rotation_module import (
-    RotateObjectCW_X_Degree, RotateObjectCW_Y_Degree, RotateObjectCW_Z_Degree, RotateObjectCW_X, RotateObjectCW_Y, RotateObjectCW_Z, RotatePanel
+    RotateObjectCW_X_Degree, RotateObjectCW_Y_Degree, RotateObjectCW_Z_Degree, RotateObjectCW_X, RotateObjectCW_Y, RotateObjectCW_Z, RotatePanel, MirrorObject_X, MirrorObject_Y, MirrorObject_Z
 )
 from location_module import (
     ResetObjectLocation, LocationPanel
 )
+from boolean_operations_module import (
+    BooleanUnionOperator, BooleanDifferenceOperator, BooleanIntersectOperator, BooleanPanel
+)
+from geometry_module import (
+    GeometryProperties, MoveGeometryWithoutAffectingOrigin, ResetGeometryToOrigin, GeometryPanel
+)
 
 # 设置日志记录
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname=s - %(message)s')
 logger = logging.getLogger(__name__)
 
 classes = (
@@ -37,10 +43,21 @@ classes = (
     RotateObjectCW_Y_Degree,
     RotateObjectCW_Z_Degree,
     RotatePanel,
+    MirrorObject_X,
+    MirrorObject_Y,
+    MirrorObject_Z,
     ApplyScale,
     ModelViewerPanel,
     ResetObjectLocation,
-    LocationPanel
+    LocationPanel,
+    BooleanUnionOperator,
+    BooleanDifferenceOperator,
+    BooleanIntersectOperator,
+    BooleanPanel,
+    GeometryProperties,
+    MoveGeometryWithoutAffectingOrigin,
+    ResetGeometryToOrigin,
+    GeometryPanel
 )
 
 def register():
@@ -64,6 +81,7 @@ def register():
             description="Degree of rotation",
             default=0.0
         )
+        bpy.types.Scene.geometry_props = bpy.props.PointerProperty(type=GeometryProperties)
         logger.info("Registered all classes successfully.")
     except Exception as e:
         logger.error(f"Error registering classes: {e}")
@@ -81,6 +99,8 @@ def unregister():
             del bpy.types.Scene.model_dimensions
         if hasattr(bpy.types.Scene, "rotation_degree"):
             del bpy.types.Scene.rotation_degree
+        if hasattr(bpy.types.Scene, "geometry_props"):
+            del bpy.types.Scene.geometry_props
         logger.info("Unregistered all classes successfully.")
     except Exception as e:
         logger.error(f"Error unregistering classes: {e}")
