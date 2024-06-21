@@ -48,10 +48,17 @@ def sanitize_command(command):
             command = command[3:-3].strip()
             if command.startswith("python"):
                 command = command[6:].strip()
+        
         # 移除所有非ASCII字符并处理引号问题
         sanitized_command = re.sub(r'[^\x00-\x7F]+', '', command)
         sanitized_command = sanitized_command.replace('“', '"').replace('”', '"').replace('‘', "'").replace('’', "'")
-        return sanitized_command
+        
+        # 分行处理多行命令
+        sanitized_lines = sanitized_command.split('\n')
+        cleaned_lines = [line.strip() for line in sanitized_lines if line.strip()]
+        cleaned_command = '\n'.join(cleaned_lines)
+        
+        return cleaned_command
     except Exception as e:
         logger.error(f"Error sanitizing command: {e}")
         return command

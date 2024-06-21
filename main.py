@@ -26,9 +26,15 @@ from boolean_operations_module import (
 from geometry_module import (
     GeometryProperties, MoveGeometryWithoutAffectingOrigin, ResetGeometryToOrigin, GeometryPanel
 )
+from subdivision_decimate_module import (
+    SubdivisionDecimateProperties, ApplySubdivisionSurface, ApplyDecimate, SubdivisionDecimatePanel
+)
+from align_module import (
+    AlignProperties, SetAlignPointOperator, AlignObjectsOperator, AlignPanel
+)
 
 # 设置日志记录
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname=s - %(message)s')
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 classes = (
@@ -57,7 +63,15 @@ classes = (
     GeometryProperties,
     MoveGeometryWithoutAffectingOrigin,
     ResetGeometryToOrigin,
-    GeometryPanel
+    GeometryPanel,
+    SubdivisionDecimateProperties,
+    ApplySubdivisionSurface,
+    ApplyDecimate,
+    SubdivisionDecimatePanel,
+    AlignProperties,
+    SetAlignPointOperator,
+    AlignObjectsOperator,
+    AlignPanel
 )
 
 def register():
@@ -82,6 +96,9 @@ def register():
             default=0.0
         )
         bpy.types.Scene.geometry_props = bpy.props.PointerProperty(type=GeometryProperties)
+        bpy.types.Scene.subdivision_decimate_props = bpy.props.PointerProperty(type=SubdivisionDecimateProperties)
+        bpy.types.Scene.align_props = bpy.props.PointerProperty(type=AlignProperties)
+        bpy.types.Scene.align_point_set = bpy.props.IntProperty(default=1)
         logger.info("Registered all classes successfully.")
     except Exception as e:
         logger.error(f"Error registering classes: {e}")
@@ -101,6 +118,12 @@ def unregister():
             del bpy.types.Scene.rotation_degree
         if hasattr(bpy.types.Scene, "geometry_props"):
             del bpy.types.Scene.geometry_props
+        if hasattr(bpy.types.Scene, "subdivision_decimate_props"):
+            del bpy.types.Scene.subdivision_decimate_props
+        if hasattr(bpy.types.Scene, "align_props"):
+            del bpy.types.Scene.align_props
+        if hasattr(bpy.types.Scene, "align_point_set"):
+            del bpy.types.Scene.align_point_set
         logger.info("Unregistered all classes successfully.")
     except Exception as e:
         logger.error(f"Error unregistering classes: {e}")
