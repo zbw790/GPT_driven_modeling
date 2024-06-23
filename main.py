@@ -12,7 +12,7 @@ from gpt_module import (
     GPTMessage, GPTProperties, initialize_conversation, generate_text, OBJECT_OT_send_to_gpt, GPT_PT_panel
 )
 from model_viewer_module import (
-    ApplyScale, ModelViewerPanel, update_model_dimensions
+    ApplyScale, ModelViewerPanel, SaveScreenshotOperator, update_model_dimensions
 )
 from rotation_module import (
     RotateObjectCW_X_Degree, RotateObjectCW_Y_Degree, RotateObjectCW_Z_Degree, RotateObjectCW_X, RotateObjectCW_Y, RotateObjectCW_Z, RotatePanel, MirrorObject_X, MirrorObject_Y, MirrorObject_Z
@@ -54,6 +54,7 @@ classes = (
     MirrorObject_Z,
     ApplyScale,
     ModelViewerPanel,
+    SaveScreenshotOperator,
     ResetObjectLocation,
     LocationPanel,
     BooleanUnionOperator,
@@ -88,7 +89,7 @@ def register():
         )
         bpy.types.Scene.model_dimensions = bpy.props.StringProperty(
             name="Model Dimensions",
-            default=""
+            default="0.00 x 0.00 x 0.00"
         )
         bpy.types.Scene.rotation_degree = bpy.props.FloatProperty(
             name="Rotation Degree",
