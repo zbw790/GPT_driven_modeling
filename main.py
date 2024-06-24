@@ -2,6 +2,7 @@ import sys
 import os
 import bpy
 import logging
+import requests
 
 # 确保项目根目录在Python的模块搜索路径中
 project_path = os.path.abspath(os.path.dirname(__file__))
@@ -9,7 +10,7 @@ if project_path not in sys.path:
     sys.path.append(project_path)
 
 from gpt_module import (
-    GPTMessage, GPTProperties, initialize_conversation, generate_text, OBJECT_OT_send_to_gpt, GPT_PT_panel
+    OBJECT_OT_send_to_gpt, GPT_PT_panel, OBJECT_OT_send_screenshots_to_gpt
 )
 from model_viewer_module import (
     ApplyScale, ModelViewerPanel, SaveScreenshotOperator, update_model_dimensions
@@ -32,16 +33,29 @@ from subdivision_decimate_module import (
 from align_module import (
     AlignProperties, SetAlignPointOperator, AlignObjectsOperator, AlignPanel
 )
+from claude_module import (
+    OBJECT_OT_send_to_claude, OBJECT_OT_send_screenshots_to_claude, CLAUDE_PT_panel
+)
+from LLM_common_utils import (
+    Message, Properties
+)
 
 # 设置日志记录
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+# 定义API URL
+API_URL = "https://api.openai.com/v1/chat/completions"
+
 classes = (
-    GPTMessage,
-    GPTProperties,
+    Message,
+    Properties,
     OBJECT_OT_send_to_gpt,
+    OBJECT_OT_send_screenshots_to_gpt,
     GPT_PT_panel,
+    OBJECT_OT_send_to_claude,
+    OBJECT_OT_send_screenshots_to_claude,
+    CLAUDE_PT_panel,
     RotateObjectCW_X,
     RotateObjectCW_Y,
     RotateObjectCW_Z,
@@ -79,7 +93,8 @@ def register():
     try:
         for cls in classes:
             bpy.utils.register_class(cls)
-        bpy.types.Scene.gpt_tool = bpy.props.PointerProperty(type=GPTProperties)
+        bpy.types.Scene.gpt_tool = bpy.props.PointerProperty(type=Properties)
+        bpy.types.Scene.claude_tool = bpy.props.PointerProperty(type=Properties)
         bpy.types.Scene.model_scale_percentage = bpy.props.FloatProperty(
             name="Model Scale Percentage",
             default=100.0,
@@ -111,6 +126,8 @@ def unregister():
                 bpy.utils.unregister_class(cls)
         if hasattr(bpy.types.Scene, "gpt_tool"):
             del bpy.types.Scene.gpt_tool
+        if hasattr(bpy.types.Scene, "claude_tool"):
+            del bpy.types.Scene.claude_tool
         if hasattr(bpy.types.Scene, "model_scale_percentage"):
             del bpy.types.Scene.model_scale_percentage
         if hasattr(bpy.types.Scene, "model_dimensions"):

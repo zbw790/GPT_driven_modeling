@@ -1,95 +1,29 @@
 import bpy
+import requests
+import base64
 import os
 import logging
 import re
+import traceback
+import textwrap
 from openai import OpenAI
 from dotenv import load_dotenv
+from bpy.types import Operator, Panel, PropertyGroup
 from bpy.props import StringProperty, PointerProperty, CollectionProperty
-from bpy.types import Panel, Operator, PropertyGroup
+from LLM_common_utils import *
 
 # 设置日志记录
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 # 加载环境变量
-load_dotenv(dotenv_path="D:/Tencent_Supernova/code/.env")
+load_dotenv(dotenv_path="D:/Tencent_Supernova/api/.env")
 api_key = os.getenv("OPENAI_API_KEY")
 client = OpenAI(api_key=api_key)
-
-# 定义全局提示词
-GLOBAL_PROMPT = """
-你将充当一个智能助手，需要根据用户的指令提供相应的回答。在执行任何操作时，请参考对话历史中提到的内容和上下文。请注意以下几点：
-
-1. 所有的回答都应基于对话历史，并尽量参考之前提到过的信息。
-2. 如果我明确要求生成 Blender 指令，返回的文本应仅包含 Blender 命令，不要包含任何额外的描述性文本、符号或注释。
-3. 在没有明确要求生成 Blender 指令的情况下，你可以提供详细的回答和解释，但请确保回答的内容与对话历史和上下文一致。
-
-例如，如果我要求生成 Blender 指令，你应返回：
-bpy.ops.object.select_all(action='SELECT')
-bpy.ops.object.delete(use_global=False)
-bpy.ops.mesh.primitive_cylinder_add(location=(0, 0, 0))
-"""
-
-class GPTMessage(bpy.types.PropertyGroup):
-    role: StringProperty(name="Role")
-    content: StringProperty(name="Content")
-
-class GPTProperties(bpy.types.PropertyGroup):
-    input_text: StringProperty(
-        name="Input Text",
-        description="Enter text to send to GPT-4"
-    )
-    messages: CollectionProperty(type=GPTMessage)
-
-def sanitize_command(command):
-    try:
-        # 移除Markdown代码块标记
-        if command.startswith("```") and command.endswith("```"):
-            command = command[3:-3].strip()
-            if command.startswith("python"):
-                command = command[6:].strip()
-        
-        # 移除所有非ASCII字符并处理引号问题
-        sanitized_command = re.sub(r'[^\x00-\x7F]+', '', command)
-        sanitized_command = sanitized_command.replace('“', '"').replace('”', '"').replace('‘', "'").replace('’', "'")
-        
-        # 分行处理多行命令
-        sanitized_lines = sanitized_command.split('\n')
-        cleaned_lines = [line.strip() for line in sanitized_lines if line.strip()]
-        cleaned_command = '\n'.join(cleaned_lines)
-        
-        return cleaned_command
-    except Exception as e:
-        logger.error(f"Error sanitizing command: {e}")
-        return command
-
-def execute_blender_command(command):
-    try:
-        sanitized_command = sanitize_command(command)
-        logger.info(f"Executing sanitized command: {sanitized_command}")
-        exec(sanitized_command, {'bpy': bpy})
-        logger.info("命令执行成功")
-    except Exception as e:
-        logger.error(f"命令执行失败: {e}")
-
-def initialize_conversation(gpt_tool):
-    # 检查对话历史中是否包含全局提示词，如果没有则添加
-    if not any(msg.content == GLOBAL_PROMPT.strip() for msg in gpt_tool.messages):
-        system_message = gpt_tool.messages.add()
-        system_message.role = "system"
-        system_message.content = GLOBAL_PROMPT.strip()
-
-def generate_prompt(messages, current_instruction=None):
-    conversation = "\n".join([f"{message['role']}: {message['content']}" for message in messages])
-    prompt = f"历史对话记录如下：\n{conversation}"
-    if current_instruction:
-        prompt += f"\n在我发给你的信息中，包含了我和你过去的历史对话，请尽量参考之前提到过的信息。现在，请根据当前指令提供回答：\n{current_instruction}"
-    return prompt
 
 def generate_text(messages, current_instruction=None):
     try:
         prompt = generate_prompt(messages, current_instruction)
-        print(prompt)
         response = client.chat.completions.create(
             model="gpt-4o",
             messages=[{"role": "user", "content": prompt}],
@@ -144,7 +78,93 @@ class OBJECT_OT_send_to_gpt(Operator):
             logger.error(f"Error in OBJECT_OT_send_to_gpt.execute: {e}")
         return {'FINISHED'}
 
-class GPT_PT_panel(bpy.types.Panel):
+
+class OBJECT_OT_send_screenshots_to_gpt(Operator):
+    bl_idname = "object.send_screenshots_to_gpt"
+    bl_label = "Send Screenshots to GPT"
+
+    def execute(self, context):
+        try:
+            scn = context.scene
+            gpt_tool = scn.gpt_tool
+
+            # 初始化对话历史，确保包含全局提示词
+            initialize_conversation(gpt_tool)
+
+            # 获取截图文件
+            screenshots_path = os.path.join(os.path.dirname(__file__), 'screenshots')
+            screenshots = [os.path.join(screenshots_path, f) for f in os.listdir(screenshots_path) if f.lower().endswith(('.png', '.jpg', '.jpeg', '.webp', '.gif'))]
+
+            headers = {
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json"
+            }
+
+            image_messages = []
+
+            for screenshot in screenshots:
+                base64_image = encode_image(screenshot)
+                image_messages.append(
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:image/png;base64,{base64_image}",
+                            "detail": "high"  # 设置图片清晰度
+                        }
+                    }
+                )
+
+            # 更新对话历史
+            messages = [{"role": msg.role, "content": msg.content} for msg in gpt_tool.messages]
+
+            # 创建提示
+            prompt = generate_prompt(messages)
+            text_message = {
+                "type": "text",
+                "text": f"{prompt}\n以下是Blender内的模型图片,所有图片拍摄自同一模型的不同角度，告诉我你看到了什么，以及是否有问题"
+            }
+
+            # 构建请求数据
+            request_data = {
+                "model": "gpt-4o",
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            text_message
+                        ] + image_messages
+                    }
+                ],
+                "max_tokens": 2560,
+                "temperature": 1,
+                "top_p": 1,
+                "frequency_penalty": 0,
+                "presence_penalty": 0
+            }
+
+            # 发送请求到GPT-4
+            response = requests.post(
+                "https://api.openai.com/v1/chat/completions",
+                headers=headers,
+                json=request_data
+            )
+            output_text = response.json().get("choices", [{}])[0].get("message", {}).get("content", "")
+            logger.info(f"GPT-4 Response: {output_text}")
+
+            # 将GPT-4响应添加到对话历史中
+            gpt_message = gpt_tool.messages.add()
+            gpt_message.role = "assistant"
+            gpt_message.content = output_text
+
+            # 执行GPT-4生成的Blender指令
+            execute_blender_command(output_text)
+
+            return {'FINISHED'}
+        except Exception as e:
+            logger.error(f"Error in OBJECT_OT_send_screenshots_to_gpt.execut e: {e}")
+            return {'CANCELLED'}
+        
+class GPT_PT_panel(Panel):
     bl_label = "GPT-4 Integration with Context"
     bl_idname = "GPT_PT_panel"
     bl_space_type = 'VIEW_3D'
@@ -156,3 +176,4 @@ class GPT_PT_panel(bpy.types.Panel):
         scn = context.scene
         layout.prop(scn.gpt_tool, "input_text")
         layout.operator("object.send_to_gpt")
+        layout.operator("object.send_screenshots_to_gpt", text="Send Screenshots to GPT")
