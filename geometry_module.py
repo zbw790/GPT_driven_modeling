@@ -33,9 +33,9 @@ class ResetGeometryToOrigin(Operator):
     def execute(self, context):
         for obj in context.selected_objects:
             bpy.context.view_layer.objects.active = obj
-
-            bpy.ops.object.origin_set(type='ORIGIN_GEOMETRY')
-            bpy.ops.object.location_clear()
+            
+            # 使用 Blender 自带的 "Set Geometry to Origin" 功能
+            bpy.ops.object.origin_set(type='GEOMETRY_ORIGIN')
             
         return {'FINISHED'}
 

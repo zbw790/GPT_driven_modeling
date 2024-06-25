@@ -28,7 +28,7 @@ def generate_text(messages, current_instruction=None):
             model="gpt-4o",
             messages=[{"role": "user", "content": prompt}],
             max_tokens=2560,
-            temperature=1,
+            temperature=0.1,
             top_p=1,
             frequency_penalty=0,
             presence_penalty=0
@@ -118,10 +118,10 @@ class OBJECT_OT_send_screenshots_to_gpt(Operator):
             messages = [{"role": msg.role, "content": msg.content} for msg in gpt_tool.messages]
 
             # 创建提示
-            prompt = generate_prompt(messages)
+            prompt = generate_screenshot_prompt(messages)
             text_message = {
                 "type": "text",
-                "text": f"{prompt}\n以下是Blender内的模型图片,所有图片拍摄自同一模型的不同角度，告诉我你看到了什么，以及是否有问题"
+                "text": f"{prompt}"
             }
 
             # 构建请求数据
@@ -136,7 +136,7 @@ class OBJECT_OT_send_screenshots_to_gpt(Operator):
                     }
                 ],
                 "max_tokens": 2560,
-                "temperature": 1,
+                "temperature": 0.1,
                 "top_p": 1,
                 "frequency_penalty": 0,
                 "presence_penalty": 0

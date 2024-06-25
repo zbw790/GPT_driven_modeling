@@ -21,21 +21,53 @@ GLOBAL_PROMPT = """
 
 2. 如果用户明确要求生成 Blender 指令：
     a. 仅返回可直接执行的 Blender Python 命令。
-    b. 将所有命令包含在一对三重反引号内，并在开头标注 'python'。
-    c. 不要包含任何额外的描述性文本、符号或注释。
+    c. 不要包含任何额外的描述性文本或符号。包括类似：“根据您的要求，我们需要使用以下的指令。”这种类型的文字也不能出现。
     d. 确保每个命令都是有效的 Blender Python API 调用。
+    e. 如果必须添加说明，只能以Python单行注释的形式出现（使用#开头）。
+    f. 绝对不要使用三引号形式的多行注释
 
 3. 在没有明确要求生成 Blender 指令的情况下：
     a. 提供详细的回答和解释。
     b. 确保回答的内容与对话历史和上下文一致。
     c. 如果需要举例说明 Blender 指令，请使用与规则 2 相同的格式。
 
-示例 - 当要求生成 Blender 指令时，你应该只返回如下格式的内容，除blender指令外，若你要提供任何描述性文字，必须是以注释的形式出现，以防影响指令的运行，以下是一个例子：
+示例 - 当要求生成 Blender 指令时，你应该只返回如下格式的内容：
 bpy.ops.object.select_all(action='SELECT')
 bpy.ops.object.delete(use_global=False)
-# 添加一个圆柱体
 bpy.ops.mesh.primitive_cylinder_add(location=(0, 0, 0))
+
+4. 在没有明确要求用其他语言回复的情况下，统一用中文回答。
+
+以下是一些我自定义的blender API的介绍，你需要在合适的时候使用他们：
 """
+
+SCREENSHOT_PROMPTS = """
+以下是Blender内的模型图片,所有图片拍摄自同一模型的不同角度。请检查这个模型是否存在以下问题：
+
+所有部件是否都连接在一起，没有悬空或分离的部分
+模型的比例是否合理，各部分大小是否协调
+是否存在明显的几何错误，如穿模、非流畅边缘等
+模型的整体形状是否符合预期的物体外观
+是否有多余或缺失的部件
+
+如果发现任何问题，请生成相应的Blender Python命令来修复。如果模型没有明显问题，请回复"这个模型没有问题"。
+生成指令时，请只返回可直接执行的Blender Python命令，不要包含任何额外的描述性文本或符号。
+"""
+
+current_dir = os.path.dirname(os.path.abspath(__file__))
+custom_prompts_file = os.path.join(current_dir, "LLM_API_prompts.txt")
+
+try:
+    with open(custom_prompts_file, "r", encoding="utf-8") as f:
+        custom_prompts = f.read()
+        # 将自定义提示词添加到 GLOBAL_PROMPT
+    GLOBAL_PROMPT += "\n" + custom_prompts
+except FileNotFoundError:
+    print(f"警告：未找到自定义提示词文件 {custom_prompts_file}")
+except Exception as e:
+    print(f"读取自定义提示词文件时出错：{str(e)}")
+
+
 
 class Message(PropertyGroup):
     role: StringProperty(name="Role")
@@ -122,4 +154,9 @@ def generate_prompt(messages, current_instruction=None):
     prompt = f"历史对话记录如下：\n{conversation}"
     if current_instruction:
         prompt += f"\n在我发给你的信息中,包含了我和你过去的历史对话,请尽量参考之前提到过的信息。现在,请根据当前指令提供回答：\n{current_instruction}"
+    return prompt
+
+def generate_screenshot_prompt(messages):
+    conversation = "\n".join([f"{message['role']}: {message['content']}" for message in messages])
+    prompt = f"历史对话记录如下：\n{conversation}\n\n{SCREENSHOT_PROMPTS}"
     return prompt

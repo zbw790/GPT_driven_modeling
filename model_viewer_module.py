@@ -140,11 +140,11 @@ class SaveScreenshotOperator(Operator):
         target = selected_objects[0]  # Assuming only one object is selected
 
         angles = [
-            ((0, 0, 10), (0, math.radians(90), 0)),  # 俯视图
-            ((0, 0, -10), (0, math.radians(-90), 0)),  # 底视图
-            ((-10, 0, 0), (math.radians(90), 0, math.radians(90))),  # 左视图
-            ((10, 0, 0), (math.radians(90), 0, math.radians(-90))),  # 右视图
-            ((0, 10, 0), (math.radians(-90), 0, math.radians(180))),  # 后视图
+            # ((0, 0, 10), (0, math.radians(90), 0)),  # 俯视图
+            # ((0, 0, -10), (0, math.radians(-90), 0)),  # 底视图
+            # ((-10, 0, 0), (math.radians(90), 0, math.radians(90))),  # 左视图
+            # ((10, 0, 0), (math.radians(90), 0, math.radians(-90))),  # 右视图
+            # ((0, 10, 0), (math.radians(-90), 0, math.radians(180))),  # 后视图
             ((0, -10, 0), (math.radians(90), 0, 0)),  # 前视图
             ((-10, -10, 10), (math.radians(45), 0, math.radians(45))),  # 左前上
             ((10, -10, 10), (math.radians(45), 0, math.radians(-45))),  # 右前上

@@ -99,8 +99,10 @@ class OBJECT_OT_send_screenshots_to_claude(Operator):
                         },
                     }
                 ])
-
-            content.append({"type": "text", "text": "以下是Blender内的模型图片,所有图片拍摄自同一模型的不同角度，告诉我你看到了什么，以及是否有问题"})
+            # 更新对话历史
+            messages = [{"role": msg.role, "content": msg.content} for msg in claude_tool.messages]
+            prompt = generate_screenshot_prompt(messages)
+            content.append({"type": "text", "text": f"{prompt}"})
 
             message = client.messages.create(
                 model="claude-3-5-sonnet-20240620",
@@ -114,8 +116,8 @@ class OBJECT_OT_send_screenshots_to_claude(Operator):
             )
 
             output_text = message.content[0].text
-            
-            self.report({'INFO'}, f"Claude Response: {output_text}")
+
+            logger.info(f"Claude Response: {output_text}")
 
             claude_message = claude_tool.messages.add()
             claude_message.role = "assistant"
