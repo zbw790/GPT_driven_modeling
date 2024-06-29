@@ -11,7 +11,7 @@ if project_path not in sys.path:
     sys.path.append(project_path)
 
 from gpt_module import (
-    OBJECT_OT_send_to_gpt, GPT_PT_panel, OBJECT_OT_send_screenshots_to_gpt
+    OBJECT_OT_send_to_gpt, GPT_PT_panel, OBJECT_OT_send_screenshots_to_gpt, OBJECT_OT_analyze_screenshots
 )
 from model_viewer_module import (
     ApplyScale, ModelViewerPanel, SaveScreenshotOperator, update_model_dimensions
@@ -35,14 +35,13 @@ from align_module import (
     AlignProperties, SetAlignPointOperator, AlignObjectsOperator, AlignPanel
 )
 from claude_module import (
-    OBJECT_OT_send_to_claude, OBJECT_OT_send_screenshots_to_claude, CLAUDE_PT_panel
+    OBJECT_OT_send_to_claude, OBJECT_OT_send_screenshots_to_claude, CLAUDE_PT_panel, OBJECT_OT_analyze_screenshots_claude
 )
 from LLM_common_utils import (
     Message, Properties
 )
 from llama_db_manager import (
-    LLAMADB_OT_query, LLAMADB_OT_query_with_screenshots, LLAMADB_PT_panel, LlamaDBProperties, 
-    initialize_llama_db
+    LLAMADB_OT_query, LLAMADB_OT_query_with_screenshots, LLAMADB_PT_panel, LlamaDBProperties, initialize_llama_db, LLAMADB_OT_query_and_generate
 )
 
 # 设置日志记录
@@ -53,13 +52,16 @@ classes = (
     Message,
     Properties,
     OBJECT_OT_send_to_gpt,
+    OBJECT_OT_analyze_screenshots,
     OBJECT_OT_send_screenshots_to_gpt,
     GPT_PT_panel,
     OBJECT_OT_send_to_claude,
+    OBJECT_OT_analyze_screenshots_claude,
     OBJECT_OT_send_screenshots_to_claude,
     CLAUDE_PT_panel,
     LLAMADB_OT_query,
     LLAMADB_OT_query_with_screenshots,
+    LLAMADB_OT_query_and_generate,
     LLAMADB_PT_panel,
     LlamaDBProperties,
     RotateObjectCW_X,

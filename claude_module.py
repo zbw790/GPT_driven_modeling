@@ -12,9 +12,42 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 # 加载环境变量
-from dotenv import load_dotenv
 load_dotenv(dotenv_path="D:/Tencent_Supernova/api/.env")
 api_key = os.getenv("ANTHROPIC_API_KEY")
+
+def analyze_screenshots_with_claude(screenshots):
+    client = Anthropic(api_key=api_key)
+    
+    content = []
+    for i, screenshot in enumerate(screenshots, 1):
+        base64_image = encode_image(screenshot)
+        content.extend([
+            {"type": "text", "text": f"Image {i}:"},
+            {
+                "type": "image",
+                "source": {
+                    "type": "base64",
+                    "media_type": "image/png",
+                    "data": base64_image,
+                },
+            }
+        ])
+    
+    prompt = "分析这些图片，描述你看到的3D模型。指出任何可能的问题或需要改进的地方。"
+    content.append({"type": "text", "text": prompt})
+
+    message = client.messages.create(
+        model="claude-3-5-sonnet-20240620",
+        max_tokens=2048,
+        messages=[
+            {
+                "role": "user",
+                "content": content,
+            }
+        ],
+    )
+
+    return message.content[0].text
 
 class OBJECT_OT_send_to_claude(Operator):
     bl_idname = "object.send_to_claude"
@@ -77,39 +110,7 @@ class OBJECT_OT_send_screenshots_to_claude(Operator):
             screenshots_path = os.path.join(os.path.dirname(__file__), 'screenshots')
             screenshots = [os.path.join(screenshots_path, f) for f in os.listdir(screenshots_path) if f.lower().endswith(('.png', '.jpg', '.jpeg', '.webp', '.gif'))]
 
-            client = Anthropic(api_key=api_key)
-
-            content = []
-            for i, screenshot in enumerate(screenshots, 1):
-                base64_image = encode_image(screenshot)
-                content.extend([
-                    {"type": "text", "text": f"Image {i}:"},
-                    {
-                        "type": "image",
-                        "source": {
-                            "type": "base64",
-                            "media_type": "image/png",
-                            "data": base64_image,
-                        },
-                    }
-                ])
-            # 更新对话历史
-            messages = [{"role": msg.role, "content": msg.content} for msg in claude_tool.messages]
-            prompt = generate_screenshot_prompt(messages)
-            content.append({"type": "text", "text": f"{prompt}"})
-
-            message = client.messages.create(
-                model="claude-3-5-sonnet-20240620",
-                max_tokens=2048,
-                messages=[
-                    {
-                        "role": "user",
-                        "content": content,
-                    }
-                ],
-            )
-
-            output_text = message.content[0].text
+            output_text = analyze_screenshots_with_claude(screenshots)
 
             logger.info(f"Claude Response: {output_text}")
 
@@ -124,6 +125,31 @@ class OBJECT_OT_send_screenshots_to_claude(Operator):
             self.report({'ERROR'}, f"Error in OBJECT_OT_send_screenshots_to_claude.execute: {str(e)}")
             return {'CANCELLED'}
 
+class OBJECT_OT_analyze_screenshots_claude(Operator):
+    bl_idname = "object.analyze_screenshots_claude"
+    bl_label = "Analyze Screenshots with Claude"
+
+    def execute(self, context):
+        try:
+            screenshots_path = os.path.join(os.path.dirname(__file__), 'screenshots')
+            screenshots = [os.path.join(screenshots_path, f) for f in os.listdir(screenshots_path) if f.lower().endswith(('.png', '.jpg', '.jpeg', '.webp', '.gif'))]
+            
+            analysis_result = analyze_screenshots_with_claude(screenshots)
+            logger.info(f"Screenshot Analysis Result: {analysis_result}")
+            
+            # 将分析结果添加到对话历史
+            claude_tool = context.scene.claude_tool
+            claude_message = claude_tool.messages.add()
+            claude_message.role = "assistant"
+            claude_message.content = f"Screenshot Analysis: {analysis_result}"
+            
+            # 可以选择是否执行分析结果
+            # execute_blender_command(analysis_result)
+            
+        except Exception as e:
+            logger.error(f"Error in OBJECT_OT_analyze_screenshots_claude.execute: {e}")
+        return {'FINISHED'}
+
 class CLAUDE_PT_panel(bpy.types.Panel):
     bl_label = "Claude Integration with Context"
     bl_idname = "CLAUDE_PT_panel"
@@ -136,4 +162,5 @@ class CLAUDE_PT_panel(bpy.types.Panel):
         scn = context.scene
         layout.prop(scn.claude_tool, "input_text")
         layout.operator("object.send_to_claude")
+        layout.operator("object.analyze_screenshots_claude", text="Analyze Screenshots")
         layout.operator("object.send_screenshots_to_claude", text="Send Screenshots to Claude")

@@ -5,6 +5,7 @@ import os
 import textwrap
 import logging
 import bpy
+import re
 import traceback
 from bpy.props import StringProperty, CollectionProperty
 from bpy.types import PropertyGroup
@@ -92,34 +93,49 @@ def encode_image(image_path):
 
 def sanitize_command(command):
     try:
+        # 移除代码块标记
         if command.startswith("```") and command.endswith("```"):
             command = command[3:-3].strip()
-            if command.startswith("python"):
-                command = command[6:].strip()
+        if command.startswith("python"):
+            command = command[6:].strip()
+
+        # 替换特殊引号
+        command = command.replace('"', '"').replace('"', '"').replace(''', "'").replace(''', "'")
+
+        # 分割成行
+        lines = command.split('\n')
+        cleaned_lines = []
         
-        sanitized_command = ''.join(char for char in command if ord(char) < 128)
-        sanitized_command = sanitized_command.replace('"', '"').replace('"', '"').replace(''', "'").replace(''', "'")
-        
-        sanitized_lines = sanitized_command.split('\n')
-        cleaned_lines = [line.strip() for line in sanitized_lines if line.strip()]
-        cleaned_command = '\n'.join(cleaned_lines)
-        
-        # 检查和修复缩进
-        lines = cleaned_command.split('\n')
-        fixed_lines = []
-        current_indent = 0
+        # 计算每行的缩进级别
+        indent_levels = []
         for line in lines:
-            stripped = line.lstrip()
-            if stripped.startswith(('def ', 'class ', 'if ', 'elif ', 'else:', 'for ', 'while ', 'try:', 'except:', 'finally:')):
-                fixed_lines.append(' ' * current_indent + stripped)
-                current_indent += 4
-            elif stripped.startswith(('return', 'break', 'continue', 'pass')):
-                current_indent = max(0, current_indent - 4)
-                fixed_lines.append(' ' * current_indent + stripped)
-            else:
-                fixed_lines.append(' ' * current_indent + stripped)
-        
-        return '\n'.join(fixed_lines)
+            if line.strip():  # 忽略空行
+                indent = len(line) - len(line.lstrip())
+                indent_levels.append(indent)
+
+        # 如果所有行都没有缩进，应用智能缩进
+        if all(level == 0 for level in indent_levels):
+            current_indent = 0
+            for line in lines:
+                stripped = line.strip()
+                if stripped:
+                    if re.match(r'^(def|class|if|elif|else:|for|while|try:|except:|finally:)', stripped):
+                        cleaned_lines.append(' ' * current_indent + stripped)
+                        current_indent += 4
+                    elif re.match(r'^(return|break|continue|pass)', stripped):
+                        current_indent = max(0, current_indent - 4)
+                        cleaned_lines.append(' ' * current_indent + stripped)
+                    else:
+                        cleaned_lines.append(' ' * current_indent + stripped)
+        else:
+            # 保持原有的缩进结构
+            min_indent = min(indent_levels)
+            for line in lines:
+                if line.strip():
+                    indent = len(line) - len(line.lstrip())
+                    cleaned_lines.append(' ' * (indent - min_indent) + line.strip())
+
+        return '\n'.join(cleaned_lines)
     except Exception as e:
         logger.error(f"Error sanitizing command: {e}")
         return command

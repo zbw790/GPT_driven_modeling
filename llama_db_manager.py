@@ -18,6 +18,7 @@ from llama_index.embeddings.openai import OpenAIEmbedding
 from dotenv import load_dotenv
 from llama_index.core.response_synthesizers import get_response_synthesizer
 from LLM_common_utils import *
+from gpt_module import generate_text_with_context, analyze_screenshots_with_gpt4
 
 # 设置日志记录
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -98,7 +99,6 @@ def query_documentation(query_engine, query):
                 return f.read()
     return "No relevant information found."
 
-
 class LlamaDBProperties(PropertyGroup):
     input_text: StringProperty(name="Query", default="")
 
@@ -174,10 +174,59 @@ class LLAMADB_OT_query_with_screenshots(Operator):
             # 使用GPT-4的描述作为LlamaDB的查询输入
             result = query_documentation(context.scene.query_engine, gpt_description)
             print("Query with Screenshots Result:", result)
+
             logger.info(f"Query with Screenshots Result Length: {len(result)}")
+
+            # 接着就是把result结合gpt再生成新的command并且运行
 
         except Exception as e:
             logger.error(f"Error in LLAMADB_OT_query_with_screenshots.execute: {e}")
+            print(f"Error: {str(e)}")
+
+        return {'FINISHED'}
+
+class LLAMADB_OT_query_and_generate(Operator):
+    bl_idname = "llamadb.query_and_generate"
+    bl_label = "Query and Generate Commands"
+
+    def execute(self, context):
+        try:
+            # 获取截图
+            screenshots_path = os.path.join(os.path.dirname(__file__), 'screenshots')
+            screenshots = [os.path.join(screenshots_path, f) for f in os.listdir(screenshots_path) if f.lower().endswith(('.png', '.jpg', '.jpeg', '.webp', '.gif'))]
+
+            # 使用GPT-4分析截图
+            gpt_description = analyze_screenshots_with_gpt4(screenshots)
+            logger.info(f"GPT-4 Image Analysis: {gpt_description}")
+
+            # 使用LlamaDB查询相关文档
+            result = query_documentation(context.scene.query_engine, gpt_description)
+            logger.info(f"LlamaDB Query Result Length: {len(result)}")
+
+            # 将LlamaDB查询结果和GPT-4图像分析结果发送到GPT-4生成命令
+            gpt_tool = context.scene.gpt_tool
+            initialize_conversation(gpt_tool)
+            messages = [{"role": msg.role, "content": msg.content} for msg in gpt_tool.messages]
+            
+            prompt = f"基于以下信息生成Blender命令：\n\n图像分析：{gpt_description}\n\n相关文档：{result}\n\n请生成适当的Blender Python命令来修复或改进模型。"
+            
+            response = generate_text_with_context(messages, prompt)
+            logger.info(f"GPT-4 Generated Commands: {response}")
+
+            # 执行生成的Blender命令
+            execute_blender_command(response)
+
+            # 更新对话历史
+            user_message = gpt_tool.messages.add()
+            user_message.role = "user"
+            user_message.content = prompt
+
+            gpt_message = gpt_tool.messages.add()
+            gpt_message.role = "assistant"
+            gpt_message.content = response
+
+        except Exception as e:
+            logger.error(f"Error in LLAMADB_OT_query_and_generate.execute: {e}")
             print(f"Error: {str(e)}")
 
         return {'FINISHED'}
@@ -196,6 +245,7 @@ class LLAMADB_PT_panel(Panel):
         layout.prop(props, "input_text")
         layout.operator("llamadb.query")
         layout.operator("llamadb.query_with_screenshots")
+        layout.operator("llamadb.query_and_generate")
 
 def initialize_llama_db():
     db_path = "./chroma_db"
