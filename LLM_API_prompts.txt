@@ -1,0 +1,353 @@
+Geometry Operations API Documentation
+
+This API provides functionality for manipulating object geometry in Blender, including translating geometry without affecting the object's origin and resetting the object's origin to its geometry center.
+
+1. Translate Geometry Without Affecting Origin
+   Function: bpy.ops.object.move_geometry_without_affecting_origin(move_x, move_y, move_z)
+   Description: Moves the geometry of selected objects without changing their origin points.
+   Parameters:
+   - move_x (float): Distance to move along the X-axis
+   - move_y (float): Distance to move along the Y-axis
+   - move_z (float): Distance to move along the Z-axis
+   Usage:
+   1. Select the desired object(s)
+   2. Set translation values in the UI or directly in the function call
+   3. Call the function
+   Example:
+   bpy.ops.object.move_geometry_without_affecting_origin(move_x=1.0, move_y=0.5, move_z=0.0)
+
+2. Reset Geometry to Origin
+   Function: bpy.ops.object.reset_geometry_to_origin()
+   Description: Sets the origin of selected objects to the center of their geometry.
+   Usage:
+   1. Select the desired object(s)
+   2. Call the function
+   Example:
+   bpy.ops.object.reset_geometry_to_origin()
+
+Additional Properties:
+- context.scene.geometry_props.move_geometry_x: FloatProperty for X-axis translation
+- context.scene.geometry_props.move_geometry_y: FloatProperty for Y-axis translation
+- context.scene.geometry_props.move_geometry_z: FloatProperty for Z-axis translation
+
+Notes:
+- The Geometry Operations panel is accessible in the 3D Viewport's sidebar under the "Tool" category.
+- The "Translate Geometry" function moves the geometry in edit mode, ensuring the object's origin remains unchanged.
+- The "Reset Geometry to Origin" function uses Blender's built-in "Set Origin to Geometry" functionality.
+- All operations are performed on all selected objects.
+
+Caution:
+- Translating geometry without moving the origin can affect the object's apparent position in the scene.
+- Resetting the geometry to origin modifies the object's origin point, which can affect its position relative to other objects or constraints.
+- Ensure you understand the implications of these operations before using them, especially in complex scenes or animations.
+
+Align Objects API Documentation
+
+This API provides functionality for aligning two objects in Blender based on specified points.
+
+1. Set Align Point
+   Function: bpy.ops.object.set_align_point()
+   Description: Sets an alignment point on the active object based on the currently selected vertex, edge, or face.
+   Usage:
+   1. Select an object and make it active
+   2. Enter Edit mode (bpy.ops.object.mode_set(mode='EDIT'))
+   3. Select a vertex, edge, or face
+   4. Call the function
+   5. Repeat steps 1-4 for the second object
+   Example:
+   bpy.context.view_layer.objects.active = bpy.data.objects["Cube1"]
+   bpy.ops.object.mode_set(mode='EDIT')
+   bpy.ops.mesh.select_mode(type="VERT")
+   bpy.ops.mesh.select_all(action='DESELECT')
+   bpy.ops.object.mode_set(mode='OBJECT')
+   bpy.data.objects["Cube1"].data.vertices[0].select = True
+   bpy.ops.object.set_align_point()
+
+   # Repeat for the second object
+   bpy.context.view_layer.objects.active = bpy.data.objects["Cube2"]
+   bpy.ops.object.mode_set(mode='EDIT')
+   bpy.ops.mesh.select_mode(type="VERT")
+   bpy.ops.mesh.select_all(action='DESELECT')
+   bpy.ops.object.mode_set(mode='OBJECT')
+   bpy.data.objects["Cube2"].data.vertices[0].select = True
+   bpy.ops.object.set_align_point()
+
+2. Align Objects
+   Function: bpy.ops.object.align_objects()
+   Description: Aligns two selected objects based on the previously set align points.
+   Usage:
+   1. Set align points for both objects (see "Set Align Point")
+   2. Select both objects
+   3. Set the align direction (optional)
+   4. Call the function
+   Example:
+   bpy.ops.object.select_all(action='DESELECT')
+   bpy.data.objects["Cube1"].select_set(True)
+   bpy.data.objects["Cube2"].select_set(True)
+   bpy.context.scene.align_props.align_direction = 'OBJ2_TO_OBJ1'
+   bpy.ops.object.align_objects()
+
+3. Set Align Direction
+   Property: bpy.context.scene.align_props.align_direction
+   Description: Sets the direction of alignment.
+   Options:
+   - 'OBJ2_TO_OBJ1': Move Object 2 to align with Object 1
+   - 'OBJ1_TO_OBJ2': Move Object 1 to align with Object 2
+   Usage:
+   Set this property before calling the align_objects function.
+   Example:
+   bpy.context.scene.align_props.align_direction = 'OBJ2_TO_OBJ1'
+
+Note: 
+- Ensure you have set align points for both objects before attempting to align them.
+- The align points are set on the active object, so make sure to activate the correct object before setting each point.
+- You must select exactly two objects before calling the align_objects function.
+- The alignment is based on the world coordinates of the set points, taking into account the objects' transformations.
+
+Boolean Operations API Documentation
+
+This API provides functionality for performing boolean operations on objects in Blender.
+
+1. Boolean Union
+   Function: bpy.ops.object.boolean_union()
+   Description: Merges multiple selected objects into a single object.
+   Usage:
+   1. Select two or more objects
+   2. Call the function
+   Example:
+   bpy.ops.object.select_all(action='DESELECT')
+   bpy.data.objects["Cube1"].select_set(True)
+   bpy.data.objects["Cube2"].select_set(True)
+   bpy.ops.object.boolean_union()
+   Note: The first selected object will be the base object, and others will be merged into it.
+
+2. Boolean Difference
+   Function: bpy.ops.object.boolean_difference()
+   Description: Subtracts the cutter object from the base object.
+   Usage:
+   1. Select exactly two objects
+   2. Make sure the base object (the one to be cut) is the active object
+   3. Call the function
+   Example:
+   bpy.ops.object.select_all(action='DESELECT')
+   bpy.data.objects["BaseCube"].select_set(True)
+   bpy.context.view_layer.objects.active = bpy.data.objects["BaseCube"]
+   bpy.data.objects["CutterSphere"].select_set(True)
+   bpy.ops.object.boolean_difference()
+   Note: The active object will be the base object, and the other selected object will be the cutter.
+
+3. Boolean Intersect
+   Function: bpy.ops.object.boolean_intersect()
+   Description: Keeps only the overlapping parts of selected objects.
+   Usage:
+   1. Select two or more objects
+   2. Call the function
+   Example:
+   bpy.ops.object.select_all(action='DESELECT')
+   bpy.data.objects["Sphere1"].select_set(True)
+   bpy.data.objects["Sphere2"].select_set(True)
+   bpy.ops.object.boolean_intersect()
+   Note: The first selected object will be the base object, and the intersection with others will be kept.
+
+General Notes:
+- These operations are destructive and will modify or delete the original objects.
+- The result of the boolean operation will always be based on the first selected or active object.
+- Make sure to select the correct number of objects before performing each operation:
+  - Union and Intersect: Two or more objects
+  - Difference: Exactly two objects
+- After the operation, only the resulting object will remain in the scene.
+- These functions can be accessed through the "布尔运算" (Boolean Operations) panel in the 3D Viewport's sidebar under the "Tool" category.
+
+Location Reset API Documentation
+
+This API provides functionality for resetting the location and origin of objects in Blender.
+
+1. Reset Object Location
+   Function: bpy.ops.model_viewer.reset_object_location()
+   Description: Resets the location and origin of selected objects to their bounding box centers.
+   Usage:
+   1. Select one or more objects
+   2. Call the function
+   Example:
+   bpy.ops.object.select_all(action='DESELECT')
+   bpy.data.objects["Cube"].select_set(True)
+   bpy.data.objects["Sphere"].select_set(True)
+   bpy.ops.model_viewer.reset_object_location()
+
+Detailed Operation:
+This function performs the following steps for each selected object:
+1. Clears the object's current location
+2. Calculates the center of the object's bounding box
+3. Sets the 3D cursor to the bounding box center
+4. Sets the object's origin to the 3D cursor (bounding box center)
+5. Moves the object's location to (0, 0, 0)
+6. Finally, resets the 3D cursor to (0, 0, 0)
+
+Notes:
+- This operation modifies the object's origin and location.
+- The mesh geometry itself is not moved relative to its origin.
+- This function can be useful for centering objects or preparing them for export.
+- The operation is performed on all selected objects, so make sure to select only the objects you want to reset.
+- After the operation, the objects will be centered at the world origin (0, 0, 0), with their geometry centered around their own origins.
+- This function can be accessed through the "Location Operations" panel in the 3D Viewport's sidebar under the "Tool" category.
+
+Caution:
+- This operation may affect the relative positioning of objects if multiple objects are in use.
+- It's recommended to use this on individual objects or groups of objects that you intend to center together.
+
+Model Viewer API Documentation
+
+This API provides functionality for scaling models, applying scale, and capturing screenshots from multiple angles in Blender.
+
+1. Apply Scale
+   Function: bpy.ops.model_viewer.apply_scale()
+   Description: Applies the current scale percentage to selected objects and updates their dimensions.
+   Usage:
+   1. Select one or more objects
+   2. Set the desired scale percentage using the UI slider or by setting context.scene.model_scale_percentage
+   3. Call the function
+   Example:
+   bpy.context.scene.model_scale_percentage = 150
+   bpy.ops.model_viewer.apply_scale()
+   Note: This operation modifies the actual scale of the objects and resets the scale percentage to 100%.
+
+2. Save Screenshot
+   Function: bpy.ops.model_viewer.save_screenshot()
+   Description: Captures screenshots of all mesh objects from 10 different angles.
+   Usage:
+   1. Ensure mesh objects are present in the scene
+   2. Call the function
+   Example:
+   bpy.ops.model_viewer.save_screenshot()
+   Note: 
+   - This function automatically selects all mesh objects in the scene.
+   - Screenshots are saved in a 'screenshots' folder in the same directory as the script.
+   - The function creates a camera if one doesn't exist, positions it for each shot, and removes any tracking constraints after use.
+
+3. Update Model Dimensions
+   Function: update_model_dimensions(self, context)
+   Description: Updates the displayed dimensions of selected objects based on the current scale percentage.
+   Usage: This function is automatically called when the scale percentage is changed in the UI.
+
+Additional Properties:
+- context.scene.model_scale_percentage: FloatProperty to set the scale percentage (0-1000%)
+- context.scene.model_dimensions: StringProperty that displays the current dimensions of the selected object
+
+Notes:
+- The Model Viewer panel is accessible in the 3D Viewport's sidebar under the "Tool" category.
+- The panel provides UI elements to adjust scale, view dimensions, apply scale, and save screenshots.
+- When saving screenshots, the camera is automatically positioned and adjusted to frame all selected objects.
+- The screenshot function captures views from top, bottom, left, right, back, front, and four isometric angles.
+- Scale changes are previewed in real-time through the dimensions display, but only applied to the actual objects when "Apply Scale" is used.
+
+Caution:
+- Applying scale modifies the actual object data and cannot be undone easily.
+- Ensure you have saved your work before using these functions, especially when applying scale or capturing screenshots.
+
+Rotate and Mirror Objects API Documentation
+
+This API provides functionality for rotating objects by specific degrees or 90° increments, and mirroring objects along different axes in Blender.
+
+1. Rotate Object by Degree
+   Functions:
+   - bpy.ops.model_rotator.rotate_object_cw_x_degree()
+   - bpy.ops.model_rotator.rotate_object_cw_y_degree()
+   - bpy.ops.model_rotator.rotate_object_cw_z_degree()
+   Description: Rotates selected objects clockwise around the specified axis by a user-defined degree.
+   Usage:
+   1. Select one or more objects
+   2. Set the desired rotation degree using context.scene.rotation_degree
+   3. Call the function for the desired axis
+   Example:
+   bpy.context.scene.rotation_degree = 45
+   bpy.ops.model_rotator.rotate_object_cw_x_degree()
+
+2. Rotate Object by 90°
+   Functions:
+   - bpy.ops.model_rotator.rotate_object_cw_x()
+   - bpy.ops.model_rotator.rotate_object_cw_y()
+   - bpy.ops.model_rotator.rotate_object_cw_z()
+   Description: Rotates selected objects clockwise by 90° around the specified axis.
+   Usage:
+   1. Select one or more objects
+   2. Call the function for the desired axis
+   Example:
+   bpy.ops.model_rotator.rotate_object_cw_z()
+
+3. Mirror Object
+   Functions:
+   - bpy.ops.model_rotator.mirror_object_x()
+   - bpy.ops.model_rotator.mirror_object_y()
+   - bpy.ops.model_rotator.mirror_object_z()
+   Description: Mirrors the selected object along the specified axis.
+   Usage:
+   1. Select exactly one object
+   2. Call the function for the desired axis
+   Example:
+   bpy.ops.model_rotator.mirror_object_x()
+
+Additional Properties:
+- context.scene.rotation_degree: FloatProperty to set the rotation degree for the "Rotate Object by Degree" functions
+
+Notes:
+- The Rotate and Mirror Objects panel is accessible in the 3D Viewport's sidebar under the "Tool" category.
+- All rotation operations apply the rotation immediately and reset the object's rotation to zero (using bpy.ops.object.transform_apply()).
+- Mirror operations add a Mirror modifier to the object and immediately apply it.
+- The panel provides UI elements to perform all these operations without needing to call the functions directly.
+
+Caution:
+- These operations modify the actual object data and cannot be undone easily.
+- For mirror operations, ensure only one object is selected, or an exception will be raised.
+- Applying rotations and mirrors can affect UV mappings and other object properties.
+- Ensure you have saved your work before using these functions.
+
+Subdivision and Decimate API Documentation
+
+This API provides functionality for applying subdivision surface and decimation to objects in Blender.
+
+1. Apply Subdivision Surface
+   Function: bpy.ops.object.apply_subdivision_surface()
+   Description: Applies a subdivision surface modifier to selected objects with user-defined levels.
+   Usage:
+   1. Select one or more objects
+   2. Set the desired subdivision levels using context.scene.subdivision_decimate_props.subdivision_levels
+   3. Call the function
+   Example:
+   bpy.context.scene.subdivision_decimate_props.subdivision_levels = 3
+   bpy.ops.object.apply_subdivision_surface()
+   Note: This operation adds a Subdivision Surface modifier and immediately applies it.
+
+2. Apply Decimate
+   Function: bpy.ops.object.apply_decimate()
+   Description: Applies a decimate modifier to selected objects with a user-defined ratio.
+   Usage:
+   1. Select one or more objects
+   2. Set the desired decimate ratio using context.scene.subdivision_decimate_props.decimate_ratio
+   3. Call the function
+   Example:
+   bpy.context.scene.subdivision_decimate_props.decimate_ratio = 0.75
+   bpy.ops.object.apply_decimate()
+   Note: This operation adds a Decimate modifier and immediately applies it.
+
+Properties:
+- context.scene.subdivision_decimate_props.subdivision_levels: IntProperty
+  - Description: Sets the number of subdivision levels
+  - Default: 1
+  - Range: 1 to 6
+
+- context.scene.subdivision_decimate_props.decimate_ratio: FloatProperty
+  - Description: Sets the ratio for decimation (1.0 means no reduction, 0.5 means 50% reduction)
+  - Default: 0.5
+  - Range: 0.0 to 1.0
+
+Notes:
+- The Subdivision and Decimate panel is accessible in the 3D Viewport's sidebar under the "Tool" category.
+- Both operations apply the respective modifiers immediately after adding them.
+- The panel provides UI elements to set the subdivision levels and decimate ratio, and to apply these operations without needing to call the functions directly.
+
+Caution:
+- These operations modify the actual mesh data and cannot be undone easily.
+- Subdivision can significantly increase the polygon count of your models, which may impact performance.
+- Decimation reduces the polygon count and can result in loss of detail.
+- Ensure you have saved your work before using these functions.
+- The effects of these operations can vary depending on the topology of your models.
