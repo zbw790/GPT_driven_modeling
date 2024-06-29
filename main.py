@@ -42,7 +42,7 @@ from LLM_common_utils import (
 )
 from llama_db_manager import (
     LLAMADB_OT_query, LLAMADB_OT_query_with_screenshots, LLAMADB_PT_panel, LlamaDBProperties, 
-    initialize_llama_db, LLAMADB_OT_update_index
+    initialize_llama_db
 )
 
 # 设置日志记录
@@ -60,7 +60,6 @@ classes = (
     CLAUDE_PT_panel,
     LLAMADB_OT_query,
     LLAMADB_OT_query_with_screenshots,
-    LLAMADB_OT_update_index,
     LLAMADB_PT_panel,
     LlamaDBProperties,
     RotateObjectCW_X,
@@ -124,9 +123,6 @@ def register():
         bpy.types.Scene.align_point_set = bpy.props.IntProperty(default=1)
         bpy.types.Scene.llama_db_tool = bpy.props.PointerProperty(type=LlamaDBProperties)
         
-        # Initialize LlamaDB
-        initialize_llama_db()
-        
         logger.info("Registered all classes successfully.")
     except Exception as e:
         logger.error(f"Error registering classes: {e}")
@@ -157,10 +153,8 @@ def unregister():
         if hasattr(bpy.types.Scene, "llama_db_tool"):
             del bpy.types.Scene.llama_db_tool
         
-        # Unregister LlamaDB timer
-        if hasattr(bpy.app.timers, "unregister"):
-            bpy.app.timers.unregister(initialize_llama_db)
-        
+        initialize_llama_db()
+
         logger.info("Unregistered all classes successfully.")
     except Exception as e:
         logger.error(f"Error unregistering classes: {e}")

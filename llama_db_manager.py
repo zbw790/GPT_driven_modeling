@@ -98,16 +98,6 @@ def query_documentation(query_engine, query):
                 return f.read()
     return "No relevant information found."
 
-def update_index():
-    try:
-        data_directory = './data'
-        documents, _ = load_data(data_directory)
-        index = create_index(documents)
-        bpy.types.Scene.query_engine = configure_query_engine(index)
-        logger.info("Index updated successfully.")
-    except Exception as e:
-        logger.error(f"Error updating index: {str(e)}")
-    return 3600  # 返回秒数，表示下次更新的间隔
 
 class LlamaDBProperties(PropertyGroup):
     input_text: StringProperty(name="Query", default="")
@@ -192,14 +182,6 @@ class LLAMADB_OT_query_with_screenshots(Operator):
 
         return {'FINISHED'}
 
-class LLAMADB_OT_update_index(Operator):
-    bl_idname = "llamadb.update_index"
-    bl_label = "Update LlamaDB Index"
-
-    def execute(self, context):
-        update_index()
-        return {'FINISHED'}
-
 class LLAMADB_PT_panel(Panel):
     bl_label = "LlamaDB Query"
     bl_idname = "LLAMADB_PT_panel"
@@ -214,8 +196,12 @@ class LLAMADB_PT_panel(Panel):
         layout.prop(props, "input_text")
         layout.operator("llamadb.query")
         layout.operator("llamadb.query_with_screenshots")
-        layout.operator("llamadb.update_index")
 
 def initialize_llama_db():
-    update_index()
-    bpy.app.timers.register(update_index)
+    db_path = "./chroma_db"
+    db = chromadb.PersistentClient(path=db_path)
+    chroma_collection = db.get_or_create_collection("operation_index")
+    vector_store = ChromaVectorStore(chroma_collection=chroma_collection)
+    index = VectorStoreIndex.from_vector_store(vector_store)
+    bpy.types.Scene.query_engine = configure_query_engine(index)
+    logger.info("LlamaDB initialized successfully.")
