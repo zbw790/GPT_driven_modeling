@@ -1,12 +1,6 @@
 import bpy
 import os
-import base64
-import json
 import logging
-import sys
-import codecs
-import textwrap
-import traceback
 from bpy.types import Operator, PropertyGroup
 from bpy.props import StringProperty, CollectionProperty
 from anthropic import Anthropic

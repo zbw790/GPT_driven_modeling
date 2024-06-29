@@ -1,11 +1,6 @@
-import bpy
 import requests
-import base64
 import os
 import logging
-import re
-import traceback
-import textwrap
 from openai import OpenAI
 from dotenv import load_dotenv
 from bpy.types import Operator, Panel, PropertyGroup
@@ -28,7 +23,7 @@ def generate_text(messages, current_instruction=None):
             model="gpt-4o",
             messages=[{"role": "user", "content": prompt}],
             max_tokens=2560,
-            temperature=0.1,
+            temperature=0.8,
             top_p=1,
             frequency_penalty=0,
             presence_penalty=0
@@ -109,7 +104,7 @@ class OBJECT_OT_send_screenshots_to_gpt(Operator):
                         "type": "image_url",
                         "image_url": {
                             "url": f"data:image/png;base64,{base64_image}",
-                            "detail": "high"  # 设置图片清晰度
+                            "detail": "low"  # 设置图片清晰度
                         }
                     }
                 )
@@ -136,7 +131,7 @@ class OBJECT_OT_send_screenshots_to_gpt(Operator):
                     }
                 ],
                 "max_tokens": 2560,
-                "temperature": 0.1,
+                "temperature": 0.8,
                 "top_p": 1,
                 "frequency_penalty": 0,
                 "presence_penalty": 0

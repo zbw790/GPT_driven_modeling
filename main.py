@@ -3,6 +3,7 @@ import os
 import bpy
 import logging
 import requests
+from bpy.props import StringProperty, PointerProperty
 
 # 确保项目根目录在Python的模块搜索路径中
 project_path = os.path.abspath(os.path.dirname(__file__))
@@ -39,13 +40,14 @@ from claude_module import (
 from LLM_common_utils import (
     Message, Properties
 )
+from llama_db_manager import (
+    LLAMADB_OT_query, LLAMADB_OT_query_with_screenshots, LLAMADB_PT_panel, LlamaDBProperties, 
+    initialize_llama_db, LLAMADB_OT_update_index
+)
 
 # 设置日志记录
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
 logger = logging.getLogger(__name__)
-
-# 定义API URL
-API_URL = "https://api.openai.com/v1/chat/completions"
 
 classes = (
     Message,
@@ -56,6 +58,11 @@ classes = (
     OBJECT_OT_send_to_claude,
     OBJECT_OT_send_screenshots_to_claude,
     CLAUDE_PT_panel,
+    LLAMADB_OT_query,
+    LLAMADB_OT_query_with_screenshots,
+    LLAMADB_OT_update_index,
+    LLAMADB_PT_panel,
+    LlamaDBProperties,
     RotateObjectCW_X,
     RotateObjectCW_Y,
     RotateObjectCW_Z,
@@ -115,6 +122,11 @@ def register():
         bpy.types.Scene.subdivision_decimate_props = bpy.props.PointerProperty(type=SubdivisionDecimateProperties)
         bpy.types.Scene.align_props = bpy.props.PointerProperty(type=AlignProperties)
         bpy.types.Scene.align_point_set = bpy.props.IntProperty(default=1)
+        bpy.types.Scene.llama_db_tool = bpy.props.PointerProperty(type=LlamaDBProperties)
+        
+        # Initialize LlamaDB
+        initialize_llama_db()
+        
         logger.info("Registered all classes successfully.")
     except Exception as e:
         logger.error(f"Error registering classes: {e}")
@@ -142,6 +154,13 @@ def unregister():
             del bpy.types.Scene.align_props
         if hasattr(bpy.types.Scene, "align_point_set"):
             del bpy.types.Scene.align_point_set
+        if hasattr(bpy.types.Scene, "llama_db_tool"):
+            del bpy.types.Scene.llama_db_tool
+        
+        # Unregister LlamaDB timer
+        if hasattr(bpy.app.timers, "unregister"):
+            bpy.app.timers.unregister(initialize_llama_db)
+        
         logger.info("Unregistered all classes successfully.")
     except Exception as e:
         logger.error(f"Error unregistering classes: {e}")
