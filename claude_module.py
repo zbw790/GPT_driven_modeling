@@ -33,7 +33,10 @@ def analyze_screenshots_with_claude(screenshots):
             }
         ])
     
-    prompt = "分析这些图片，描述你看到的3D模型。指出任何可能的问题或需要改进的地方。"
+    scene_info = get_scene_info()
+    formatted_scene_info = format_scene_info(scene_info)
+    
+    prompt = f"分析这些图片，描述你看到的3D模型。指出任何可能的问题或需要改进的地方。以下是场景中对象的详细信息：\n\n{formatted_scene_info}"
     content.append({"type": "text", "text": prompt})
 
     message = client.messages.create(
@@ -110,13 +113,16 @@ class OBJECT_OT_send_screenshots_to_claude(Operator):
             screenshots_path = os.path.join(os.path.dirname(__file__), 'screenshots')
             screenshots = [os.path.join(screenshots_path, f) for f in os.listdir(screenshots_path) if f.lower().endswith(('.png', '.jpg', '.jpeg', '.webp', '.gif'))]
 
+            scene_info = get_scene_info()
+            formatted_scene_info = format_scene_info(scene_info)
+
             output_text = analyze_screenshots_with_claude(screenshots)
 
             logger.info(f"Claude Response: {output_text}")
 
             claude_message = claude_tool.messages.add()
             claude_message.role = "assistant"
-            claude_message.content = output_text
+            claude_message.content = f"以下为blender内的场景信息:\n{formatted_scene_info}\n\这是基于视觉图片得到的场景分析:\n{output_text}"
 
             execute_blender_command(output_text)
 
@@ -134,6 +140,9 @@ class OBJECT_OT_analyze_screenshots_claude(Operator):
             screenshots_path = os.path.join(os.path.dirname(__file__), 'screenshots')
             screenshots = [os.path.join(screenshots_path, f) for f in os.listdir(screenshots_path) if f.lower().endswith(('.png', '.jpg', '.jpeg', '.webp', '.gif'))]
             
+            scene_info = get_scene_info()
+            formatted_scene_info = format_scene_info(scene_info)
+            
             analysis_result = analyze_screenshots_with_claude(screenshots)
             logger.info(f"Screenshot Analysis Result: {analysis_result}")
             
@@ -141,7 +150,7 @@ class OBJECT_OT_analyze_screenshots_claude(Operator):
             claude_tool = context.scene.claude_tool
             claude_message = claude_tool.messages.add()
             claude_message.role = "assistant"
-            claude_message.content = f"Screenshot Analysis: {analysis_result}"
+            claude_message.content = f"以下为blender内的场景信息:\n{formatted_scene_info}\n\n这是基于视觉图片得到的场景分析: {analysis_result}"
             
             # 可以选择是否执行分析结果
             # execute_blender_command(analysis_result)

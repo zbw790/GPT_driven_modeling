@@ -93,52 +93,79 @@ def encode_image(image_path):
 
 def sanitize_command(command):
     try:
-        # 移除代码块标记
+        # 移除代码块标记和语言标识
         if command.startswith("```") and command.endswith("```"):
-            command = command[3:-3].strip()
-        if command.startswith("python"):
-            command = command[6:].strip()
-
-        # 替换特殊引号
-        command = command.replace('"', '"').replace('"', '"').replace(''', "'").replace(''', "'")
-
-        # 分割成行
-        lines = command.split('\n')
-        cleaned_lines = []
+            command = re.sub(r'^```[\w\s]*\n|```$', '', command, flags=re.MULTILINE).strip()
         
-        # 计算每行的缩进级别
-        indent_levels = []
-        for line in lines:
-            if line.strip():  # 忽略空行
-                indent = len(line) - len(line.lstrip())
-                indent_levels.append(indent)
-
-        # 如果所有行都没有缩进，应用智能缩进
-        if all(level == 0 for level in indent_levels):
-            current_indent = 0
-            for line in lines:
-                stripped = line.strip()
-                if stripped:
-                    if re.match(r'^(def|class|if|elif|else:|for|while|try:|except:|finally:)', stripped):
-                        cleaned_lines.append(' ' * current_indent + stripped)
-                        current_indent += 4
-                    elif re.match(r'^(return|break|continue|pass)', stripped):
-                        current_indent = max(0, current_indent - 4)
-                        cleaned_lines.append(' ' * current_indent + stripped)
-                    else:
-                        cleaned_lines.append(' ' * current_indent + stripped)
-        else:
-            # 保持原有的缩进结构
-            min_indent = min(indent_levels)
-            for line in lines:
-                if line.strip():
-                    indent = len(line) - len(line.lstrip())
-                    cleaned_lines.append(' ' * (indent - min_indent) + line.strip())
-
-        return '\n'.join(cleaned_lines)
+        # 移除可能的注释和说明文字
+        command = re.sub(r'^#.*$', '', command, flags=re.MULTILINE)
+        command = re.sub(r'^[\u4e00-\u9fff，。：；！？、（）【】《》""'']+.*$', '', command, flags=re.MULTILINE)
+        
+        # 替换特殊引号和其他字符
+        command = command.replace('"', '"').replace('"', '"').replace(''', "'").replace(''', "'")
+        command = command.replace('，', ',').replace('：', ':').replace('；', ';')
+        
+        # 分割成行并清理
+        lines = command.split('\n')
+        cleaned_lines = [line.strip() for line in lines if line.strip()]
+        
+        # 应用智能缩进
+        indented_lines = apply_smart_indentation(cleaned_lines)
+        
+        return '\n'.join(indented_lines)
     except Exception as e:
         logger.error(f"Error sanitizing command: {e}")
         return command
+
+def apply_smart_indentation(lines):
+    indented_lines = []
+    current_indent = 0
+    indent_increase = ['if', 'for', 'while', 'def', 'class', 'with', 'try', 'except', 'finally']
+    indent_decrease = ['else', 'elif', 'except', 'finally']
+    
+    for line in lines:
+        stripped = line.strip()
+        if any(stripped.startswith(keyword) for keyword in indent_decrease):
+            current_indent = max(0, current_indent - 4)
+        
+        indented_lines.append(' ' * current_indent + stripped)
+        
+        if any(stripped.startswith(keyword) for keyword in indent_increase) or stripped.endswith(':'):
+            current_indent += 4
+        elif stripped.startswith('return') or stripped.startswith('break') or stripped.startswith('continue'):
+            current_indent = max(0, current_indent - 4)
+    
+    return indented_lines
+
+def get_scene_info():
+    scene_info = []
+    for obj in bpy.context.scene.objects:
+        obj_info = {
+            "name": obj.name,
+            "type": obj.type,
+            "location": tuple(obj.location),
+            "rotation": tuple(obj.rotation_euler),
+            "scale": tuple(obj.scale)
+        }
+        if obj.type == 'MESH':
+            obj_info["vertex_count"] = len(obj.data.vertices)
+            obj_info["face_count"] = len(obj.data.polygons)
+        scene_info.append(obj_info)
+    return scene_info
+
+def format_scene_info(scene_info):
+    formatted_info = "场景信息:\n"
+    for obj in scene_info:
+        formatted_info += f"对象名称: {obj['name']}\n"
+        formatted_info += f"  类型: {obj['type']}\n"
+        formatted_info += f"  位置: {obj['location']}\n"
+        formatted_info += f"  旋转: {obj['rotation']}\n"
+        formatted_info += f"  缩放: {obj['scale']}\n"
+        if 'vertex_count' in obj:
+            formatted_info += f"  顶点数: {obj['vertex_count']}\n"
+            formatted_info += f"  面数: {obj['face_count']}\n"
+        formatted_info += "\n"
+    return formatted_info
 
 def execute_blender_command(command):
     try:

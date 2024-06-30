@@ -69,7 +69,10 @@ def analyze_screenshots_with_gpt4(screenshots):
             }
         )
 
-    prompt = "分析这些图片，描述你看到的3D模型。指出任何可能的问题或需要改进的地方。"
+    scene_info = get_scene_info()
+    formatted_scene_info = format_scene_info(scene_info)
+
+    prompt = f"分析这些图片，描述你看到的3D模型。指出任何可能的问题或需要改进的地方。以下是场景中对象的详细信息：\n\n{formatted_scene_info}"
     text_message = {
         "type": "text",
         "text": prompt
@@ -153,14 +156,18 @@ class OBJECT_OT_send_screenshots_to_gpt(Operator):
             screenshots_path = os.path.join(os.path.dirname(__file__), 'screenshots')
             screenshots = [os.path.join(screenshots_path, f) for f in os.listdir(screenshots_path) if f.lower().endswith(('.png', '.jpg', '.jpeg', '.webp', '.gif'))]
 
-            # 分析截图
+            # 获取场景信息
+            scene_info = get_scene_info()
+            formatted_scene_info = format_scene_info(scene_info)
+
+            # 分析截图和场景信息
             output_text = analyze_screenshots_with_gpt4(screenshots)
             logger.info(f"GPT-4 Response: {output_text}")
 
             # 将GPT-4响应添加到对话历史中
             gpt_message = gpt_tool.messages.add()
             gpt_message.role = "assistant"
-            gpt_message.content = output_text
+            gpt_message.content = f"以下为blender内的场景信息:\n{formatted_scene_info}\n\这是基于视觉图片得到的场景分析:\n{output_text}"
 
             # 执行GPT-4生成的Blender指令
             execute_blender_command(output_text)
@@ -179,6 +186,10 @@ class OBJECT_OT_analyze_screenshots(Operator):
             screenshots_path = os.path.join(os.path.dirname(__file__), 'screenshots')
             screenshots = [os.path.join(screenshots_path, f) for f in os.listdir(screenshots_path) if f.lower().endswith(('.png', '.jpg', '.jpeg', '.webp', '.gif'))]
             
+            
+            scene_info = get_scene_info()
+            formatted_scene_info = format_scene_info(scene_info)
+            
             analysis_result = analyze_screenshots_with_gpt4(screenshots)
             logger.info(f"Screenshot Analysis Result: {analysis_result}")
             
@@ -186,7 +197,7 @@ class OBJECT_OT_analyze_screenshots(Operator):
             gpt_tool = context.scene.gpt_tool
             gpt_message = gpt_tool.messages.add()
             gpt_message.role = "assistant"
-            gpt_message.content = f"Screenshot Analysis: {analysis_result}"
+            gpt_message.content = f"以下为blender内的场景信息:\n{formatted_scene_info}\n\n这是基于视觉图片得到的场景分析: {analysis_result}"
             
             # 可以选择是否执行分析结果
             # execute_blender_command(analysis_result)
