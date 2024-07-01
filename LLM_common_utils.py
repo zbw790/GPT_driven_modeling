@@ -7,6 +7,8 @@ import logging
 import bpy
 import re
 import traceback
+import importlib
+import sys
 from bpy.props import StringProperty, CollectionProperty
 from bpy.types import PropertyGroup
 
@@ -93,26 +95,36 @@ def encode_image(image_path):
 
 def sanitize_command(command):
     try:
-        # 移除代码块标记和语言标识
+        # 移除代码块标记和语言标识（包括可能的 'python' 标识）
         if command.startswith("```") and command.endswith("```"):
-            command = re.sub(r'^```[\w\s]*\n|```$', '', command, flags=re.MULTILINE).strip()
+            command = re.sub(r'^```(?:python)?\s*\n|```$', '', command, flags=re.MULTILINE | re.IGNORECASE).strip()
         
-        # 移除可能的注释和说明文字
-        command = re.sub(r'^#.*$', '', command, flags=re.MULTILINE)
-        command = re.sub(r'^[\u4e00-\u9fff，。：；！？、（）【】《》""'']+.*$', '', command, flags=re.MULTILINE)
-        
-        # 替换特殊引号和其他字符
-        command = command.replace('"', '"').replace('"', '"').replace(''', "'").replace(''', "'")
-        command = command.replace('，', ',').replace('：', ':').replace('；', ';')
-        
-        # 分割成行并清理
+        # 移除可能残留的单独 'python' 行
         lines = command.split('\n')
-        cleaned_lines = [line.strip() for line in lines if line.strip()]
+        if lines and lines[0].strip().lower() == 'python':
+            lines = lines[1:]
         
-        # 应用智能缩进
-        indented_lines = apply_smart_indentation(cleaned_lines)
+        # 保留原始缩进和重要的 Python 语句
+        cleaned_lines = []
+        for line in lines:
+            stripped_line = line.strip()
+            if stripped_line:
+                # 保留 import 语句、函数定义、类定义等
+                if (stripped_line.startswith('import ') or 
+                    stripped_line.startswith('from ') or 
+                    stripped_line.startswith('def ') or 
+                    stripped_line.startswith('class ') or 
+                    not re.match(r'^[\u4e00-\u9fff，。：；！？、（）【】《》""'']+', stripped_line)):
+                    
+                    # 替换特殊引号和其他字符
+                    cleaned_line = stripped_line.replace('"', '"').replace('"', '"').replace(''', "'").replace(''', "'")
+                    cleaned_line = cleaned_line.replace('，', ',').replace('：', ':').replace('；', ';')
+                    
+                    # 保留原始缩进
+                    indent = len(line) - len(line.lstrip())
+                    cleaned_lines.append(' ' * indent + cleaned_line)
         
-        return '\n'.join(indented_lines)
+        return '\n'.join(cleaned_lines)
     except Exception as e:
         logger.error(f"Error sanitizing command: {e}")
         return command
@@ -174,8 +186,25 @@ def execute_blender_command(command):
         
         dedented_command = textwrap.dedent(sanitized_command)
         
-        exec_globals = {'bpy': bpy}
+        # 创建一个新的全局命名空间, 注意__builtins__的正确写法是 __builtins__
+        exec_globals = {
+            '__name__': '__main__',
+            '__builtins__': __builtins__,
+        }
         
+        # 添加一个自定义的导入函数
+        def custom_import(name, globals=None, locals=None, fromlist=(), level=0):
+            try:
+                if name not in sys.modules:
+                    importlib.import_module(name)
+                return sys.modules[name]
+            except ImportError as e:
+                logger.error(f"无法导入模块 {name}: {str(e)}")
+                raise e
+        
+        exec_globals['__import__'] = custom_import
+        
+        # 执行代码
         exec(dedented_command, exec_globals)
         
         logger.info("命令执行成功")
