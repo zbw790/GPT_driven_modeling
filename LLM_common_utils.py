@@ -95,20 +95,27 @@ def encode_image(image_path):
 
 def sanitize_command(command):
     try:
-        # 移除代码块标记和语言标识（包括可能的 'python' 标识）
-        if command.startswith("```") and command.endswith("```"):
-            command = re.sub(r'^```(?:python)?\s*\n|```$', '', command, flags=re.MULTILINE | re.IGNORECASE).strip()
+        # 移除代码块标记和语言标识（包括三引号情况）
+        command = re.sub(r'^(```|"""|\'\'\')\s*(?:python)?\s*\n|(```|"""|\'\'\')\s*$', '', command, flags=re.MULTILINE | re.IGNORECASE).strip()
         
         # 移除可能残留的单独 'python' 行
         lines = command.split('\n')
         if lines and lines[0].strip().lower() == 'python':
             lines = lines[1:]
         
-        # 保留原始缩进和重要的 Python 语句
+        # 清理和智能缩进
         cleaned_lines = []
+        indent_stack = [0]
+        indent_increase = ['if', 'for', 'while', 'def', 'class', 'with', 'try', 'except', 'finally']
+        indent_decrease = ['else', 'elif', 'except', 'finally']
+        
         for line in lines:
             stripped_line = line.strip()
             if stripped_line:
+                # 检查是否需要减少缩进
+                if any(stripped_line.startswith(keyword) for keyword in indent_decrease):
+                    indent_stack.pop()
+                
                 # 保留 import 语句、函数定义、类定义等
                 if (stripped_line.startswith('import ') or 
                     stripped_line.startswith('from ') or 
@@ -120,34 +127,21 @@ def sanitize_command(command):
                     cleaned_line = stripped_line.replace('"', '"').replace('"', '"').replace(''', "'").replace(''', "'")
                     cleaned_line = cleaned_line.replace('，', ',').replace('：', ':').replace('；', ';')
                     
-                    # 保留原始缩进
-                    indent = len(line) - len(line.lstrip())
-                    cleaned_lines.append(' ' * indent + cleaned_line)
+                    # 应用当前缩进
+                    current_indent = indent_stack[-1]
+                    cleaned_lines.append(' ' * current_indent + cleaned_line)
+                    
+                    # 检查是否需要增加缩进
+                    if any(cleaned_line.startswith(keyword) for keyword in indent_increase) or cleaned_line.endswith(':'):
+                        indent_stack.append(current_indent + 4)
+                    elif cleaned_line.startswith('return') or cleaned_line.startswith('break') or cleaned_line.startswith('continue'):
+                        if len(indent_stack) > 1:
+                            indent_stack.pop()
         
         return '\n'.join(cleaned_lines)
     except Exception as e:
         logger.error(f"Error sanitizing command: {e}")
         return command
-
-def apply_smart_indentation(lines):
-    indented_lines = []
-    current_indent = 0
-    indent_increase = ['if', 'for', 'while', 'def', 'class', 'with', 'try', 'except', 'finally']
-    indent_decrease = ['else', 'elif', 'except', 'finally']
-    
-    for line in lines:
-        stripped = line.strip()
-        if any(stripped.startswith(keyword) for keyword in indent_decrease):
-            current_indent = max(0, current_indent - 4)
-        
-        indented_lines.append(' ' * current_indent + stripped)
-        
-        if any(stripped.startswith(keyword) for keyword in indent_increase) or stripped.endswith(':'):
-            current_indent += 4
-        elif stripped.startswith('return') or stripped.startswith('break') or stripped.startswith('continue'):
-            current_indent = max(0, current_indent - 4)
-    
-    return indented_lines
 
 def get_scene_info():
     scene_info = []
