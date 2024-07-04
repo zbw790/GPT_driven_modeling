@@ -40,8 +40,11 @@ from claude_module import (
 from LLM_common_utils import (
     Message, Properties
 )
-from llama_db_manager import (
-    LLAMADB_OT_query, LLAMADB_OT_query_with_screenshots, LLAMADB_PT_panel, LlamaDBProperties, initialize_llama_db, LLAMADB_OT_query_and_generate
+from llama_index_model_modification import (
+    ModificationProperties, MODIFICATION_OT_query, MODIFICATION_OT_query_with_screenshots, MODIFICATION_PT_panel, initialize_modification_db, MODIFICATION_OT_query_and_generate
+)
+from llama_index_model_generation import (
+    GenerationProperties, GENERATION_OT_query, GENERATION_OT_generate_model, GENERATION_PT_panel, initialize_generation_db
 )
 
 # 设置日志记录
@@ -59,11 +62,15 @@ classes = (
     OBJECT_OT_analyze_screenshots_claude,
     OBJECT_OT_send_screenshots_to_claude,
     CLAUDE_PT_panel,
-    LLAMADB_OT_query,
-    LLAMADB_OT_query_with_screenshots,
-    LLAMADB_OT_query_and_generate,
-    LLAMADB_PT_panel,
-    LlamaDBProperties,
+    ModificationProperties,
+    MODIFICATION_OT_query,
+    MODIFICATION_OT_query_with_screenshots,
+    MODIFICATION_OT_query_and_generate,
+    MODIFICATION_PT_panel,
+    GenerationProperties,
+    GENERATION_OT_query,
+    GENERATION_OT_generate_model,
+    GENERATION_PT_panel,
     RotateObjectCW_X,
     RotateObjectCW_Y,
     RotateObjectCW_Z,
@@ -123,7 +130,11 @@ def register():
         bpy.types.Scene.subdivision_decimate_props = bpy.props.PointerProperty(type=SubdivisionDecimateProperties)
         bpy.types.Scene.align_props = bpy.props.PointerProperty(type=AlignProperties)
         bpy.types.Scene.align_point_set = bpy.props.IntProperty(default=1)
-        bpy.types.Scene.llama_db_tool = bpy.props.PointerProperty(type=LlamaDBProperties)
+        bpy.types.Scene.modification_tool = bpy.props.PointerProperty(type=ModificationProperties)
+        bpy.types.Scene.generation_tool = bpy.props.PointerProperty(type=GenerationProperties)
+        
+        initialize_modification_db()
+        initialize_generation_db()
         
         logger.info("Registered all classes successfully.")
     except Exception as e:
@@ -152,11 +163,11 @@ def unregister():
             del bpy.types.Scene.align_props
         if hasattr(bpy.types.Scene, "align_point_set"):
             del bpy.types.Scene.align_point_set
-        if hasattr(bpy.types.Scene, "llama_db_tool"):
-            del bpy.types.Scene.llama_db_tool
+        if hasattr(bpy.types.Scene, "modification_tool"):
+            del bpy.types.Scene.modification_tool
+        if hasattr(bpy.types.Scene, "generation_tool"):
+            del bpy.types.Scene.generation_tool
         
-        initialize_llama_db()
-
         logger.info("Unregistered all classes successfully.")
     except Exception as e:
         logger.error(f"Error unregistering classes: {e}")

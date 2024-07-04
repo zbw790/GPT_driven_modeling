@@ -29,9 +29,9 @@ load_dotenv(dotenv_path="D:/Tencent_Supernova/api/.env")
 api_key = os.getenv("OPENAI_API_KEY")
 openai.api_key = api_key
 
-def load_data(directory_path):
+def load_modification_data(directory_path):
     documents = []
-    category_structure_path = os.path.join(directory_path, 'category_structure.json')
+    category_structure_path = os.path.join(directory_path, 'model_modification', 'modification_category_structure.json')
     
     # 加载类别结构
     with open(category_structure_path, 'r', encoding='utf-8') as f:
@@ -41,7 +41,7 @@ def load_data(directory_path):
     for category in category_structure['categories']:
         for subcategory in category['subcategories']:
             for problem in subcategory['problems']:
-                file_path = os.path.join(directory_path, 'furniture', subcategory['name'].lower(), problem['file'])
+                file_path = os.path.join(directory_path, 'model_modification', 'furniture', subcategory['name'].lower(), problem['file'])
                 if os.path.exists(file_path):
                     with open(file_path, 'r', encoding='utf-8') as f:
                         content = f.read()
@@ -61,21 +61,21 @@ def load_data(directory_path):
     return documents, category_structure
 
 # 创建向量存储索引
-def create_index(documents):
-    db_path = "./chroma_db"
+def create_modification_index(documents):
+    db_path = "./chroma_db_modification"
     if os.path.exists(db_path):
         shutil.rmtree(db_path)
-        logger.info("Existing database deleted.")
+        logger.info("Existing modification database deleted.")
     
     db = chromadb.PersistentClient(path=db_path)
-    chroma_collection = db.get_or_create_collection("operation_index")
+    chroma_collection = db.get_or_create_collection("modification_index")
     vector_store = ChromaVectorStore(chroma_collection=chroma_collection)
     storage_context = StorageContext.from_defaults(vector_store=vector_store)
     embed_model = OpenAIEmbedding(model="text-embedding-ada-002", api_key=api_key)
     return VectorStoreIndex.from_documents(documents, storage_context=storage_context, embed_model=embed_model)
 
 # 配置查询引擎
-def configure_query_engine(index):
+def configure_modification_query_engine(index):
     retriever = VectorIndexRetriever(index=index, similarity_top_k=1)
     response_synthesizer = get_response_synthesizer(
         response_mode="tree_summarize",
@@ -88,7 +88,7 @@ def configure_query_engine(index):
     )
 
 # 查询函数
-def query_documentation(query_engine, query):
+def query_modification_documentation(query_engine, query):
     response = query_engine.query(query)
     if response.source_nodes:
         # 获取最相关文档的文件路径
@@ -97,26 +97,26 @@ def query_documentation(query_engine, query):
             # 直接读取并返回整个文件内容
             with open(file_path, 'r', encoding='utf-8') as f:
                 return f.read()
-    return "No relevant information found."
+    return "No relevant modification information found."
 
-class LlamaDBProperties(PropertyGroup):
-    input_text: StringProperty(name="Query", default="")
+class ModificationProperties(PropertyGroup):
+    input_text: StringProperty(name="Modification Query", default="")
 
-class LLAMADB_OT_query(Operator):
-    bl_idname = "llamadb.query"
-    bl_label = "Query LlamaDB"
+class MODIFICATION_OT_query(Operator):
+    bl_idname = "modification.query"
+    bl_label = "Query Modification DB"
 
     def execute(self, context):
-        props = context.scene.llama_db_tool
+        props = context.scene.modification_tool
         query = props.input_text
-        result = query_documentation(context.scene.query_engine, query)
-        print("Query Result:", result)
-        logger.info(f"Query Result Length: {len(result)}")
+        result = query_modification_documentation(context.scene.modification_query_engine, query)
+        print("Modification Query Result:", result)
+        logger.info(f"Modification Query Result Length: {len(result)}")
         return {'FINISHED'}
 
-class LLAMADB_OT_query_with_screenshots(Operator):
-    bl_idname = "llamadb.query_with_screenshots"
-    bl_label = "Query with Screenshots"
+class MODIFICATION_OT_query_with_screenshots(Operator):
+    bl_idname = "modification.query_with_screenshots"
+    bl_label = "Query Modification with Screenshots"
 
     def execute(self, context):
         try:
@@ -124,70 +124,26 @@ class LLAMADB_OT_query_with_screenshots(Operator):
             screenshots_path = os.path.join(os.path.dirname(__file__), 'screenshots')
             screenshots = [os.path.join(screenshots_path, f) for f in os.listdir(screenshots_path) if f.lower().endswith(('.png', '.jpg', '.jpeg', '.webp', '.gif'))]
 
-            headers = {
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json"
-            }
-
-            image_messages = []
-            for screenshot in screenshots:
-                base64_image = encode_image(screenshot)
-                image_messages.append(
-                    {
-                        "type": "image_url",
-                        "image_url": {
-                            "url": f"data:image/png;base64,{base64_image}",
-                            "detail": "low"
-                        }
-                    }
-                )
-
-            prompt = "所有的图片皆来自于同一模型，你觉得这个物品像什么东西，有什么问题。"
-            text_message = {
-                "type": "text",
-                "text": prompt
-            }
-
-            request_data = {
-                "model": "gpt-4o",
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": [text_message] + image_messages
-                    }
-                ],
-                "max_tokens": 2560,
-                "temperature": 0.8,
-                "top_p": 1,
-                "frequency_penalty": 0,
-                "presence_penalty": 0
-            }
-
-            response = requests.post(
-                "https://api.openai.com/v1/chat/completions",
-                headers=headers,
-                json=request_data
-            )
-            gpt_description = response.json().get("choices", [{}])[0].get("message", {}).get("content", "")
+            gpt_description = analyze_screenshots_with_gpt4(screenshots)
             logger.info(f"GPT-4 Response: {gpt_description}")
 
-            # 使用GPT-4的描述作为LlamaDB的查询输入
-            result = query_documentation(context.scene.query_engine, gpt_description)
+            # 使用GPT-4的描述作为查询输入
+            result = query_modification_documentation(context.scene.modification_query_engine, gpt_description)
             print("Query with Screenshots Result:", result)
 
             logger.info(f"Query with Screenshots Result Length: {len(result)}")
 
-            # 接着就是把result结合gpt再生成新的command并且运行
+            # 这里可以添加进一步的处理逻辑，比如生成新的命令并运行
 
         except Exception as e:
-            logger.error(f"Error in LLAMADB_OT_query_with_screenshots.execute: {e}")
+            logger.error(f"Error in MODIFICATION_OT_query_with_screenshots.execute: {e}")
             print(f"Error: {str(e)}")
 
         return {'FINISHED'}
 
-class LLAMADB_OT_query_and_generate(Operator):
-    bl_idname = "llamadb.query_and_generate"
-    bl_label = "Query and Generate Commands"
+class MODIFICATION_OT_query_and_generate(Operator):
+    bl_idname = "modification.query_and_generate"
+    bl_label = "Query and Generate Modification Commands"
 
     def execute(self, context):
         try:
@@ -199,11 +155,11 @@ class LLAMADB_OT_query_and_generate(Operator):
             gpt_description = analyze_screenshots_with_gpt4(screenshots)
             logger.info(f"GPT-4 Image Analysis: {gpt_description}")
 
-            # 使用LlamaDB查询相关文档
-            result = query_documentation(context.scene.query_engine, gpt_description)
-            logger.info(f"LlamaDB Query Result Length: {len(result)}")
+            # 使用查询相关文档
+            result = query_modification_documentation(context.scene.modification_query_engine, gpt_description)
+            logger.info(f"Modification Query Result Length: {len(result)}")
 
-            # 将LlamaDB查询结果和GPT-4图像分析结果发送到GPT-4生成命令
+            # 将查询结果和GPT-4图像分析结果发送到GPT-4生成命令
             gpt_tool = context.scene.gpt_tool
             initialize_conversation(gpt_tool)
             messages = [{"role": msg.role, "content": msg.content} for msg in gpt_tool.messages]
@@ -226,32 +182,32 @@ class LLAMADB_OT_query_and_generate(Operator):
             gpt_message.content = response
 
         except Exception as e:
-            logger.error(f"Error in LLAMADB_OT_query_and_generate.execute: {e}")
+            logger.error(f"Error in MODIFICATION_OT_query_and_generate.execute: {e}")
             print(f"Error: {str(e)}")
 
         return {'FINISHED'}
 
-class LLAMADB_PT_panel(Panel):
-    bl_label = "LlamaDB Query"
-    bl_idname = "LLAMADB_PT_panel"
+class MODIFICATION_PT_panel(Panel):
+    bl_label = "Model Modification"
+    bl_idname = "MODIFICATION_PT_panel"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = 'Tool'
 
     def draw(self, context):
         layout = self.layout
-        props = context.scene.llama_db_tool
+        props = context.scene.modification_tool
 
         layout.prop(props, "input_text")
-        layout.operator("llamadb.query")
-        layout.operator("llamadb.query_with_screenshots")
-        layout.operator("llamadb.query_and_generate")
+        layout.operator("modification.query")
+        layout.operator("modification.query_with_screenshots")
+        layout.operator("modification.query_and_generate")
 
-def initialize_llama_db():
-    db_path = "./chroma_db"
+def initialize_modification_db():
+    db_path = "./chroma_db_modification"
     db = chromadb.PersistentClient(path=db_path)
-    chroma_collection = db.get_or_create_collection("operation_index")
+    chroma_collection = db.get_or_create_collection("modification_index")
     vector_store = ChromaVectorStore(chroma_collection=chroma_collection)
     index = VectorStoreIndex.from_vector_store(vector_store)
-    bpy.types.Scene.query_engine = configure_query_engine(index)
-    logger.info("LlamaDB initialized successfully.")
+    bpy.types.Scene.modification_query_engine = configure_modification_query_engine(index)
+    logger.info("Modification DB initialized successfully.")
