@@ -93,6 +93,8 @@ def encode_image(image_path):
     with open(image_path, "rb") as image_file:
         return base64.b64encode(image_file.read()).decode('utf-8')
 
+import re
+
 def sanitize_command(command):
     try:
         # 移除代码块标记和语言标识（包括三引号情况）
@@ -103,40 +105,31 @@ def sanitize_command(command):
         if lines and lines[0].strip().lower() == 'python':
             lines = lines[1:]
         
-        # 清理和智能缩进
+        # 清理每一行
         cleaned_lines = []
-        indent_stack = [0]
-        indent_increase = ['if', 'for', 'while', 'def', 'class', 'with', 'try', 'except', 'finally']
-        indent_decrease = ['else', 'elif', 'except', 'finally']
-        
         for line in lines:
             stripped_line = line.strip()
             if stripped_line:
-                # 检查是否需要减少缩进
-                if any(stripped_line.startswith(keyword) for keyword in indent_decrease):
-                    indent_stack.pop()
+                # 保留原始缩进
+                indent = len(line) - len(line.lstrip())
                 
+                # 替换特殊引号和其他字符
+                cleaned_line = stripped_line.replace('"', '"').replace('"', '"').replace(''', "'").replace(''', "'")
+                cleaned_line = cleaned_line.replace('，', ',').replace('：', ':').replace('；', ';')
+                
+                # 保留注释
+                if cleaned_line.startswith('#'):
+                    cleaned_lines.append(' ' * indent + cleaned_line)
                 # 保留 import 语句、函数定义、类定义等
-                if (stripped_line.startswith('import ') or 
-                    stripped_line.startswith('from ') or 
-                    stripped_line.startswith('def ') or 
-                    stripped_line.startswith('class ') or 
-                    not re.match(r'^[\u4e00-\u9fff，。：；！？、（）【】《》""'']+', stripped_line)):
-                    
-                    # 替换特殊引号和其他字符
-                    cleaned_line = stripped_line.replace('"', '"').replace('"', '"').replace(''', "'").replace(''', "'")
-                    cleaned_line = cleaned_line.replace('，', ',').replace('：', ':').replace('；', ';')
-                    
-                    # 应用当前缩进
-                    current_indent = indent_stack[-1]
-                    cleaned_lines.append(' ' * current_indent + cleaned_line)
-                    
-                    # 检查是否需要增加缩进
-                    if any(cleaned_line.startswith(keyword) for keyword in indent_increase) or cleaned_line.endswith(':'):
-                        indent_stack.append(current_indent + 4)
-                    elif cleaned_line.startswith('return') or cleaned_line.startswith('break') or cleaned_line.startswith('continue'):
-                        if len(indent_stack) > 1:
-                            indent_stack.pop()
+                elif (cleaned_line.startswith('import ') or 
+                      cleaned_line.startswith('from ') or 
+                      cleaned_line.startswith('def ') or 
+                      cleaned_line.startswith('class ') or 
+                      not re.match(r'^[\u4e00-\u9fff，。：；！？、（）【】《》""'']+', cleaned_line)):
+                    cleaned_lines.append(' ' * indent + cleaned_line)
+            else:
+                # 保留空行
+                cleaned_lines.append('')
         
         return '\n'.join(cleaned_lines)
     except Exception as e:

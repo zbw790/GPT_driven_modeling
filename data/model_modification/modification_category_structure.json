@@ -1,0 +1,23 @@
+{
+    "categories": [
+      {
+        "name": "furniture",
+        "subcategories": [
+          {
+            "name": "table",
+            "problems": [
+              {"name": "精确修复桌子腿与桌面分离及错位问题", "file": "table_leg_structure_precision_fix.md"},
+              {"name": "桌面不平整", "file": "uneven_surface.md"}
+            ]
+          },
+          {
+            "name": "chair",
+            "problems": [
+              {"name": "椅腿和椅面分离", "file": "chair_leg_separation.md"},
+              {"name": "靠背太小", "file": "back_rest_too_small.md"}
+            ]
+          }
+        ]
+      }
+    ]
+  }

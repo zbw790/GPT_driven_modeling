@@ -89,7 +89,7 @@ $RECYCLE.BIN/
 *.db
 
 # Ignore the data folder
-data/
+# data/
 
 # Ignore the pycache
 __pycache__/

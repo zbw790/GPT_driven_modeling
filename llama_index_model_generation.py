@@ -123,6 +123,7 @@ class GENERATION_OT_generate_model(Operator):
             
             # 使用LlamaDB查询相关文档
             result = query_generation_documentation(context.scene.generation_query_engine, query)
+            logger.info(f"Generation DB Query Result {result}")
             logger.info(f"Generation DB Query Result Length: {len(result)}")
 
             # 将查询结果发送到GPT-4生成命令
@@ -130,7 +131,7 @@ class GENERATION_OT_generate_model(Operator):
             initialize_conversation(gpt_tool)
             messages = [{"role": msg.role, "content": msg.content} for msg in gpt_tool.messages]
             
-            prompt = f"基于以下信息生成Blender命令来创建3D模型：\n\n用户查询：{query}\n\n相关生成文档：{result}\n\n请生成适当的Blender Python命令来创建3D模型，注意当前的运行函数允许导入新的库，所以请生成代码时也import相关的库。"
+            prompt = f"基于以下信息生成Blender命令来创建3D模型：\n\n用户生成要求：{query}\n\n相关生成文档：{result}\n\n请生成适当的Blender Python命令来创建3D模型，注意当前的运行函数允许导入新的库，所以请生成代码时也import相关的库。"
             
             response = generate_text_with_context(messages, prompt)
             logger.info(f"GPT-4 Generated Commands for 3D Model: {response}")
