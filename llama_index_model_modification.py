@@ -163,8 +163,11 @@ class MODIFICATION_OT_query_and_generate(Operator):
             gpt_tool = context.scene.gpt_tool
             initialize_conversation(gpt_tool)
             messages = [{"role": msg.role, "content": msg.content} for msg in gpt_tool.messages]
+
+            scene_info = get_scene_info()
+            formatted_scene_info = format_scene_info(scene_info)
             
-            prompt = f"基于以下信息生成Blender命令：\n\n图像分析：{gpt_description}\n\可以参考相关问题的解决文档{result}\n\n请生成适当的Blender Python命令来修复或改进模型，注意当前的运行函数允许导入新的库，所以请生成代码时也import相关的库。"
+            prompt = f"基于以下信息生成Blender命令：\n\nblender内的场景信息:{formatted_scene_info}\n\n图像分析：{gpt_description}\n\可以参考相关问题的解决文档{result}\n\n请生成适当的Blender Python命令来修复或改进模型，注意当前的运行函数允许导入新的库，所以请生成代码时也import相关的库。"
             
             response = generate_text_with_context(messages, prompt)
             logger.info(f"GPT-4 Generated Commands: {response}")
