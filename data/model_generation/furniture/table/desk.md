@@ -1,5 +1,17 @@
-# 办公桌
+# 办公桌与学习桌生成指南
+这段代码用于生成办公桌、书桌或学习桌类型的桌子。这类桌子的主要特征包括:
 
+1. 结构相对复杂:通常包括桌面、桌腿、抽屉单元和/或搁板
+2. 桌面尺寸适中:适合个人工作或学习使用
+3. 桌面形状:通常为长方形,可能有圆角设计
+4. 功能性强:可能包含抽屉、键盘托盘、线缆管理孔等功能性元素
+5. 桌腿设计:可能是传统的四条腿,也可能是L型支架或其他现代设计
+7. 用途:主要用于办公、学习、写作或其他需要集中注意力的任务
+
+这个生成器创建的是一个基础版本的办公桌/书桌,包含桌面、抽屉单元和桌腿。
+可以根据需要调整尺寸、比例和功能元素,以适应不同的工作或学习环境。
+
+注意:这个代码不适用于生成其他类型的桌子,如餐桌、咖啡桌或会议桌等。
 ```python
 import bpy
 import bmesh
@@ -172,7 +184,7 @@ def create_cabinet_with_drawers():
     # 创建抽屉
     for i in range(drawer_count):
         drawer_z = (i + 1) * gap + i * drawer_height + drawer_height / 2 + cabinet_thickness
-        drawer_location = (-cabinet_length/2 + cabinet_thickness + gap, -cabinet_thickness/2 - gap, drawer_z)
+        drawer_location = (-cabinet_length/2, -cabinet_thickness/2, drawer_z)
         create_drawer(drawer_length, drawer_width, drawer_height, drawer_thickness, drawer_location)
 
 # 调用主函数
