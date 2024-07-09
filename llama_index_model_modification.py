@@ -7,7 +7,7 @@ import requests
 import time
 import shutil
 from bpy.types import Operator, Panel, PropertyGroup
-from bpy.props import StringProperty, PointerProperty
+from bpy.props import StringProperty, PointerProperty, EnumProperty
 from llama_index.core import Document, VectorStoreIndex, StorageContext
 from llama_index.vector_stores.chroma import ChromaVectorStore
 import chromadb
@@ -19,6 +19,7 @@ from dotenv import load_dotenv
 from llama_index.core.response_synthesizers import get_response_synthesizer
 from LLM_common_utils import *
 from gpt_module import generate_text_with_context, analyze_screenshots_with_gpt4
+from claude_module import generate_text_with_claude, analyze_screenshots_with_claude
 
 # 设置日志记录
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -101,6 +102,14 @@ def query_modification_documentation(query_engine, query):
 
 class ModificationProperties(PropertyGroup):
     input_text: StringProperty(name="Modification Query", default="")
+    model_choice: EnumProperty(
+        name="Model",
+        items=[
+            ('GPT', "GPT-4", "Use GPT-4 model"),
+            ('CLAUDE', "Claude-3.5", "Use Claude-3.5 model"),
+        ],
+        default='GPT'
+    )
 
 class MODIFICATION_OT_query(Operator):
     bl_idname = "modification.query"
@@ -120,20 +129,24 @@ class MODIFICATION_OT_query_with_screenshots(Operator):
 
     def execute(self, context):
         try:
-            # 获取截图并发送到GPT-4
+            props = context.scene.modification_tool
+            model_choice = props.model_choice
+
             screenshots_path = os.path.join(os.path.dirname(__file__), 'screenshots')
             screenshots = [os.path.join(screenshots_path, f) for f in os.listdir(screenshots_path) if f.lower().endswith(('.png', '.jpg', '.jpeg', '.webp', '.gif'))]
 
-            gpt_description = analyze_screenshots_with_gpt4(screenshots)
-            logger.info(f"GPT-4 Response: {gpt_description}")
+            if model_choice == 'GPT':
+                description = analyze_screenshots_with_gpt4(screenshots)
+            elif model_choice == 'CLAUDE':
+                description = analyze_screenshots_with_claude(screenshots)
+            else:
+                raise ValueError("Invalid model choice")
 
-            # 使用GPT-4的描述作为查询输入
-            result = query_modification_documentation(context.scene.modification_query_engine, gpt_description)
+            logger.info(f"{model_choice} Response: {description}")
+
+            result = query_modification_documentation(context.scene.modification_query_engine, description)
             print("Query with Screenshots Result:", result)
-
             logger.info(f"Query with Screenshots Result Length: {len(result)}")
-
-            # 这里可以添加进一步的处理逻辑，比如生成新的命令并运行
 
         except Exception as e:
             logger.error(f"Error in MODIFICATION_OT_query_with_screenshots.execute: {e}")
@@ -147,42 +160,59 @@ class MODIFICATION_OT_query_and_generate(Operator):
 
     def execute(self, context):
         try:
-            # 获取截图
+            props = context.scene.modification_tool
+            model_choice = props.model_choice
+
             screenshots_path = os.path.join(os.path.dirname(__file__), 'screenshots')
             screenshots = [os.path.join(screenshots_path, f) for f in os.listdir(screenshots_path) if f.lower().endswith(('.png', '.jpg', '.jpeg', '.webp', '.gif'))]
 
-            # 使用GPT-4分析截图
-            gpt_description = analyze_screenshots_with_gpt4(screenshots)
-            logger.info(f"GPT-4 Image Analysis: {gpt_description}")
+            if model_choice == 'GPT':
+                description = analyze_screenshots_with_gpt4(screenshots)
+            elif model_choice == 'CLAUDE':
+                description = analyze_screenshots_with_claude(screenshots)
+            else:
+                raise ValueError("Invalid model choice")
 
-            # 使用查询相关文档
-            result = query_modification_documentation(context.scene.modification_query_engine, gpt_description)
+            logger.info(f"{model_choice} Image Analysis: {description}")
+
+            result = query_modification_documentation(context.scene.modification_query_engine, description)
             logger.info(f"Modification Query Result Length: {len(result)}")
-
-            # 将查询结果和GPT-4图像分析结果发送到GPT-4生成命令
-            gpt_tool = context.scene.gpt_tool
-            initialize_conversation(gpt_tool)
-            messages = [{"role": msg.role, "content": msg.content} for msg in gpt_tool.messages]
 
             scene_info = get_scene_info()
             formatted_scene_info = format_scene_info(scene_info)
             
-            prompt = f"基于以下信息生成Blender命令：\n\nblender内的场景信息:{formatted_scene_info}\n\n图像分析：{gpt_description}\n\可以参考相关问题的解决文档{result}\n\n请生成适当的Blender Python命令来修复或改进模型，注意当前的运行函数允许导入新的库，所以请生成代码时也import相关的库。"
+            prompt = f"基于以下信息生成Blender命令：\n\nblender内的场景信息:{formatted_scene_info}\n\n图像分析：{description}\n\可以参考相关问题的解决文档{result}\n\n请生成适当的Blender Python命令来修复或改进模型，注意当前的运行函数允许导入新的库，所以请生成代码时也import相关的库。"
             
-            response = generate_text_with_context(messages, prompt)
-            logger.info(f"GPT-4 Generated Commands: {response}")
+            if model_choice == 'GPT':
+                gpt_tool = context.scene.gpt_tool
+                initialize_conversation(gpt_tool)
+                messages = [{"role": msg.role, "content": msg.content} for msg in gpt_tool.messages]
+                response = generate_text_with_context(messages, prompt)
+                
+                user_message = gpt_tool.messages.add()
+                user_message.role = "user"
+                user_message.content = prompt
 
-            # 执行生成的Blender命令
+                gpt_message = gpt_tool.messages.add()
+                gpt_message.role = "assistant"
+                gpt_message.content = response
+            elif model_choice == 'CLAUDE':
+                claude_tool = context.scene.claude_tool
+                initialize_conversation(claude_tool)
+                messages = [{"role": msg.role, "content": msg.content} for msg in claude_tool.messages]
+                response = generate_text_with_claude(messages, prompt)
+                
+                user_message = claude_tool.messages.add()
+                user_message.role = "human"
+                user_message.content = prompt
+
+                claude_message = claude_tool.messages.add()
+                claude_message.role = "assistant"
+                claude_message.content = response
+
+            logger.info(f"{model_choice} Generated Commands: {response}")
+
             execute_blender_command(response)
-
-            # 更新对话历史
-            user_message = gpt_tool.messages.add()
-            user_message.role = "user"
-            user_message.content = prompt
-
-            gpt_message = gpt_tool.messages.add()
-            gpt_message.role = "assistant"
-            gpt_message.content = response
 
         except Exception as e:
             logger.error(f"Error in MODIFICATION_OT_query_and_generate.execute: {e}")
@@ -202,6 +232,7 @@ class MODIFICATION_PT_panel(Panel):
         props = context.scene.modification_tool
 
         layout.prop(props, "input_text")
+        layout.prop(props, "model_choice")
         layout.operator("modification.query")
         layout.operator("modification.query_with_screenshots")
         layout.operator("modification.query_and_generate")

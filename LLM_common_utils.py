@@ -9,6 +9,7 @@ import re
 import traceback
 import importlib
 import sys
+import ast
 from bpy.props import StringProperty, CollectionProperty
 from bpy.types import PropertyGroup
 
@@ -92,9 +93,6 @@ def initialize_conversation(tool):
 def encode_image(image_path):
     with open(image_path, "rb") as image_file:
         return base64.b64encode(image_file.read()).decode('utf-8')
-
-import re
-import ast
 
 def is_valid_python(line):
     try:
