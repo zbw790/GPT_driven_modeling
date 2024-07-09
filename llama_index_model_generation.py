@@ -7,7 +7,7 @@ import requests
 import time
 import shutil
 from bpy.types import Operator, Panel, PropertyGroup
-from bpy.props import StringProperty, PointerProperty
+from bpy.props import StringProperty, PointerProperty, EnumProperty
 from llama_index.core import Document, VectorStoreIndex, StorageContext
 from llama_index.vector_stores.chroma import ChromaVectorStore
 import chromadb
@@ -19,6 +19,7 @@ from dotenv import load_dotenv
 from llama_index.core.response_synthesizers import get_response_synthesizer
 from LLM_common_utils import *
 from gpt_module import generate_text_with_context
+from claude_module import generate_text_with_claude
 
 # 设置日志记录
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -99,6 +100,14 @@ def query_generation_documentation(query_engine, query):
 
 class GenerationProperties(PropertyGroup):
     input_text: StringProperty(name="Generation Query", default="")
+    model_choice: EnumProperty(
+        name="Model",
+        items=[
+            ('GPT', "GPT-4", "Use GPT-4 model"),
+            ('CLAUDE', "Claude", "Use Claude-3.5 model"),
+        ],
+        default='GPT'
+    )
 
 class GENERATION_OT_query(Operator):
     bl_idname = "generation.query"
@@ -120,33 +129,53 @@ class GENERATION_OT_generate_model(Operator):
         try:
             props = context.scene.generation_tool
             query = props.input_text
+            model_choice = props.model_choice
             
             # 使用LlamaDB查询相关文档
             result = query_generation_documentation(context.scene.generation_query_engine, query)
             logger.info(f"Generation DB Query Result {result}")
             logger.info(f"Generation DB Query Result Length: {len(result)}")
 
-            # 将查询结果发送到GPT-4生成命令
-            gpt_tool = context.scene.gpt_tool
-            initialize_conversation(gpt_tool)
-            messages = [{"role": msg.role, "content": msg.content} for msg in gpt_tool.messages]
-            
+            # 准备提示信息
             prompt = f"基于以下信息生成Blender命令来创建3D模型：\n\n用户生成要求：{query}\n\n相关生成文档：{result}\n\n请生成适当的Blender Python命令来创建3D模型，注意当前的运行函数允许导入新的库，所以请生成代码时也import相关的库。"
-            
-            response = generate_text_with_context(messages, prompt)
-            logger.info(f"GPT-4 Generated Commands for 3D Model: {response}")
+
+            # 根据选择的模型生成响应
+            if model_choice == 'GPT':
+                gpt_tool = context.scene.gpt_tool
+                initialize_conversation(gpt_tool)
+                messages = [{"role": msg.role, "content": msg.content} for msg in gpt_tool.messages]
+                response = generate_text_with_context(messages, prompt)
+                
+                # 更新GPT对话历史
+                user_message = gpt_tool.messages.add()
+                user_message.role = "user"
+                user_message.content = prompt
+
+                gpt_message = gpt_tool.messages.add()
+                gpt_message.role = "assistant"
+                gpt_message.content = response
+                
+            elif model_choice == 'CLAUDE':
+                claude_tool = context.scene.claude_tool
+                initialize_conversation(claude_tool)
+                messages = [{"role": msg.role, "content": msg.content} for msg in claude_tool.messages]
+                response = generate_text_with_claude(messages, prompt)
+                
+                # 更新Claude对话历史
+                user_message = claude_tool.messages.add()
+                user_message.role = "human"
+                user_message.content = prompt
+
+                claude_message = claude_tool.messages.add()
+                claude_message.role = "assistant"
+                claude_message.content = response
+            else:
+                raise ValueError("Invalid model choice")
+
+            logger.info(f"{model_choice} Generated Commands for 3D Model: {response}")
 
             # 执行生成的Blender命令
             execute_blender_command(response)
-
-            # 更新对话历史
-            user_message = gpt_tool.messages.add()
-            user_message.role = "user"
-            user_message.content = prompt
-
-            gpt_message = gpt_tool.messages.add()
-            gpt_message.role = "assistant"
-            gpt_message.content = response
 
         except Exception as e:
             logger.error(f"Error in GENERATION_OT_generate_model.execute: {e}")
@@ -166,6 +195,7 @@ class GENERATION_PT_panel(Panel):
         props = context.scene.generation_tool
 
         layout.prop(props, "input_text")
+        layout.prop(props, "model_choice")
         layout.operator("generation.query")
         layout.operator("generation.generate_model")
 

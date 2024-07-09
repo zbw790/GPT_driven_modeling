@@ -122,7 +122,6 @@ bpy.context.view_layer.active_layer_collection = layer_collection
 # 创建桌板
 bpy.ops.mesh.primitive_cube_add(size=1, location=(0, 0, 0.75))
 tabletop = bpy.context.active_object
-tabletop.scale = (1.5, 0.9, 0.03)
 tabletop.name = "table_top"
 
 # 确保桌板只在主集合中
@@ -137,7 +136,6 @@ def create_leg(name, location):
     
     bpy.ops.mesh.primitive_cube_add(size=1, location=location)
     leg = bpy.context.active_object
-    leg.scale = (0.05, 0.05, 0.75)
     leg.name = name
     
     # 确保桌腿只在legs集合中

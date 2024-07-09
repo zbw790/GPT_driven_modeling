@@ -94,10 +94,30 @@ def encode_image(image_path):
         return base64.b64encode(image_file.read()).decode('utf-8')
 
 import re
+import ast
+
+def is_valid_python(line):
+    try:
+        # 尝试作为表达式解析
+        ast.parse(line, mode='eval')
+        return True
+    except SyntaxError:
+        try:
+            # 尝试作为语句解析
+            ast.parse(line, mode='exec')
+            return True
+        except SyntaxError:
+            # 检查是否是以某些关键字开头的不完整语句
+            if re.match(r'^\s*(def|class|if|for|while|try|with|else|elif|return)', line):
+                return True
+            return False
+    
+def is_potential_multiline_start(line):
+    return line.strip().endswith(('=', '[', '{', '('))
 
 def sanitize_command(command):
     try:
-        # 移除代码块标记和语言标识（包括三引号情况）
+        # 移除代码块标记和语言标识
         command = re.sub(r'^(```|"""|\'\'\')\s*(?:python)?\s*\n|(```|"""|\'\'\')\s*$', '', command, flags=re.MULTILINE | re.IGNORECASE).strip()
         
         # 移除可能残留的单独 'python' 行
@@ -105,35 +125,61 @@ def sanitize_command(command):
         if lines and lines[0].strip().lower() == 'python':
             lines = lines[1:]
         
-        # 清理每一行
         cleaned_lines = []
-        for line in lines:
-            stripped_line = line.strip()
-            if stripped_line:
-                # 保留原始缩进
-                indent = len(line) - len(line.lstrip())
-                
-                # 替换特殊引号和其他字符
-                cleaned_line = stripped_line.replace('"', '"').replace('"', '"').replace(''', "'").replace(''', "'")
-                cleaned_line = cleaned_line.replace('，', ',').replace('：', ':').replace('；', ';')
-                
-                # 保留注释
-                if cleaned_line.startswith('#'):
-                    cleaned_lines.append(' ' * indent + cleaned_line)
-                # 保留 import 语句、函数定义、类定义等
-                elif (cleaned_line.startswith('import ') or 
-                      cleaned_line.startswith('from ') or 
-                      cleaned_line.startswith('def ') or 
-                      cleaned_line.startswith('class ') or 
-                      not re.match(r'^[\u4e00-\u9fff，。：；！？、（）【】《》""'']+', cleaned_line)):
-                    cleaned_lines.append(' ' * indent + cleaned_line)
+        buffer = []
+        i = 0
+        in_multiline = False
+        
+        while i < len(lines):
+            current_line = lines[i].strip()
+            
+            # 替换特殊引号和其他字符
+            current_line = current_line.replace('"', '"').replace('"', '"').replace(''', "'").replace(''', "'")
+            current_line = current_line.replace('，', ',').replace('：', ':').replace('；', ';')
+            
+            # 保留原始缩进
+            indent = len(lines[i]) - len(lines[i].lstrip())
+            
+            if current_line.startswith('#') or not current_line:  # 注释或空行
+                if buffer:
+                    cleaned_lines.extend(buffer)
+                    buffer = []
+                    in_multiline = False
+                cleaned_lines.append(' ' * indent + current_line)
+                i += 1
+                continue
+            
+            if is_potential_multiline_start(current_line):
+                in_multiline = True
+            
+            # 尝试添加新行并验证
+            new_buffer = buffer + [' ' * indent + current_line]
+            if is_valid_python('\n'.join(new_buffer)) or in_multiline:
+                buffer = new_buffer
+                i += 1
+                if not is_potential_multiline_start(current_line) and not current_line.strip().endswith(','):
+                    in_multiline = False
             else:
-                # 保留空行
-                cleaned_lines.append('')
+                # 如果新行添加后不合法，先保存之前的buffer
+                if buffer:
+                    cleaned_lines.extend(buffer)
+                    buffer = []
+                    in_multiline = False
+                
+                # 单独检查当前行
+                if is_valid_python(current_line):
+                    cleaned_lines.append(' ' * indent + current_line)
+                else:
+                    cleaned_lines.append(f"# {' ' * indent + current_line}")
+                i += 1
+        
+        # 处理最后可能剩余的buffer
+        if buffer:
+            cleaned_lines.extend(buffer)
         
         return '\n'.join(cleaned_lines)
     except Exception as e:
-        logger.error(f"Error sanitizing command: {e}")
+        print(f"Error sanitizing command: {e}")
         return command
 
 def get_scene_info():

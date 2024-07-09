@@ -6,8 +6,7 @@
           {
             "name": "table",
             "problems": [
-              {"name": "精确修复3D模型组件分离及错位问题", "file": "components_structure_precision_fix.md"},
-              {"name": "桌面不平整", "file": "uneven_surface.md"}
+              {"name": "精确修复3D模型组件分离及错位问题", "file": "components_structure_precision_fix.md"}
             ]
           },
           {

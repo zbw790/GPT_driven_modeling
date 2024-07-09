@@ -16,23 +16,6 @@ load_dotenv(dotenv_path="D:/Tencent_Supernova/api/.env")
 api_key = os.getenv("OPENAI_API_KEY")
 client = OpenAI(api_key=api_key)
 
-def generate_text(messages, current_instruction=None):
-    try:
-        prompt = generate_prompt(messages, current_instruction)
-        response = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=2560,
-            temperature=0.8,
-            top_p=1,
-            frequency_penalty=0,
-            presence_penalty=0
-        )
-        return response.choices[0].message.content
-    except Exception as e:
-        logger.error(f"Error generating text from GPT-4: {e}")
-        return "Error generating response from GPT-4."
-
 def generate_text_with_context(messages, current_instruction):
     try:
         prompt = generate_prompt(messages, current_instruction)
@@ -124,7 +107,7 @@ class OBJECT_OT_send_to_gpt(Operator):
                 logger.info(f"Messages: {messages}")
                 
                 # 生成GPT-4响应
-                response_text = generate_text(messages, input_text)
+                response_text = generate_text_with_context(messages, input_text)
                 logger.info(f"GPT-4 Response: {response_text}")
                 
                 # 将GPT-4响应添加到对话历史中

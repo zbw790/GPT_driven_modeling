@@ -15,6 +15,28 @@ logger = logging.getLogger(__name__)
 load_dotenv(dotenv_path="D:/Tencent_Supernova/api/.env")
 api_key = os.getenv("ANTHROPIC_API_KEY")
 
+def generate_text_with_claude(messages, current_instruction):
+    try:
+        client = Anthropic(api_key=api_key)
+        
+        prompt = generate_prompt(messages, current_instruction)
+        
+        message = client.messages.create(
+            model="claude-3-5-sonnet-20240620",
+            max_tokens=2048,
+            messages=[
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+        )
+        
+        return message.content[0].text
+    except Exception as e:
+        logger.error(f"Error generating text from Claude with context: {e}")
+        return "Error generating response from Claude."
+
 def analyze_screenshots_with_claude(screenshots):
     client = Anthropic(api_key=api_key)
     
@@ -72,19 +94,7 @@ class OBJECT_OT_send_to_claude(Operator):
                 messages = [{"role": msg.role, "content": msg.content} for msg in claude_tool.messages]
                 logger.info(f"Messages: {messages}")
                 
-                client = Anthropic(api_key=api_key)
-                
-                message = client.messages.create(
-                    model="claude-3-5-sonnet-20240620",
-                    max_tokens=2048,
-                    messages=[
-                        {
-                            "role": "user",
-                            "content": generate_prompt(messages, input_text)
-                        }
-                    ],
-                )
-                response_text = message.content[0].text
+                response_text = generate_text_with_claude(messages, input_text)
                 
                 logger.info(f"Claude Response: {response_text}")
                 
