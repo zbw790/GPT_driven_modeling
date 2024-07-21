@@ -30,6 +30,10 @@ load_dotenv(dotenv_path="D:/Tencent_Supernova/api/.env")
 api_key = os.getenv("OPENAI_API_KEY")
 openai.api_key = api_key
 
+def preprocess_markdown(content):
+    # 提取描述部分（假设描述部分在文件的开头，到第一个 ## 标题之前）
+    return re.split(r'\n##', content)[0]
+
 def load_modification_data(directory_path):
     documents = []
     category_structure_path = os.path.join(directory_path, 'model_modification', 'modification_category_structure.json')
@@ -42,16 +46,18 @@ def load_modification_data(directory_path):
     for category in category_structure['categories']:
         for subcategory in category['subcategories']:
             for problem in subcategory['problems']:
-                file_path = os.path.join(directory_path, 'model_modification', 'furniture', subcategory['name'].lower(), problem['file'])
+                file_path = os.path.join(directory_path, 'model_modification', category['name'], subcategory['name'], problem['file'])
                 if os.path.exists(file_path):
                     with open(file_path, 'r', encoding='utf-8') as f:
                         content = f.read()
-                        doc = Document(text=content, metadata={
+                        # 使用预处理函数提取描述部分
+                        description = preprocess_markdown(content)
+                        doc = Document(text=description, metadata={
                             "category": category['name'],
                             "subcategory": subcategory['name'],
                             "problem": problem['name'],
                             "file_name": problem['file'],
-                            "file_path": os.path.abspath(file_path)  # 使用绝对路径
+                            "file_path": os.path.abspath(file_path)
                         })
                         documents.append(doc)
                     logger.info(f"Loaded file: {file_path}")

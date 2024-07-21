@@ -15,6 +15,7 @@ from llama_index.core.query_engine import RetrieverQueryEngine
 from llama_index.core.retrievers import VectorIndexRetriever
 from llama_index.core.postprocessor import SimilarityPostprocessor
 from llama_index.embeddings.openai import OpenAIEmbedding
+from llama_index.core import SimpleDirectoryReader
 from dotenv import load_dotenv
 from llama_index.core.response_synthesizers import get_response_synthesizer
 from LLM_common_utils import *
@@ -29,6 +30,10 @@ logger = logging.getLogger(__name__)
 load_dotenv(dotenv_path="D:/Tencent_Supernova/api/.env")
 api_key = os.getenv("OPENAI_API_KEY")
 openai.api_key = api_key
+
+def preprocess_markdown(content):
+    # 提取描述部分（假设描述部分在文件的开头，到第一个 ## 标题之前）
+    return re.split(r'\n##', content)[0]
 
 def load_generation_data(directory_path):
     documents = []
@@ -46,7 +51,9 @@ def load_generation_data(directory_path):
                 if os.path.exists(file_path):
                     with open(file_path, 'r', encoding='utf-8') as f:
                         content = f.read()
-                        doc = Document(text=content, metadata={
+                        # 使用预处理函数提取描述部分
+                        description = preprocess_markdown(content)
+                        doc = Document(text=description, metadata={
                             "category": category['name'],
                             "subcategory": subcategory['name'],
                             "item_type": item_type['name'],
@@ -104,7 +111,7 @@ class GenerationProperties(PropertyGroup):
         name="Model",
         items=[
             ('GPT', "GPT-4", "Use GPT-4 model"),
-            ('CLAUDE', "Claude", "Use Claude-3.5 model"),
+            ('CLAUDE', "Claude-3.5", "Use Claude-3.5 model"),
         ],
         default='GPT'
     )

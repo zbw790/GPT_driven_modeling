@@ -23,7 +23,7 @@ def generate_text_with_claude(messages, current_instruction):
         
         message = client.messages.create(
             model="claude-3-5-sonnet-20240620",
-            max_tokens=5000,
+            max_tokens=4096,
             temperature=0,
             messages=[
                 {

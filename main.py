@@ -3,7 +3,7 @@ import os
 import bpy
 import logging
 import requests
-from bpy.props import StringProperty, PointerProperty
+from bpy.props import StringProperty, PointerProperty, FloatProperty, IntProperty
 
 # 确保项目根目录在Python的模块搜索路径中
 project_path = os.path.abspath(os.path.dirname(__file__))
@@ -45,6 +45,9 @@ from llama_index_model_modification import (
 )
 from llama_index_model_generation import (
     GenerationProperties, GENERATION_OT_query, GENERATION_OT_generate_model, GENERATION_PT_panel, initialize_generation_db
+)
+from bevel_corners_module import (
+    BevelEdgesOperator, OBJECT_PT_bevel_panel
 )
 
 # 设置日志记录
@@ -101,37 +104,39 @@ classes = (
     AlignProperties,
     SetAlignPointOperator,
     AlignObjectsOperator,
-    AlignPanel
+    AlignPanel,
+    BevelEdgesOperator,
+    OBJECT_PT_bevel_panel
 )
 
 def register():
     try:
         for cls in classes:
             bpy.utils.register_class(cls)
-        bpy.types.Scene.gpt_tool = bpy.props.PointerProperty(type=Properties)
-        bpy.types.Scene.claude_tool = bpy.props.PointerProperty(type=Properties)
-        bpy.types.Scene.model_scale_percentage = bpy.props.FloatProperty(
+        bpy.types.Scene.gpt_tool = PointerProperty(type=Properties)
+        bpy.types.Scene.claude_tool = PointerProperty(type=Properties)
+        bpy.types.Scene.model_scale_percentage = FloatProperty(
             name="Model Scale Percentage",
             default=100.0,
             min=0.01,
             max=10000.0,
             update=update_model_dimensions
         )
-        bpy.types.Scene.model_dimensions = bpy.props.StringProperty(
+        bpy.types.Scene.model_dimensions = StringProperty(
             name="Model Dimensions",
             default="0.00 x 0.00 x 0.00"
         )
-        bpy.types.Scene.rotation_degree = bpy.props.FloatProperty(
+        bpy.types.Scene.rotation_degree = FloatProperty(
             name="Rotation Degree",
             description="Degree of rotation",
             default=0.0
         )
-        bpy.types.Scene.geometry_props = bpy.props.PointerProperty(type=GeometryProperties)
-        bpy.types.Scene.subdivision_decimate_props = bpy.props.PointerProperty(type=SubdivisionDecimateProperties)
-        bpy.types.Scene.align_props = bpy.props.PointerProperty(type=AlignProperties)
-        bpy.types.Scene.align_point_set = bpy.props.IntProperty(default=1)
-        bpy.types.Scene.modification_tool = bpy.props.PointerProperty(type=ModificationProperties)
-        bpy.types.Scene.generation_tool = bpy.props.PointerProperty(type=GenerationProperties)
+        bpy.types.Scene.geometry_props = PointerProperty(type=GeometryProperties)
+        bpy.types.Scene.subdivision_decimate_props = PointerProperty(type=SubdivisionDecimateProperties)
+        bpy.types.Scene.align_props = PointerProperty(type=AlignProperties)
+        bpy.types.Scene.align_point_set = IntProperty(default=1)
+        bpy.types.Scene.modification_tool = PointerProperty(type=ModificationProperties)
+        bpy.types.Scene.generation_tool = PointerProperty(type=GenerationProperties)
         
         initialize_modification_db()
         initialize_generation_db()
@@ -142,31 +147,20 @@ def register():
 
 def unregister():
     try:
-        for cls in classes:
+        for cls in reversed(classes):
             if hasattr(bpy.types, cls.__name__):
                 bpy.utils.unregister_class(cls)
-        if hasattr(bpy.types.Scene, "gpt_tool"):
-            del bpy.types.Scene.gpt_tool
-        if hasattr(bpy.types.Scene, "claude_tool"):
-            del bpy.types.Scene.claude_tool
-        if hasattr(bpy.types.Scene, "model_scale_percentage"):
-            del bpy.types.Scene.model_scale_percentage
-        if hasattr(bpy.types.Scene, "model_dimensions"):
-            del bpy.types.Scene.model_dimensions
-        if hasattr(bpy.types.Scene, "rotation_degree"):
-            del bpy.types.Scene.rotation_degree
-        if hasattr(bpy.types.Scene, "geometry_props"):
-            del bpy.types.Scene.geometry_props
-        if hasattr(bpy.types.Scene, "subdivision_decimate_props"):
-            del bpy.types.Scene.subdivision_decimate_props
-        if hasattr(bpy.types.Scene, "align_props"):
-            del bpy.types.Scene.align_props
-        if hasattr(bpy.types.Scene, "align_point_set"):
-            del bpy.types.Scene.align_point_set
-        if hasattr(bpy.types.Scene, "modification_tool"):
-            del bpy.types.Scene.modification_tool
-        if hasattr(bpy.types.Scene, "generation_tool"):
-            del bpy.types.Scene.generation_tool
+        del bpy.types.Scene.gpt_tool
+        del bpy.types.Scene.claude_tool
+        del bpy.types.Scene.model_scale_percentage
+        del bpy.types.Scene.model_dimensions
+        del bpy.types.Scene.rotation_degree
+        del bpy.types.Scene.geometry_props
+        del bpy.types.Scene.subdivision_decimate_props
+        del bpy.types.Scene.align_props
+        del bpy.types.Scene.align_point_set
+        del bpy.types.Scene.modification_tool
+        del bpy.types.Scene.generation_tool
         
         logger.info("Unregistered all classes successfully.")
     except Exception as e:
