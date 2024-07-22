@@ -10,6 +10,9 @@
 
 注意，实际情况中的组件命名可能有所变化，例如，leg1可能是tableleg1，以此类推，请根据情况做出修改和补正。不要忘记import
 
+注意该方法仅用于对齐，不应该删除现有的模型并替换成新的模型
+
+## 示例代码
 import bpy
 import bmesh
 from mathutils import Vector
