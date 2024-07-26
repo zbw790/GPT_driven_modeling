@@ -262,6 +262,7 @@ def generate_prompt(messages, current_instruction=None):
     prompt = f"历史对话记录如下：\n{conversation}"
     if current_instruction:
         prompt += f"\n在我发给你的信息中,包含了我和你过去的历史对话,请尽量参考之前提到过的信息。现在,请根据当前指令提供回答：\n{current_instruction}"
+    print(prompt)
     return prompt
 
 def generate_screenshot_prompt(messages):

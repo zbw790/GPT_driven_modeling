@@ -9,6 +9,7 @@ from bpy.props import StringProperty, PointerProperty
 from claude_module import generate_text_with_claude
 from LLM_common_utils import sanitize_command
 from logger_module import setup_logger, log_context
+from prompt_rewriter import rewrite_prompt
 
 # 创建专门的日志记录器
 logger = setup_logger('model_generation')
@@ -26,8 +27,8 @@ def parse_user_input(user_input):
     输入: {user_input}
     
     要求:
-    1. 识别出需要生成的家具类型
-    2. 只识别并列出定义家具基本结构和核心功能的必要部件
+    1. 识别出需要生成的物品类型
+    2. 只识别并列出定义物品基本结构和核心功能的必要部件
     3. 对于每个必要部件，提供名称、数量和形状信息
     4. 如果某些信息缺失，请根据常识进行合理推断
     5. 简化结构，避免列出不必要的装饰性或次要部件
@@ -42,9 +43,9 @@ def parse_user_input(user_input):
        - dimensions: 根据形状包含相应的必要尺寸信息
 
     注意：
-    - 只包含定义家具基本形态和功能的核心部件
-    - 对于简单家具（如桌子、椅子），通常只需要主体和支撑部分
-    - 对于功能性家具（如书桌、衣柜），包含核心功能部件（如抽屉、柜门）
+    - 只包含定义物品基本形态和功能的核心部件
+    - 对于简单物品（如家具中的桌子、椅子），通常只需要主体和支撑部分
+    - 对于功能性物品（如书桌、衣柜），包含核心功能部件（如抽屉、柜门）
     - 省略纯装饰性元素、内部支撑结构或不影响整体形态的次要部件
 
     示例输出格式:
@@ -118,8 +119,12 @@ class MODEL_GENERATION_OT_generate(Operator):
 
         with log_context(logger, user_input) as log_dir:
             try:
-                logger.info("Parsing user input")
-                model_description = parse_user_input(user_input)
+                logger.info("Rewriting user input")
+                rewritten_input = rewrite_prompt(user_input)
+                logger.info(f"Rewritten input: {rewritten_input}")
+                
+                logger.info("Parsing rewritten user input")
+                model_description = parse_user_input(rewritten_input)
                 logger.info("Model Description:")
                 logger.info(json.dumps(model_description, ensure_ascii=False, indent=2))
                 
