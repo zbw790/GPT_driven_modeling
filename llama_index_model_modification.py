@@ -227,7 +227,7 @@ class MODIFICATION_OT_query_and_generate(Operator):
         return {'FINISHED'}
 
 class MODIFICATION_PT_panel(Panel):
-    bl_label = "Model Modification"
+    bl_label = "Llama Index Model Modification"
     bl_idname = "MODIFICATION_PT_panel"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'

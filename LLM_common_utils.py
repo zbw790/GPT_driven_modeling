@@ -127,6 +127,7 @@ def sanitize_command(command):
         buffer = []
         i = 0
         in_multiline = False
+        open_brackets = 0  # 新增：跟踪开放的括号数量
         
         while i < len(lines):
             current_line = lines[i].strip()
@@ -138,8 +139,12 @@ def sanitize_command(command):
             # 保留原始缩进
             indent = len(lines[i]) - len(lines[i].lstrip())
             
+            # 更新括号计数
+            open_brackets += current_line.count('(') + current_line.count('[') + current_line.count('{')
+            open_brackets -= current_line.count(')') + current_line.count(']') + current_line.count('}')
+            
             if current_line.startswith('#') or not current_line:  # 注释或空行
-                if buffer:
+                if buffer and open_brackets == 0:
                     cleaned_lines.extend(buffer)
                     buffer = []
                     in_multiline = False
@@ -147,19 +152,19 @@ def sanitize_command(command):
                 i += 1
                 continue
             
-            if is_potential_multiline_start(current_line):
+            if is_potential_multiline_start(current_line) or open_brackets > 0:
                 in_multiline = True
             
             # 尝试添加新行并验证
             new_buffer = buffer + [' ' * indent + current_line]
-            if is_valid_python('\n'.join(new_buffer)) or in_multiline:
+            if is_valid_python('\n'.join(new_buffer)) or in_multiline or open_brackets > 0:
                 buffer = new_buffer
                 i += 1
-                if not is_potential_multiline_start(current_line) and not current_line.strip().endswith(','):
+                if not is_potential_multiline_start(current_line) and not current_line.strip().endswith(',') and open_brackets == 0:
                     in_multiline = False
             else:
                 # 如果新行添加后不合法，先保存之前的buffer
-                if buffer:
+                if buffer and open_brackets == 0:
                     cleaned_lines.extend(buffer)
                     buffer = []
                     in_multiline = False

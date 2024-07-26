@@ -103,3 +103,6 @@ chroma_db_modification/
 # Ignore screen shots
 screenshots/
 
+# Ignore logs
+model_generation_logs/
+

@@ -191,7 +191,7 @@ class GENERATION_OT_generate_model(Operator):
         return {'FINISHED'}
 
 class GENERATION_PT_panel(Panel):
-    bl_label = "3D Model Generation"
+    bl_label = "Llama Index Model Generation"
     bl_idname = "GENERATION_PT_panel"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'

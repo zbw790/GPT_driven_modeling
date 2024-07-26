@@ -49,6 +49,9 @@ from llama_index_model_generation import (
 from bevel_corners_module import (
     BevelEdgesOperator, OBJECT_PT_bevel_panel,BevelProperties
 )
+from model_generation import (
+    ModelGenerationProperties, MODEL_GENERATION_OT_generate, MODEL_GENERATION_PT_panel
+)
 
 # 设置日志记录
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
@@ -74,6 +77,9 @@ classes = (
     GENERATION_OT_query,
     GENERATION_OT_generate_model,
     GENERATION_PT_panel,
+    ModelGenerationProperties,
+    MODEL_GENERATION_OT_generate,
+    MODEL_GENERATION_PT_panel,
     RotateObjectCW_X,
     RotateObjectCW_Y,
     RotateObjectCW_Z,
@@ -139,6 +145,7 @@ def register():
         bpy.types.Scene.modification_tool = PointerProperty(type=ModificationProperties)
         bpy.types.Scene.generation_tool = PointerProperty(type=GenerationProperties)
         bpy.types.Scene.bevel_properties = PointerProperty(type=BevelProperties)
+        bpy.types.Scene.model_generation_tool = PointerProperty(type=ModelGenerationProperties)
         
         initialize_modification_db()
         initialize_generation_db()
@@ -164,6 +171,7 @@ def unregister():
         del bpy.types.Scene.modification_tool
         del bpy.types.Scene.generation_tool
         del bpy.types.Scene.bevel_properties
+        del bpy.types.Scene.model_generation_tool
         
         logger.info("Unregistered all classes successfully.")
     except Exception as e:
