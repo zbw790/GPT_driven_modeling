@@ -7,9 +7,11 @@ import os
 from bpy.types import Operator, Panel, PropertyGroup
 from bpy.props import StringProperty, PointerProperty
 from claude_module import generate_text_with_claude
-from LLM_common_utils import sanitize_command
+from LLM_common_utils import sanitize_command, initialize_conversation, execute_blender_command
 from logger_module import setup_logger, log_context
 from prompt_rewriter import rewrite_prompt
+from gpt_module import generate_text_with_context
+from llama_index_model_generation import query_generation_documentation
 
 # 创建专门的日志记录器
 logger = setup_logger('model_generation')
@@ -21,10 +23,11 @@ class ModelGenerationProperties(PropertyGroup):
         default=""
     )
 
-def parse_user_input(user_input):
+def parse_user_input(user_input, rewritten_input):
     prompt = f"""
     请解析以下用户输入，并生成一个JSON格式的结构化数据。
-    输入: {user_input}
+    此为用户原始输入: {user_input}
+    此为根据用户原始输入解析后得到的提示词：{rewritten_input}
     
     要求:
     1. 识别出需要生成的物品类型
@@ -50,7 +53,7 @@ def parse_user_input(user_input):
 
     示例输出格式:
     {{
-      "furniture_type": "书桌",
+      "object_type": "书桌",
       "components": [
         {{
           "name": "桌面",
@@ -124,23 +127,31 @@ class MODEL_GENERATION_OT_generate(Operator):
                 logger.info(f"Rewritten input: {rewritten_input}")
                 
                 logger.info("Parsing rewritten user input")
-                model_description = parse_user_input(rewritten_input)
+                model_description = parse_user_input(user_input, rewritten_input)
                 logger.info("Model Description:")
                 logger.info(json.dumps(model_description, ensure_ascii=False, indent=2))
+
+                logger.info("Querying generation documentation")
+                generation_docs = query_generation_documentation(bpy.types.Scene.generation_query_engine, rewritten_input)
+                logger.info(f"Generation documentation: {generation_docs}")
                 
                 # Save model description to file
                 with open(os.path.join(log_dir, "model_description.json"), "w", encoding='utf-8') as f:
                     json.dump(model_description, f, ensure_ascii=False, indent=2)
                 
-                # TODO: 根据model_description生成实际的3D模型
-                # 这里需要实现具体的模型生成逻辑
+                # Generate 3D model using GPT
+                self.generate_3d_model(context, user_input, rewritten_input, model_description, generation_docs, log_dir)
+
+                # 更新视图并等待一小段时间以确保视图已更新
+                self.update_blender_view(context)
+                bpy.ops.wm.redraw_timer(type='DRAW_WIN_SWAP', iterations=1)
                 
                 # 保存当前场景的屏幕截图
                 screenshot_path = os.path.join(log_dir, "model_screenshot.png")
                 bpy.ops.screen.screenshot(filepath=screenshot_path)
                 logger.info(f"Screenshot saved to {screenshot_path}")
                 
-                self.report({'INFO'}, f"Model generated for {model_description['furniture_type']}. Logs saved in {log_dir}")
+                self.report({'INFO'}, f"Model generated for {model_description['object_type']}. Logs saved in {log_dir}")
             except json.JSONDecodeError:
                 logger.error("Failed to parse the model description.")
                 self.report({'ERROR'}, "Failed to parse the model description.")
@@ -152,6 +163,66 @@ class MODEL_GENERATION_OT_generate(Operator):
                 self.report({'ERROR'}, f"An error occurred: {str(e)}")
         
         return {'FINISHED'}
+
+    def generate_3d_model(self, context, user_input, rewritten_input, model_description, generation_docs, log_dir):
+        # 准备提示信息
+        prompt = f"""
+        请根据以下信息生成Blender Python命令来创建3D模型：
+
+        用户原始输入的要求：{user_input}
+        改写后的要求：{rewritten_input}
+        模型描述（JSON格式）：{json.dumps(model_description, ensure_ascii=False, indent=2)}
+        相关生成文档：{generation_docs}
+
+
+        请生成适当的Blender Python命令来创建这个3D模型。注意以下几点：
+        1. 使用 bpy 库来创建和操作对象。
+        2. 为每个组件创建单独的对象，并根据其形状和尺寸进行设置。
+        3. 正确放置每个组件，确保它们的相对位置正确。
+        4. 如果需要，可以使用循环来创建重复的组件（如多个桌腿）。
+        5. 为生成的对象设置合适的名称，以便于识别。
+        6. 如果需要，可以添加简单的材质。
+        7. 生成正确的集合以便于模型管理。
+
+        请只返回Python代码，不需要其他解释。
+        """
+
+        # 使用 GPT 生成响应
+        gpt_tool = context.scene.gpt_tool
+        initialize_conversation(gpt_tool)
+        messages = [{"role": msg.role, "content": msg.content} for msg in gpt_tool.messages]
+        response = generate_text_with_context(messages, prompt)
+
+        # 更新GPT对话历史
+        user_message = gpt_tool.messages.add()
+        user_message.role = "user"
+        user_message.content = prompt
+
+        gpt_message = gpt_tool.messages.add()
+        gpt_message.role = "assistant"
+        gpt_message.content = response
+
+        logger.info(f"GPT Generated Commands for 3D Model: {response}")
+
+        # 保存生成的代码到文件
+        with open(os.path.join(log_dir, "generated_blender_code.py"), "w", encoding='utf-8') as f:
+            f.write(response)
+
+        # 执行生成的Blender命令
+        try:
+            execute_blender_command(response)
+            logger.info("Successfully executed Blender commands.")
+        except Exception as e:
+            logger.error(f"Error executing Blender commands: {str(e)}")
+            self.report({'ERROR'}, f"Error executing Blender commands: {str(e)}")
+
+    def update_blender_view(self, context):
+      
+      # 确保更改立即可见
+      bpy.context.view_layer.update()
+
+      logger.info("Blender view updated.")
+    
 
 class MODEL_GENERATION_PT_panel(Panel):
     bl_label = "Model Generation"
