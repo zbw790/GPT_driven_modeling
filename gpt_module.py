@@ -42,7 +42,12 @@ def analyze_screenshots_with_gpt4(screenshots):
     image_messages = []
     for screenshot in screenshots:
         base64_image = encode_image(screenshot)
-        image_messages.append(
+        view_name = os.path.splitext(os.path.basename(screenshot))[0]  # 获取文件名（不包括扩展名）
+        image_messages.extend([
+            {
+                "type": "text",
+                "text": f"视图角度: {view_name}"
+            },
             {
                 "type": "image_url",
                 "image_url": {
@@ -50,7 +55,7 @@ def analyze_screenshots_with_gpt4(screenshots):
                     "detail": "low"
                 }
             }
-        )
+        ])
 
     scene_info = get_scene_info()
     formatted_scene_info = format_scene_info(scene_info)

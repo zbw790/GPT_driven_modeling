@@ -121,6 +121,15 @@ class SaveScreenshotOperator(Operator):
     def execute(self, context):
         scene = context.scene
 
+        # 设置渲染分辨率
+        original_resolution_x = scene.render.resolution_x
+        original_resolution_y = scene.render.resolution_y
+        original_resolution_percentage = scene.render.resolution_percentage
+
+        scene.render.resolution_x = 750
+        scene.render.resolution_y = 750
+        scene.render.resolution_percentage = 100
+
         # 自动选择所有模型
         bpy.ops.object.select_all(action='DESELECT')
         for obj in bpy.context.scene.objects:
@@ -140,19 +149,19 @@ class SaveScreenshotOperator(Operator):
         target = selected_objects[0]  # Assuming only one object is selected
 
         angles = [
-            # ((0, 0, 10), (0, math.radians(90), 0)),  # 俯视图
-            # ((0, 0, -10), (0, math.radians(-90), 0)),  # 底视图
-            # ((-10, 0, 0), (math.radians(90), 0, math.radians(90))),  # 左视图
-            # ((10, 0, 0), (math.radians(90), 0, math.radians(-90))),  # 右视图
-            # ((0, 10, 0), (math.radians(-90), 0, math.radians(180))),  # 后视图
-            ((0, -10, 0), (math.radians(90), 0, 0)),  # 前视图
-            ((-10, -10, 10), (math.radians(45), 0, math.radians(45))),  # 左前上
-            ((10, -10, 10), (math.radians(45), 0, math.radians(-45))),  # 右前上
-            ((-10, 10, -10), (math.radians(-45), 0, math.radians(135))),  # 左后下
-            ((10, 10, -10), (math.radians(-45), 0, math.radians(-135))),  # 右后下
+            ((0, 0, 10), (0, math.radians(90), 0), "俯视图"),
+            ((0, 0, -10), (0, math.radians(-90), 0), "底视图"),
+            ((-10, 0, 0), (math.radians(90), 0, math.radians(90)), "左视图"),
+            ((10, 0, 0), (math.radians(90), 0, math.radians(-90)), "右视图"),
+            ((0, 10, 0), (math.radians(-90), 0, math.radians(180)), "后视图"),
+            ((0, -10, 0), (math.radians(90), 0, 0), "前视图"),
+            # ((-10, -10, 10), (math.radians(45), 0, math.radians(45)), "左前上视图"),
+            ((10, -10, 10), (math.radians(45), 0, math.radians(-45)), "右前上视图"),
+            # ((-10, 10, -10), (math.radians(-45), 0, math.radians(135)), "左后下视图"),
+            ((10, 10, -10), (math.radians(-45), 0, math.radians(-135)), "右后下视图"),
         ]
 
-        for i, (location, rotation) in enumerate(angles):
+        for location, rotation, view_name in angles:
             move_camera_to_position(camera, location, rotation)
             add_track_to_constraint(camera, target)
             activate_camera(camera)
@@ -161,7 +170,7 @@ class SaveScreenshotOperator(Operator):
             # 调整相机位置
             adjust_camera_distance(camera, selected_objects, margin=4)
 
-            screenshot_path = os.path.join(SCREENSHOTS_PATH, f"screenshot_{i+1}.png")
+            screenshot_path = os.path.join(SCREENSHOTS_PATH, f"{view_name}.png")
             bpy.context.scene.render.image_settings.file_format = 'PNG'
             bpy.context.scene.render.filepath = screenshot_path
 
@@ -178,6 +187,11 @@ class SaveScreenshotOperator(Operator):
                 area.spaces[0].lock_camera = False
                 break
         
+        # 恢复原始渲染设置
+        scene.render.resolution_x = original_resolution_x
+        scene.render.resolution_y = original_resolution_y
+        scene.render.resolution_percentage = original_resolution_percentage
+
         self.report({'INFO'}, f"Screenshots saved to {SCREENSHOTS_PATH}")
         return {'FINISHED'}
 
