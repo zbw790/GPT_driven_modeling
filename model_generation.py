@@ -234,10 +234,8 @@ class MODEL_GENERATION_OT_generate(Operator):
             self.report({'ERROR'}, f"Error executing Blender commands: {str(e)}")
 
     def update_blender_view(self, context):
-      
       # 确保更改立即可见
       bpy.context.view_layer.update()
-
       logger.info("Blender view updated.")
     
 

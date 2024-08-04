@@ -52,6 +52,9 @@ from model_generation import (
     ModelGenerationProperties, MODEL_GENERATION_OT_generate, MODEL_GENERATION_PT_panel
 )
 from LLM_common_utils import LLMToolProperties
+from llama_index_component_library import (
+    ComponentProperties, COMPONENT_OT_query, COMPONENT_OT_generate_component, COMPONENT_PT_panel, initialize_component_db
+)
 
 # 设置日志记录
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
@@ -81,6 +84,10 @@ classes = (
     GENERATION_OT_query,
     GENERATION_OT_generate_model,
     GENERATION_PT_panel,
+    ComponentProperties,
+    COMPONENT_OT_query,
+    COMPONENT_OT_generate_component,
+    COMPONENT_PT_panel,
     ModelGenerationProperties,
     MODEL_GENERATION_OT_generate,
     MODEL_GENERATION_PT_panel,
@@ -150,9 +157,11 @@ def register():
         bpy.types.Scene.bevel_properties = PointerProperty(type=BevelProperties)
         bpy.types.Scene.model_generation_tool = PointerProperty(type=ModelGenerationProperties)
         bpy.types.Scene.llm_tool = PointerProperty(type=LLMToolProperties)
+        bpy.types.Scene.component_tool = PointerProperty(type=ComponentProperties)
         
         initialize_modification_db()
         initialize_generation_db()
+        initialize_component_db()
         
         logger.info("Registered all classes successfully.")
     except Exception as e:
@@ -191,6 +200,8 @@ def unregister():
             del bpy.types.Scene.model_generation_tool
         if hasattr(bpy.types.Scene, "llm_tool"):
             del bpy.types.Scene.llm_tool
+        if hasattr(bpy.types.Scene, "component_tool"):
+            del bpy.types.Scene.component_tool
         
         logger.info("Unregistered all classes successfully.")
     except Exception as e:

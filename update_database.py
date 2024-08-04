@@ -3,6 +3,7 @@ import shutil
 import logging
 from llama_index_model_modification import load_modification_data, create_modification_index
 from llama_index_model_generation import load_generation_data, create_generation_index
+from llama_index_component_library import load_component_data, create_component_index
 from dotenv import load_dotenv
 
 # 设置日志记录
@@ -42,9 +43,25 @@ def update_generation_database():
     except Exception as e:
         logger.error(f"Error updating generation database: {str(e)}")
 
+def update_component_database():
+    try:
+        data_directory = './data'
+        documents, _ = load_component_data(data_directory)
+        
+        db_path = "./chroma_db_components"
+        if os.path.exists(db_path):
+            shutil.rmtree(db_path)
+            logger.info("Existing component database deleted.")
+        
+        create_component_index(documents)
+        logger.info("Component database updated successfully.")
+    except Exception as e:
+        logger.error(f"Error updating component database: {str(e)}")
+
 def update_all_databases():
     update_modification_database()
     update_generation_database()
+    update_component_database()
 
 if __name__ == "__main__":
     update_all_databases()
