@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 # 加载环境变量
 load_dotenv(dotenv_path="D:/Tencent_Supernova/api/.env")
 api_key = os.getenv("ANTHROPIC_API_KEY")
+
 def generate_text_with_claude(messages, current_instruction):
     try:
         client = Anthropic(api_key=api_key)
@@ -37,9 +38,13 @@ def generate_text_with_claude(messages, current_instruction):
         logger.error(f"Error generating text from Claude with context: {e}")
         return "Error generating response from Claude."
 
-def analyze_screenshots_with_claude(screenshots):
+def analyze_screenshots_with_claude(prompt):
     client = Anthropic(api_key=api_key)
     
+    # 在函数内部获取截图
+    screenshots_path = os.path.join(os.path.dirname(__file__), 'screenshots')
+    screenshots = [os.path.join(screenshots_path, f) for f in os.listdir(screenshots_path) if f.lower().endswith(('.png', '.jpg', '.jpeg', '.webp', '.gif'))]
+
     content = []
     for screenshot in screenshots:
         base64_image = encode_image(screenshot)
@@ -56,20 +61,11 @@ def analyze_screenshots_with_claude(screenshots):
             }
         ])
     
-    scene_info = get_scene_info()
-    formatted_scene_info = format_scene_info(scene_info)
-    
-    prompt = f"""分析这些图片，描述你看到的3D模型。每张图片都标注了对应的视图角度。
-    请在你的分析中引用这些视图名称，以便更清晰地描述模型的不同方面。
-    指出任何可能的问题或需要改进的地方。
-    以下是场景中对象的详细信息：{formatted_scene_info}
-    请提供一个全面的分析，包括模型的整体形状、细节、比例和可能的用途。"""
-    
     content.append({"type": "text", "text": prompt})
 
     message = client.messages.create(
         model="claude-3-5-sonnet-20240620",
-        max_tokens=2048,
+        max_tokens=4096,
         messages=[
             {
                 "role": "user",
@@ -126,19 +122,25 @@ class OBJECT_OT_send_screenshots_to_claude(Operator):
 
             initialize_conversation(claude_tool)
 
-            screenshots_path = os.path.join(os.path.dirname(__file__), 'screenshots')
-            screenshots = [os.path.join(screenshots_path, f) for f in os.listdir(screenshots_path) if f.lower().endswith(('.png', '.jpg', '.jpeg', '.webp', '.gif'))]
-
             scene_info = get_scene_info()
             formatted_scene_info = format_scene_info(scene_info)
 
-            output_text = analyze_screenshots_with_claude(screenshots)
+            prompt = f"""分析这些图片，描述你看到的3D模型。每张图片都标注了对应的视图角度。
+            请在你的分析中引用这些视图名称，以便更清晰地描述模型的不同方面。
+            指出任何可能的问题或需要改进的地方。
+            以下是场景中对象的详细信息：
+
+            {formatted_scene_info}
+
+            请提供一个全面的分析，包括模型的整体形状、细节、比例和可能的用途。"""
+
+            output_text = analyze_screenshots_with_claude(prompt)
 
             logger.info(f"Claude Response: {output_text}")
 
             claude_message = claude_tool.messages.add()
             claude_message.role = "assistant"
-            claude_message.content = f"以下为blender内的场景信息:\n{formatted_scene_info}\n\这是基于视觉图片得到的场景分析:\n{output_text}"
+            claude_message.content = f"这是基于多个视角截图得到的场景分析:\n{output_text}"
 
             execute_blender_command(output_text)
 
@@ -153,20 +155,26 @@ class OBJECT_OT_analyze_screenshots_claude(Operator):
 
     def execute(self, context):
         try:
-            screenshots_path = os.path.join(os.path.dirname(__file__), 'screenshots')
-            screenshots = [os.path.join(screenshots_path, f) for f in os.listdir(screenshots_path) if f.lower().endswith(('.png', '.jpg', '.jpeg', '.webp', '.gif'))]
-            
             scene_info = get_scene_info()
             formatted_scene_info = format_scene_info(scene_info)
             
-            analysis_result = analyze_screenshots_with_claude(screenshots)
+            prompt = f"""分析这些图片，描述你看到的3D模型。每张图片都标注了对应的视图角度。
+            请在你的分析中引用这些视图名称，以便更清晰地描述模型的不同方面。
+            指出任何可能的问题或需要改进的地方。
+            以下是场景中对象的详细信息：
+
+            {formatted_scene_info}
+
+            请提供一个全面的分析，包括模型的整体形状、细节、比例和可能的用途。"""
+            
+            analysis_result = analyze_screenshots_with_claude(prompt)
             logger.info(f"Screenshot Analysis Result: {analysis_result}")
             
             # 将分析结果添加到对话历史
             claude_tool = context.scene.claude_tool
             claude_message = claude_tool.messages.add()
             claude_message.role = "assistant"
-            claude_message.content = f"以下为blender内的场景信息:\n{formatted_scene_info}\n\n这是基于多个视角截图得到的场景分析: {analysis_result}"
+            claude_message.content = f"这是基于多个视角截图得到的场景分析: {analysis_result}"
             
             # 可以选择是否执行分析结果
             # execute_blender_command(analysis_result)
