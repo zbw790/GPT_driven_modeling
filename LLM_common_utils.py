@@ -1,4 +1,4 @@
-# common_utils.py
+# LLM_common_utils.py
 
 import base64
 import os
@@ -10,7 +10,7 @@ import traceback
 import importlib
 import sys
 import ast
-from bpy.props import StringProperty, CollectionProperty
+from bpy.props import StringProperty
 from bpy.types import PropertyGroup
 
 # 设置日志记录
@@ -25,7 +25,7 @@ GLOBAL_PROMPT = """
 
 2. 如果用户明确要求生成 Blender 指令：
     a. 仅返回可直接执行的 Blender Python 命令。
-    c. 不要包含任何额外的描述性文本或符号。包括类似：“根据您的要求，我们需要使用以下的指令。”这种类型的文字也不能出现。
+    c. 不要包含任何额外的描述性文本或符号。包括类似："根据您的要求，我们需要使用以下的指令。"这种类型的文字也不能出现。
     d. 确保每个命令都是有效的 Blender Python API 调用。
     e. 如果必须添加说明，只能以Python单行注释的形式出现（使用#开头）。
     f. 绝对不要使用三引号形式的多行注释
@@ -45,50 +45,26 @@ bpy.ops.mesh.primitive_cylinder_add(location=(0, 0, 0))
 以下是一些我自定义的blender API的介绍，你需要在合适的时候使用他们：
 """
 
-SCREENSHOT_PROMPTS = """
-以下是Blender内的模型图片,所有图片拍摄自同一模型的不同角度。请检查这个模型是否存在以下问题：
+# current_dir = os.path.dirname(os.path.abspath(__file__))
+# custom_prompts_file = os.path.join(current_dir, "LLM_API_prompts.txt")
 
-所有部件是否都连接在一起，没有悬空或分离的部分
-模型的比例是否合理，各部分大小是否协调
-是否存在明显的几何错误，如穿模、非流畅边缘等
-模型的整体形状是否符合预期的物体外观
-是否有多余或缺失的部件
+# try:
+#     with open(custom_prompts_file, "r", encoding="utf-8") as f:
+#         custom_prompts = f.read()
+#         # 将自定义提示词添加到 GLOBAL_PROMPT
+#     GLOBAL_PROMPT += "\n" + custom_prompts
+# except FileNotFoundError:
+#     print(f"警告：未找到自定义提示词文件 {custom_prompts_file}")
+# except Exception as e:
+#     print(f"读取自定义提示词文件时出错：{str(e)}")
 
-如果发现任何问题，请生成相应的Blender Python命令来修复。如果模型没有明显问题，请回复"这个模型没有问题"。
-生成指令时，请只返回可直接执行的Blender Python命令，不要包含任何额外的描述性文本或符号。
-"""
+class LLMToolProperties(PropertyGroup):
+    input_text: StringProperty(name="Input Text", default="")
 
-current_dir = os.path.dirname(os.path.abspath(__file__))
-custom_prompts_file = os.path.join(current_dir, "LLM_API_prompts.txt")
-
-try:
-    with open(custom_prompts_file, "r", encoding="utf-8") as f:
-        custom_prompts = f.read()
-        # 将自定义提示词添加到 GLOBAL_PROMPT
-    GLOBAL_PROMPT += "\n" + custom_prompts
-except FileNotFoundError:
-    print(f"警告：未找到自定义提示词文件 {custom_prompts_file}")
-except Exception as e:
-    print(f"读取自定义提示词文件时出错：{str(e)}")
-
-
-
-class Message(PropertyGroup):
-    role: StringProperty(name="Role")
-    content: StringProperty(name="Content")
-
-class Properties(PropertyGroup):
-    input_text: StringProperty(
-        name="Input Text",
-        description="Enter text to send to GPT"
-    )
-    messages: CollectionProperty(type=Message)
-
-def initialize_conversation(tool):
-    if not any(msg.content == GLOBAL_PROMPT.strip() for msg in tool.messages):
-        system_message = tool.messages.add()
-        system_message.role = "system"
-        system_message.content = GLOBAL_PROMPT.strip()
+def initialize_conversation(context):
+    conversation_manager = context.scene.conversation_manager
+    if not any(msg.content == GLOBAL_PROMPT.strip() for msg in conversation_manager.messages):
+        conversation_manager.add_message("system", GLOBAL_PROMPT.strip())
 
 def encode_image(image_path):
     with open(image_path, "rb") as image_file:
@@ -257,15 +233,7 @@ def execute_blender_command(command):
         logger.error(f"错误类型: {type(e).__name__}")
         logger.error(f"完整的错误信息: {traceback.format_exc()}")
 
-def generate_prompt(messages, current_instruction=None):
-    conversation = "\n".join([f"{message['role']}: {message['content']}" for message in messages])
-    prompt = f"历史对话记录如下：\n{conversation}"
-    if current_instruction:
-        prompt += f"\n在我发给你的信息中,包含了我和你过去的历史对话,请尽量参考之前提到过的信息。现在,请根据当前指令提供回答：\n{current_instruction}"
-    print(prompt)
-    return prompt
-
-def generate_screenshot_prompt(messages):
-    conversation = "\n".join([f"{message['role']}: {message['content']}" for message in messages])
-    prompt = f"历史对话记录如下：\n{conversation}\n\n{SCREENSHOT_PROMPTS}"
-    return prompt
+def add_history_to_prompt(context, prompt):
+    conversation_manager = context.scene.conversation_manager
+    conversation = "\n".join([f"{message['role']}: {message['content']}" for message in conversation_manager.get_conversation_history()])
+    return f"历史对话记录如下：\n{conversation}\n\n在我发给你的信息中,包含了我和你过去的历史对话,请尽量参考之前提到过的信息。\n\n{prompt}"

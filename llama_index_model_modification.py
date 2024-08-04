@@ -6,6 +6,7 @@ import logging
 import requests
 import time
 import shutil
+import re
 from bpy.types import Operator, Panel, PropertyGroup
 from bpy.props import StringProperty, PointerProperty, EnumProperty
 from llama_index.core import Document, VectorStoreIndex, StorageContext
@@ -17,7 +18,7 @@ from llama_index.core.postprocessor import SimilarityPostprocessor
 from llama_index.embeddings.openai import OpenAIEmbedding
 from dotenv import load_dotenv
 from llama_index.core.response_synthesizers import get_response_synthesizer
-from LLM_common_utils import *
+from LLM_common_utils import execute_blender_command, initialize_conversation, add_history_to_prompt, get_scene_info, format_scene_info
 from gpt_module import generate_text_with_context, analyze_screenshots_with_gpt4
 from claude_module import generate_text_with_claude, analyze_screenshots_with_claude
 
@@ -189,32 +190,18 @@ class MODIFICATION_OT_query_and_generate(Operator):
             
             prompt = f"基于以下信息生成Blender命令：\n\nblender内的场景信息:{formatted_scene_info}\n\n图像分析：{description}\n\可以参考相关问题的解决文档{result}\n\n请生成适当的Blender Python命令来修复或改进模型，注意当前的运行函数允许导入新的库，所以请生成代码时也import相关的库。"
             
+            conversation_manager = context.scene.conversation_manager
+            initialize_conversation(context)
+            prompt_with_history = add_history_to_prompt(context, prompt)
+
             if model_choice == 'GPT':
-                gpt_tool = context.scene.gpt_tool
-                initialize_conversation(gpt_tool)
-                messages = [{"role": msg.role, "content": msg.content} for msg in gpt_tool.messages]
-                response = generate_text_with_context(messages, prompt)
-                
-                user_message = gpt_tool.messages.add()
-                user_message.role = "user"
-                user_message.content = prompt
-
-                gpt_message = gpt_tool.messages.add()
-                gpt_message.role = "assistant"
-                gpt_message.content = response
+                response = generate_text_with_context(prompt_with_history)
             elif model_choice == 'CLAUDE':
-                claude_tool = context.scene.claude_tool
-                initialize_conversation(claude_tool)
-                messages = [{"role": msg.role, "content": msg.content} for msg in claude_tool.messages]
-                response = generate_text_with_claude(messages, prompt)
-                
-                user_message = claude_tool.messages.add()
-                user_message.role = "human"
-                user_message.content = prompt
+                response = generate_text_with_claude(prompt_with_history)
 
-                claude_message = claude_tool.messages.add()
-                claude_message.role = "assistant"
-                claude_message.content = response
+            # 更新对话历史
+            conversation_manager.add_message("user", prompt)
+            conversation_manager.add_message("assistant", response)
 
             logger.info(f"{model_choice} Generated Commands: {response}")
 

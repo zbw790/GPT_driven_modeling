@@ -2,7 +2,6 @@ import sys
 import os
 import bpy
 import logging
-import requests
 from bpy.props import StringProperty, PointerProperty, FloatProperty, IntProperty
 
 # 确保项目根目录在Python的模块搜索路径中
@@ -37,8 +36,8 @@ from align_module import (
 from claude_module import (
     OBJECT_OT_send_to_claude, OBJECT_OT_send_screenshots_to_claude, CLAUDE_PT_panel, OBJECT_OT_analyze_screenshots_claude
 )
-from LLM_common_utils import (
-    Message, Properties
+from conversation_manager import (
+    Message, ConversationManager, CONVERSATION_OT_print_all, CONVERSATION_OT_print_latest, CONVERSATION_PT_panel
 )
 from llama_index_model_modification import (
     ModificationProperties, MODIFICATION_OT_query, MODIFICATION_OT_query_with_screenshots, MODIFICATION_PT_panel, initialize_modification_db, MODIFICATION_OT_query_and_generate
@@ -52,14 +51,19 @@ from bevel_corners_module import (
 from model_generation import (
     ModelGenerationProperties, MODEL_GENERATION_OT_generate, MODEL_GENERATION_PT_panel
 )
+from LLM_common_utils import LLMToolProperties
 
 # 设置日志记录
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 classes = (
+    LLMToolProperties,
     Message,
-    Properties,
+    ConversationManager,
+    CONVERSATION_OT_print_all,
+    CONVERSATION_OT_print_latest,
+    CONVERSATION_PT_panel,
     OBJECT_OT_send_to_gpt,
     OBJECT_OT_analyze_screenshots,
     OBJECT_OT_send_screenshots_to_gpt,
@@ -120,8 +124,7 @@ def register():
     try:
         for cls in classes:
             bpy.utils.register_class(cls)
-        bpy.types.Scene.gpt_tool = PointerProperty(type=Properties)
-        bpy.types.Scene.claude_tool = PointerProperty(type=Properties)
+        bpy.types.Scene.conversation_manager = PointerProperty(type=ConversationManager)
         bpy.types.Scene.model_scale_percentage = FloatProperty(
             name="Model Scale Percentage",
             default=100.0,
@@ -146,6 +149,7 @@ def register():
         bpy.types.Scene.generation_tool = PointerProperty(type=GenerationProperties)
         bpy.types.Scene.bevel_properties = PointerProperty(type=BevelProperties)
         bpy.types.Scene.model_generation_tool = PointerProperty(type=ModelGenerationProperties)
+        bpy.types.Scene.llm_tool = PointerProperty(type=LLMToolProperties)
         
         initialize_modification_db()
         initialize_generation_db()
@@ -159,19 +163,34 @@ def unregister():
         for cls in reversed(classes):
             if hasattr(bpy.types, cls.__name__):
                 bpy.utils.unregister_class(cls)
-        del bpy.types.Scene.gpt_tool
-        del bpy.types.Scene.claude_tool
-        del bpy.types.Scene.model_scale_percentage
-        del bpy.types.Scene.model_dimensions
-        del bpy.types.Scene.rotation_degree
-        del bpy.types.Scene.geometry_props
-        del bpy.types.Scene.subdivision_decimate_props
-        del bpy.types.Scene.align_props
-        del bpy.types.Scene.align_point_set
-        del bpy.types.Scene.modification_tool
-        del bpy.types.Scene.generation_tool
-        del bpy.types.Scene.bevel_properties
-        del bpy.types.Scene.model_generation_tool
+        
+        # 检查属性是否存在before删除
+        if hasattr(bpy.types.Scene, "conversation_manager"):
+            del bpy.types.Scene.conversation_manager
+        if hasattr(bpy.types.Scene, "model_scale_percentage"):
+            del bpy.types.Scene.model_scale_percentage
+        if hasattr(bpy.types.Scene, "model_dimensions"):
+            del bpy.types.Scene.model_dimensions
+        if hasattr(bpy.types.Scene, "rotation_degree"):
+            del bpy.types.Scene.rotation_degree
+        if hasattr(bpy.types.Scene, "geometry_props"):
+            del bpy.types.Scene.geometry_props
+        if hasattr(bpy.types.Scene, "subdivision_decimate_props"):
+            del bpy.types.Scene.subdivision_decimate_props
+        if hasattr(bpy.types.Scene, "align_props"):
+            del bpy.types.Scene.align_props
+        if hasattr(bpy.types.Scene, "align_point_set"):
+            del bpy.types.Scene.align_point_set
+        if hasattr(bpy.types.Scene, "modification_tool"):
+            del bpy.types.Scene.modification_tool
+        if hasattr(bpy.types.Scene, "generation_tool"):
+            del bpy.types.Scene.generation_tool
+        if hasattr(bpy.types.Scene, "bevel_properties"):
+            del bpy.types.Scene.bevel_properties
+        if hasattr(bpy.types.Scene, "model_generation_tool"):
+            del bpy.types.Scene.model_generation_tool
+        if hasattr(bpy.types.Scene, "llm_tool"):
+            del bpy.types.Scene.llm_tool
         
         logger.info("Unregistered all classes successfully.")
     except Exception as e:

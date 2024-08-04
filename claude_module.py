@@ -1,11 +1,10 @@
 import bpy
 import os
 import logging
-from bpy.types import Operator, PropertyGroup
-from bpy.props import StringProperty, CollectionProperty
+from bpy.types import Operator, Panel
 from anthropic import Anthropic
 from dotenv import load_dotenv
-from LLM_common_utils import *
+from LLM_common_utils import execute_blender_command, add_history_to_prompt, initialize_conversation, encode_image, get_scene_info, format_scene_info
 
 # 设置日志记录
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -15,11 +14,9 @@ logger = logging.getLogger(__name__)
 load_dotenv(dotenv_path="D:/Tencent_Supernova/api/.env")
 api_key = os.getenv("ANTHROPIC_API_KEY")
 
-def generate_text_with_claude(messages, current_instruction):
+def generate_text_with_claude(prompt):
     try:
         client = Anthropic(api_key=api_key)
-        
-        prompt = generate_prompt(messages, current_instruction)
         
         message = client.messages.create(
             model="claude-3-5-sonnet-20240620",
@@ -82,27 +79,22 @@ class OBJECT_OT_send_to_claude(Operator):
 
     def execute(self, context):
         try:
-            scn = context.scene
-            claude_tool = scn.claude_tool
-            input_text = claude_tool.input_text
+            conversation_manager = context.scene.conversation_manager
+            input_text = context.scene.llm_tool.input_text
             
             if input_text:
-                initialize_conversation(claude_tool)
+                initialize_conversation(context)
                 
-                user_message = claude_tool.messages.add()
-                user_message.role = "human"
-                user_message.content = input_text
+                conversation_manager.add_message("human", input_text)
                 
-                messages = [{"role": msg.role, "content": msg.content} for msg in claude_tool.messages]
-                logger.info(f"Messages: {messages}")
+                # 添加历史记录到提示
+                prompt_with_history = add_history_to_prompt(context, input_text)
                 
-                response_text = generate_text_with_claude(messages, input_text)
+                response_text = generate_text_with_claude(prompt_with_history)
                 
                 logger.info(f"Claude Response: {response_text}")
                 
-                claude_message = claude_tool.messages.add()
-                claude_message.role = "assistant"
-                claude_message.content = response_text
+                conversation_manager.add_message("assistant", response_text)
                 
                 execute_blender_command(response_text)
             else:
@@ -117,10 +109,9 @@ class OBJECT_OT_send_screenshots_to_claude(Operator):
 
     def execute(self, context):
         try:
-            scn = context.scene
-            claude_tool = scn.claude_tool
+            conversation_manager = context.scene.conversation_manager
 
-            initialize_conversation(claude_tool)
+            initialize_conversation(context)
 
             scene_info = get_scene_info()
             formatted_scene_info = format_scene_info(scene_info)
@@ -134,13 +125,14 @@ class OBJECT_OT_send_screenshots_to_claude(Operator):
 
             请提供一个全面的分析，包括模型的整体形状、细节、比例和可能的用途。"""
 
-            output_text = analyze_screenshots_with_claude(prompt)
+            # 添加历史记录到提示
+            prompt_with_history = add_history_to_prompt(context, prompt)
+
+            output_text = analyze_screenshots_with_claude(prompt_with_history)
 
             logger.info(f"Claude Response: {output_text}")
 
-            claude_message = claude_tool.messages.add()
-            claude_message.role = "assistant"
-            claude_message.content = f"这是基于多个视角截图得到的场景分析:\n{output_text}"
+            conversation_manager.add_message("assistant", f"这是基于多个视角截图得到的场景分析:\n{output_text}")
 
             execute_blender_command(output_text)
 
@@ -167,14 +159,15 @@ class OBJECT_OT_analyze_screenshots_claude(Operator):
 
             请提供一个全面的分析，包括模型的整体形状、细节、比例和可能的用途。"""
             
-            analysis_result = analyze_screenshots_with_claude(prompt)
+            # 添加历史记录到提示
+            prompt_with_history = add_history_to_prompt(context, prompt)
+            
+            analysis_result = analyze_screenshots_with_claude(prompt_with_history)
             logger.info(f"Screenshot Analysis Result: {analysis_result}")
             
             # 将分析结果添加到对话历史
-            claude_tool = context.scene.claude_tool
-            claude_message = claude_tool.messages.add()
-            claude_message.role = "assistant"
-            claude_message.content = f"这是基于多个视角截图得到的场景分析: {analysis_result}"
+            conversation_manager = context.scene.conversation_manager
+            conversation_manager.add_message("assistant", f"这是基于多个视角截图得到的场景分析: {analysis_result}")
             
             # 可以选择是否执行分析结果
             # execute_blender_command(analysis_result)
@@ -183,7 +176,7 @@ class OBJECT_OT_analyze_screenshots_claude(Operator):
             logger.error(f"Error in OBJECT_OT_analyze_screenshots_claude.execute: {e}")
         return {'FINISHED'}
 
-class CLAUDE_PT_panel(bpy.types.Panel):
+class CLAUDE_PT_panel(Panel):
     bl_label = "Claude Integration with Context"
     bl_idname = "CLAUDE_PT_panel"
     bl_space_type = 'VIEW_3D'
@@ -193,7 +186,7 @@ class CLAUDE_PT_panel(bpy.types.Panel):
     def draw(self, context):
         layout = self.layout
         scn = context.scene
-        layout.prop(scn.claude_tool, "input_text")
+        layout.prop(scn.llm_tool, "input_text")
         layout.operator("object.send_to_claude")
         layout.operator("object.analyze_screenshots_claude", text="Analyze Screenshots")
         layout.operator("object.send_screenshots_to_claude", text="Send Screenshots to Claude")

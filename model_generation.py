@@ -7,7 +7,7 @@ import os
 from bpy.types import Operator, Panel, PropertyGroup
 from bpy.props import StringProperty, PointerProperty
 from claude_module import generate_text_with_claude
-from LLM_common_utils import sanitize_command, initialize_conversation, execute_blender_command
+from LLM_common_utils import sanitize_command, initialize_conversation, execute_blender_command, add_history_to_prompt
 from logger_module import setup_logger, log_context
 from prompt_rewriter import rewrite_prompt
 from gpt_module import generate_text_with_context
@@ -111,7 +111,7 @@ def parse_user_input(user_input, rewritten_input):
     """
     
     logger.info(f"Sending prompt to Claude: {prompt}")
-    response = generate_text_with_claude([], prompt)
+    response = generate_text_with_claude(prompt)
     logger.info(f"Received response from Claude: {response}")
     
     response = sanitize_command(response)
@@ -210,19 +210,14 @@ class MODEL_GENERATION_OT_generate(Operator):
         """
 
         # 使用 GPT 生成响应
-        gpt_tool = context.scene.gpt_tool
-        initialize_conversation(gpt_tool)
-        messages = [{"role": msg.role, "content": msg.content} for msg in gpt_tool.messages]
-        response = generate_text_with_context(messages, prompt)
+        conversation_manager = context.scene.conversation_manager
+        initialize_conversation(context)
+        prompt_with_history = add_history_to_prompt(context, prompt)
+        response = generate_text_with_context(prompt_with_history)
 
-        # 更新GPT对话历史
-        user_message = gpt_tool.messages.add()
-        user_message.role = "user"
-        user_message.content = prompt
-
-        gpt_message = gpt_tool.messages.add()
-        gpt_message.role = "assistant"
-        gpt_message.content = response
+        # 更新对话历史
+        conversation_manager.add_message("user", prompt)
+        conversation_manager.add_message("assistant", response)
 
         logger.info(f"GPT Generated Commands for 3D Model: {response}")
 

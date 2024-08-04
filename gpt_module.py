@@ -4,7 +4,7 @@ import logging
 from openai import OpenAI
 from dotenv import load_dotenv
 from bpy.types import Operator, Panel, PropertyGroup
-from bpy.props import StringProperty, PointerProperty, CollectionProperty
+from bpy.props import StringProperty, PointerProperty
 from LLM_common_utils import *
 
 # 设置日志记录
@@ -16,9 +16,8 @@ load_dotenv(dotenv_path="D:/Tencent_Supernova/api/.env")
 api_key = os.getenv("OPENAI_API_KEY")
 client = OpenAI(api_key=api_key)
 
-def generate_text_with_context(messages, current_instruction):
+def generate_text_with_context(prompt):
     try:
-        prompt = generate_prompt(messages, current_instruction)
         response = client.chat.completions.create(
             model="gpt-4o",
             messages=[{"role": "user", "content": prompt}],
@@ -94,33 +93,22 @@ class OBJECT_OT_send_to_gpt(Operator):
 
     def execute(self, context):
         try:
-            scn = context.scene
-            gpt_tool = scn.gpt_tool
-            input_text = gpt_tool.input_text
+            conversation_manager = context.scene.conversation_manager
+            input_text = context.scene.llm_tool.input_text
             
             if input_text:
-                # 初始化对话历史，确保包含全局提示词
-                initialize_conversation(gpt_tool)
+                initialize_conversation(context)
                 
-                # 将用户输入添加到对话历史中
-                user_message = gpt_tool.messages.add()
-                user_message.role = "user"
-                user_message.content = input_text
+                conversation_manager.add_message("user", input_text)
                 
-                # 将对话历史转换为列表
-                messages = [{"role": msg.role, "content": msg.content} for msg in gpt_tool.messages]
-                logger.info(f"Messages: {messages}")
+                # 添加历史记录到提示
+                prompt_with_history = add_history_to_prompt(context, input_text)
                 
-                # 生成GPT-4响应
-                response_text = generate_text_with_context(messages, input_text)
+                response_text = generate_text_with_context(prompt_with_history)
                 logger.info(f"GPT-4 Response: {response_text}")
                 
-                # 将GPT-4响应添加到对话历史中
-                gpt_message = gpt_tool.messages.add()
-                gpt_message.role = "assistant"
-                gpt_message.content = response_text
+                conversation_manager.add_message("assistant", response_text)
                 
-                # 执行GPT-4生成的Blender指令
                 execute_blender_command(response_text)
             else:
                 logger.warning("No input text provided.")
@@ -134,11 +122,9 @@ class OBJECT_OT_send_screenshots_to_gpt(Operator):
 
     def execute(self, context):
         try:
-            scn = context.scene
-            gpt_tool = scn.gpt_tool
+            conversation_manager = context.scene.conversation_manager
 
-            # 初始化对话历史，确保包含全局提示词
-            initialize_conversation(gpt_tool)
+            initialize_conversation(context)
 
             # 获取场景信息
             scene_info = get_scene_info()
@@ -151,14 +137,15 @@ class OBJECT_OT_send_screenshots_to_gpt(Operator):
             以下是场景中对象的详细信息：{formatted_scene_info}
             请提供一个全面的分析，包括模型的整体形状、细节、比例和可能的用途。"""
 
+            # 添加历史记录到提示
+            prompt_with_history = add_history_to_prompt(context, prompt)
+
             # 分析截图和场景信息
-            output_text = analyze_screenshots_with_gpt4(prompt)
+            output_text = analyze_screenshots_with_gpt4(prompt_with_history)
             logger.info(f"GPT-4 Response: {output_text}")
 
             # 将GPT-4响应添加到对话历史中
-            gpt_message = gpt_tool.messages.add()
-            gpt_message.role = "assistant"
-            gpt_message.content = f"这是基于多个视角截图得到的场景分析:\n{output_text}"
+            conversation_manager.add_message("assistant", f"这是基于多个视角截图得到的场景分析:\n{output_text}")
 
             # 执行GPT-4生成的Blender指令
             execute_blender_command(output_text)
@@ -184,14 +171,15 @@ class OBJECT_OT_analyze_screenshots(Operator):
             以下是场景中对象的详细信息：{formatted_scene_info}
             请提供一个全面的分析，包括模型的整体形状、细节、比例和可能的用途。"""
             
-            analysis_result = analyze_screenshots_with_gpt4(prompt)
+            # 添加历史记录到提示
+            prompt_with_history = add_history_to_prompt(context, prompt)
+            
+            analysis_result = analyze_screenshots_with_gpt4(prompt_with_history)
             logger.info(f"Screenshot Analysis Result: {analysis_result}")
             
             # 将分析结果添加到对话历史
-            gpt_tool = context.scene.gpt_tool
-            gpt_message = gpt_tool.messages.add()
-            gpt_message.role = "assistant"
-            gpt_message.content = f"这是基于多个视角截图得到的场景分析: {analysis_result}"
+            conversation_manager = context.scene.conversation_manager
+            conversation_manager.add_message("assistant", f"这是基于多个视角截图得到的场景分析: {analysis_result}")
             
             # 可以选择是否执行分析结果
             # execute_blender_command(analysis_result)
@@ -210,7 +198,7 @@ class GPT_PT_panel(Panel):
     def draw(self, context):
         layout = self.layout
         scn = context.scene
-        layout.prop(scn.gpt_tool, "input_text")
+        layout.prop(scn.llm_tool, "input_text")
         layout.operator("object.send_to_gpt")
         layout.operator("object.analyze_screenshots", text="Analyze Screenshots")
         layout.operator("object.send_screenshots_to_gpt", text="Send Screenshots to GPT")
