@@ -238,6 +238,46 @@ class MODEL_GENERATION_OT_generate(Operator):
       bpy.context.view_layer.update()
       logger.info("Blender view updated.")
     
+# class MODEL_GENERATION_OT_optimize_once(Operator):
+#     bl_idname = "model_generation.optimize_once"
+#     bl_label = "Optimize Model Once"
+#     bl_description = "Perform one iteration of model optimization"
+
+#     def execute(self, context):
+#         try:
+#             # 获取当前模型
+#             model = context.active_object
+
+#             # 捕获模型截图
+#             screenshots = self.capture_model_screenshots(model)
+
+#             # 评估模型
+#             evaluator = ModelEvaluator()
+#             evaluation_result = evaluator.evaluate(screenshots)
+
+#             # 根据评估结果修改模型
+#             self.modify_model(model, evaluation_result.suggestions)
+
+#             # 更新视图
+#             self.update_blender_view(context)
+
+#             self.report({'INFO'}, "Model optimization iteration completed.")
+#             return {'FINISHED'}
+#         except Exception as e:
+#             self.report({'ERROR'}, f"Error during optimization: {str(e)}")
+#             return {'CANCELLED'}
+
+#     def capture_model_screenshots(self, model):
+#         # 实现多视角截图逻辑
+#         pass
+
+#     def modify_model(self, model, suggestions):
+#         # 根据建议修改模型
+#         pass
+
+#     def update_blender_view(self, context):
+#         # 更新Blender视图
+#         bpy.context.view_layer.update()
 
 class MODEL_GENERATION_PT_panel(Panel):
     bl_label = "Model Generation"

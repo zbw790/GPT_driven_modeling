@@ -4,7 +4,7 @@ import logging
 from bpy.types import Operator, Panel
 from anthropic import Anthropic
 from dotenv import load_dotenv
-from LLM_common_utils import execute_blender_command, add_history_to_prompt, initialize_conversation, encode_image, get_scene_info, format_scene_info
+from LLM_common_utils import *
 
 # 设置日志记录
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -35,13 +35,9 @@ def generate_text_with_claude(prompt):
         logger.error(f"Error generating text from Claude with context: {e}")
         return "Error generating response from Claude."
 
-def analyze_screenshots_with_claude(prompt):
+def analyze_screenshots_with_claude(prompt, screenshots):
     client = Anthropic(api_key=api_key)
     
-    # 在函数内部获取截图
-    screenshots_path = os.path.join(os.path.dirname(__file__), 'screenshots')
-    screenshots = [os.path.join(screenshots_path, f) for f in os.listdir(screenshots_path) if f.lower().endswith(('.png', '.jpg', '.jpeg', '.webp', '.gif'))]
-
     content = []
     for screenshot in screenshots:
         base64_image = encode_image(screenshot)
@@ -128,7 +124,10 @@ class OBJECT_OT_send_screenshots_to_claude(Operator):
             # 添加历史记录到提示
             prompt_with_history = add_history_to_prompt(context, prompt)
 
-            output_text = analyze_screenshots_with_claude(prompt_with_history)
+            # 获取截图
+            screenshots = get_screenshots()
+
+            output_text = analyze_screenshots_with_claude(prompt_with_history, screenshots)
 
             logger.info(f"Claude Response: {output_text}")
 
@@ -162,7 +161,10 @@ class OBJECT_OT_analyze_screenshots_claude(Operator):
             # 添加历史记录到提示
             prompt_with_history = add_history_to_prompt(context, prompt)
             
-            analysis_result = analyze_screenshots_with_claude(prompt_with_history)
+            # 获取截图
+            screenshots = get_screenshots()
+            
+            analysis_result = analyze_screenshots_with_claude(prompt_with_history, screenshots)
             logger.info(f"Screenshot Analysis Result: {analysis_result}")
             
             # 将分析结果添加到对话历史

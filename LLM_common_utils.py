@@ -61,6 +61,10 @@ bpy.ops.mesh.primitive_cylinder_add(location=(0, 0, 0))
 class LLMToolProperties(PropertyGroup):
     input_text: StringProperty(name="Input Text", default="")
 
+def get_screenshots():
+    screenshots_path = os.path.join(os.path.dirname(__file__), 'screenshots')
+    return [os.path.join(screenshots_path, f) for f in os.listdir(screenshots_path) if f.lower().endswith(('.png', '.jpg', '.jpeg', '.webp', '.gif'))]
+
 def initialize_conversation(context):
     conversation_manager = context.scene.conversation_manager
     if not any(msg.content == GLOBAL_PROMPT.strip() for msg in conversation_manager.messages):

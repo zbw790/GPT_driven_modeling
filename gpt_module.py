@@ -32,15 +32,11 @@ def generate_text_with_context(prompt):
         logger.error(f"Error generating text from GPT-4 with context: {e}")
         return "Error generating response from GPT-4."
 
-def analyze_screenshots_with_gpt4(prompt):
+def analyze_screenshots_with_gpt4(prompt, screenshots):
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json"
     }
-
-    # 在函数内部获取截图
-    screenshots_path = os.path.join(os.path.dirname(__file__), 'screenshots')
-    screenshots = [os.path.join(screenshots_path, f) for f in os.listdir(screenshots_path) if f.lower().endswith(('.png', '.jpg', '.jpeg', '.webp', '.gif'))]
 
     image_messages = []
     for screenshot in screenshots:
@@ -140,8 +136,11 @@ class OBJECT_OT_send_screenshots_to_gpt(Operator):
             # 添加历史记录到提示
             prompt_with_history = add_history_to_prompt(context, prompt)
 
+            # 获取截图
+            screenshots = get_screenshots()
+
             # 分析截图和场景信息
-            output_text = analyze_screenshots_with_gpt4(prompt_with_history)
+            output_text = analyze_screenshots_with_gpt4(prompt_with_history, screenshots)
             logger.info(f"GPT-4 Response: {output_text}")
 
             # 将GPT-4响应添加到对话历史中
@@ -174,7 +173,10 @@ class OBJECT_OT_analyze_screenshots(Operator):
             # 添加历史记录到提示
             prompt_with_history = add_history_to_prompt(context, prompt)
             
-            analysis_result = analyze_screenshots_with_gpt4(prompt_with_history)
+            # 获取截图
+            screenshots = get_screenshots()
+            
+            analysis_result = analyze_screenshots_with_gpt4(prompt_with_history, screenshots)
             logger.info(f"Screenshot Analysis Result: {analysis_result}")
             
             # 将分析结果添加到对话历史
