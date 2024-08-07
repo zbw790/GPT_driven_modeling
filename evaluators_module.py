@@ -1,14 +1,15 @@
-# evaluators.py
+# evaluators_module.py
 
 import bpy
 from bpy.types import Operator, Panel
 from abc import ABC, abstractmethod
-from .gpt_module import analyze_screenshots_with_gpt4
-from .claude_module import analyze_screenshots_with_claude
+from gpt_module import analyze_screenshots_with_gpt4
+from claude_module import analyze_screenshots_with_claude
 from typing import List, Dict, Tuple
 from enum import Enum
+from LLM_common_utils import get_screenshots
 import json
-import os
+import re
 
 class EvaluationStatus(Enum):
     NOT_PASS = 0
@@ -25,14 +26,47 @@ class EvaluationResult:
     def __str__(self):
         return f"Analysis: {self.analysis}\nStatus: {self.status.name}, Score: {self.score}\nSuggestions: {', '.join(self.suggestions)}"
 
+def parse_json_response(response, default_message="无法解析评估结果。"):
+    try:
+        return json.loads(response)
+    except json.JSONDecodeError:
+        json_match = re.search(r'\{[\s\S]*\}', response)
+        if json_match:
+            try:
+                return json.loads(json_match.group(0))
+            except json.JSONDecodeError:
+                pass
+    
+    return {
+        "analysis": default_message,
+        "status": "NOT_PASS",
+        "score": 0,
+        "suggestions": ["请检查模型并重新评估。"]
+    }
+
 class BaseEvaluator(ABC):
     @abstractmethod
-    def evaluate(self, screenshots: List[str]) -> EvaluationResult:
+    def get_prompt(self) -> str:
         pass
 
-class GPTOverallEvaluator(BaseEvaluator):
+    @abstractmethod
+    def analyze_screenshots(self, prompt: str, screenshots: List[str]) -> str:
+        pass
+
     def evaluate(self, screenshots: List[str]) -> EvaluationResult:
-        prompt = """
+        prompt = self.get_prompt()
+        response = self.analyze_screenshots(prompt, screenshots)
+        result = parse_json_response(response)
+        return EvaluationResult(
+            result['analysis'],
+            EvaluationStatus[result['status']],
+            result['score'],
+            result['suggestions']
+        )
+
+class GPTOverallEvaluator(BaseEvaluator):
+    def get_prompt(self) -> str:
+        return """
         Context:
         你是一个专门用于评估3D模型整体质量的AI助手。你需要分析提供的多角度截图，评估模型的整体结构和设计。
 
@@ -77,18 +111,13 @@ class GPTOverallEvaluator(BaseEvaluator):
         3. 模型的整体形状是否符合预期？
         4. 是否有明显的结构问题或不自然的部分？
         """
-        response = analyze_screenshots_with_gpt4(prompt, screenshots)
-        result = json.loads(response)
-        return EvaluationResult(
-            result['analysis'],
-            EvaluationStatus[result['status']],
-            result['score'],
-            result['suggestions']
-        )
+
+    def analyze_screenshots(self, prompt: str, screenshots: List[str]) -> str:
+        return analyze_screenshots_with_gpt4(prompt, screenshots)
 
 class ClaudeOverallEvaluator(BaseEvaluator):
-    def evaluate(self, screenshots: List[str]) -> EvaluationResult:
-        prompt = """
+    def get_prompt(self) -> str:
+        return """
         Context:
         你是一个专门用于评估3D模型整体质量的AI助手。你需要分析提供的多角度截图，评估模型的整体结构和设计。
 
@@ -133,18 +162,13 @@ class ClaudeOverallEvaluator(BaseEvaluator):
         3. 模型的整体形状是否符合预期？
         4. 是否有明显的结构问题或不自然的部分？
         """
-        response = analyze_screenshots_with_claude(prompt, screenshots)
-        result = json.loads(response)
-        return EvaluationResult(
-            result['analysis'],
-            EvaluationStatus[result['status']],
-            result['score'],
-            result['suggestions']
-        )
+
+    def analyze_screenshots(self, prompt: str, screenshots: List[str]) -> str:
+        return analyze_screenshots_with_claude(prompt, screenshots)
 
 class SizeEvaluator(BaseEvaluator):
-    def evaluate(self, screenshots: List[str]) -> EvaluationResult:
-        prompt = """
+    def get_prompt(self) -> str:
+        return """
         Context:
         你是一个专门评估3D模型尺寸的AI助手。你需要分析提供的多角度截图，评估模型各部分的大小是否合适。
 
@@ -189,18 +213,13 @@ class SizeEvaluator(BaseEvaluator):
         3. 是否有任何部分的尺寸明显不合适？
         4. 尺寸是否影响了模型的功能或美观？
         """
-        response = analyze_screenshots_with_gpt4(prompt, screenshots)
-        result = json.loads(response)
-        return EvaluationResult(
-            result['analysis'],
-            EvaluationStatus[result['status']],
-            result['score'],
-            result['suggestions']
-        )
+
+    def analyze_screenshots(self, prompt: str, screenshots: List[str]) -> str:
+        return analyze_screenshots_with_gpt4(prompt, screenshots)
 
 class ProportionEvaluator(BaseEvaluator):
-    def evaluate(self, screenshots: List[str]) -> EvaluationResult:
-        prompt = """
+    def get_prompt(self) -> str:
+        return """
         Context:
         你是一个专门评估3D模型比例的AI助手。你需要分析提供的多角度截图，评估模型各部分之间的比例关系。
 
@@ -245,18 +264,13 @@ class ProportionEvaluator(BaseEvaluator):
         3. 比例是否符合模型的预期用途？
         4. 与真实物体相比，有哪些比例需要调整？
         """
-        response = analyze_screenshots_with_gpt4(prompt, screenshots)
-        result = json.loads(response)
-        return EvaluationResult(
-            result['analysis'],
-            EvaluationStatus[result['status']],
-            result['score'],
-            result['suggestions']
-        )
+
+    def analyze_screenshots(self, prompt: str, screenshots: List[str]) -> str:
+        return analyze_screenshots_with_gpt4(prompt, screenshots)
 
 class StructureEvaluator(BaseEvaluator):
-    def evaluate(self, screenshots: List[str]) -> EvaluationResult:
-        prompt = """
+    def get_prompt(self) -> str:
+        return """
         Context:
         你是一个专门评估3D模型结构的AI助手。你需要分析提供的多角度截图，评估模型的整体结构和细节处理。
 
@@ -302,14 +316,9 @@ class StructureEvaluator(BaseEvaluator):
         3. 结构设计是否符合模型的预期用途？
         4. 是否存在潜在的结构弱点或不稳定因素？
         """
-        response = analyze_screenshots_with_claude(prompt, screenshots)
-        result = json.loads(response)
-        return EvaluationResult(
-            result['analysis'],
-            EvaluationStatus[result['status']],
-            result['score'],
-            result['suggestions']
-        )
+
+    def analyze_screenshots(self, prompt: str, screenshots: List[str]) -> str:
+        return analyze_screenshots_with_claude(prompt, screenshots)
 
 class ModelEvaluator:
     def __init__(self):
@@ -337,13 +346,9 @@ class ModelEvaluator:
             all_suggestions.extend(result.suggestions)
             all_analyses.append(result.analysis)
         
-        # 去除重复的建议
         unique_suggestions = list(set(all_suggestions))
-        
-        # 合并分析
         combined_analysis = " ".join(all_analyses)
         
-        # 确定最终状态
         if EvaluationStatus.NOT_PASS in statuses:
             final_status = EvaluationStatus.NOT_PASS
         elif all(status == EvaluationStatus.GOOD for status in statuses):
@@ -363,20 +368,12 @@ class OBJECT_OT_evaluate_model(Operator):
     bl_description = "Evaluate the current 3D model"
 
     def execute(self, context):
-        # 假设截图已经存在
-        screenshots_dir = bpy.path.abspath("//screenshots")
-        screenshots = [os.path.join(screenshots_dir, f) for f in os.listdir(screenshots_dir) if f.endswith(('.png', '.jpg', '.jpeg'))]
-
-        if not screenshots:
-            self.report({'ERROR'}, "No screenshots found in the screenshots directory.")
-            return {'CANCELLED'}
-
+        screenshots = get_screenshots()
         evaluator = ModelEvaluator()
         results = evaluator.evaluate(screenshots)
         
         combined_analysis, final_status, average_score, suggestions = evaluator.aggregate_results(results)
 
-        # 在控制台输出结果
         print(f"Combined Analysis: {combined_analysis}")
         print(f"Final Status: {final_status.name}")
         print(f"Average Score: {average_score:.2f}")
@@ -384,17 +381,16 @@ class OBJECT_OT_evaluate_model(Operator):
         for suggestion in suggestions:
             print(f"- {suggestion}")
 
-        # 在Blender界面显示结果摘要
         self.report({'INFO'}, f"Evaluation complete. Status: {final_status.name}, Score: {average_score:.2f}")
 
         return {'FINISHED'}
 
-# 添加新的面板
-class VIEW3D_PT_model_evaluator(Panel):
+class Evaluator_PT_panel(Panel):
+    bl_label = "Model Evaluator"
+    bl_idname = "EVALUATOR_PT_panel"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = 'Tool'
-    bl_label = "Model Evaluator"
 
     def draw(self, context):
         layout = self.layout

@@ -1,3 +1,5 @@
+# main.py
+
 import sys
 import os
 import bpy
@@ -54,6 +56,9 @@ from model_generation import (
 from LLM_common_utils import LLMToolProperties
 from llama_index_component_library import (
     ComponentProperties, COMPONENT_OT_query, COMPONENT_OT_generate_component, COMPONENT_PT_panel, initialize_component_db
+)
+from evaluators_module import (
+    OBJECT_OT_evaluate_model, Evaluator_PT_panel
 )
 
 # 设置日志记录
@@ -124,7 +129,9 @@ classes = (
     AlignPanel,
     BevelEdgesOperator,
     OBJECT_PT_bevel_panel,
-    BevelProperties
+    BevelProperties,
+    OBJECT_OT_evaluate_model,
+    Evaluator_PT_panel
 )
 
 def register():
