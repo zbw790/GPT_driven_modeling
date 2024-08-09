@@ -1,7 +1,7 @@
 # prompt_rewriter.py
 
-from claude_module import generate_text_with_claude
-from logger_module import setup_logger
+from src.llm_modules.claude_module import generate_text_with_claude
+from src.utils.logger_module import setup_logger
 
 logger = setup_logger('prompt_rewriter')
 

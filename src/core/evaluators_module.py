@@ -3,11 +3,11 @@
 import bpy
 from bpy.types import Operator, Panel
 from abc import ABC, abstractmethod
-from gpt_module import analyze_screenshots_with_gpt4
-from claude_module import analyze_screenshots_with_claude
+from src.llm_modules.gpt_module import analyze_screenshots_with_gpt4
+from src.llm_modules.claude_module import analyze_screenshots_with_claude
 from typing import List, Dict, Any, Tuple
 from enum import Enum
-from LLM_common_utils import get_screenshots
+from src.llm_modules.LLM_common_utils import get_screenshots
 import json
 import re
 

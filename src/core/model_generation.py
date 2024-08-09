@@ -6,13 +6,13 @@ import re
 import os
 from bpy.types import Operator, Panel, PropertyGroup
 from bpy.props import StringProperty, PointerProperty
-from claude_module import generate_text_with_claude
-from LLM_common_utils import sanitize_command, initialize_conversation, execute_blender_command, add_history_to_prompt, get_screenshots
-from logger_module import setup_logger, log_context
-from prompt_rewriter import rewrite_prompt
-from gpt_module import generate_text_with_context
-from llama_index_model_generation import query_generation_documentation
-from evaluators_module import ModelEvaluator, EvaluationStatus
+from src.llm_modules.claude_module import generate_text_with_claude
+from src.llm_modules.LLM_common_utils import sanitize_command, initialize_conversation, execute_blender_command, add_history_to_prompt, get_screenshots
+from src.utils.logger_module import setup_logger, log_context
+from src.core.prompt_rewriter import rewrite_prompt
+from src.llm_modules.gpt_module import generate_text_with_context
+from src.llama_index_modules.llama_index_model_generation import query_generation_documentation
+from src.core.evaluators_module import ModelEvaluator, EvaluationStatus
 
 # 创建专门的日志记录器
 logger = setup_logger('model_generation')

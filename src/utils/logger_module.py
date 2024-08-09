@@ -16,7 +16,7 @@ def setup_logger(name):
 def log_context(logger, input_text):
     # 创建日志文件夹
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    log_dir = os.path.join(os.path.dirname(__file__), "model_generation_logs", timestamp)
+    log_dir = os.path.join(os.path.dirname(__file__), '..', 'logs', 'model_generation_logs', timestamp)
     os.makedirs(log_dir, exist_ok=True)
 
     # 配置文件处理器

@@ -14,9 +14,9 @@ from llama_index.core.postprocessor import SimilarityPostprocessor
 from llama_index.embeddings.openai import OpenAIEmbedding
 from llama_index.core.response_synthesizers import get_response_synthesizer
 from dotenv import load_dotenv
-from LLM_common_utils import execute_blender_command, initialize_conversation, add_history_to_prompt
-from gpt_module import generate_text_with_context
-from claude_module import generate_text_with_claude
+from src.llm_modules.LLM_common_utils import execute_blender_command, initialize_conversation, add_history_to_prompt
+from src.llm_modules.gpt_module import generate_text_with_context
+from src.llm_modules.claude_module import generate_text_with_claude
 from bpy.types import Operator, Panel, PropertyGroup
 from bpy.props import StringProperty, PointerProperty, EnumProperty
 
@@ -61,7 +61,7 @@ def load_component_data(directory_path):
     return documents, category_structure
 
 def create_component_index(documents):
-    db_path = "./chroma_db_components"
+    db_path = "./database/chroma_db_components"
     if os.path.exists(db_path):
         shutil.rmtree(db_path)
         logger.info("Existing component database deleted.")
@@ -181,7 +181,7 @@ class COMPONENT_PT_panel(Panel):
         layout.operator("component.generate_component")
 
 def initialize_component_db():
-    db_path = "./chroma_db_components"
+    db_path = "./database/chroma_db_components"
     db = chromadb.PersistentClient(path=db_path)
     chroma_collection = db.get_or_create_collection("component_index")
     vector_store = ChromaVectorStore(chroma_collection=chroma_collection)

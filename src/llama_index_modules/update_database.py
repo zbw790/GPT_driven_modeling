@@ -1,9 +1,9 @@
 import os
 import shutil
 import logging
-from llama_index_model_modification import load_modification_data, create_modification_index
-from llama_index_model_generation import load_generation_data, create_generation_index
-from llama_index_component_library import load_component_data, create_component_index
+from src.llama_index_modules.llama_index_model_modification import load_modification_data, create_modification_index
+from src.llama_index_modules.llama_index_model_generation import load_generation_data, create_generation_index
+from src.llama_index_modules.llama_index_component_library import load_component_data, create_component_index
 from dotenv import load_dotenv
 
 # 设置日志记录
@@ -18,7 +18,7 @@ def update_modification_database():
         data_directory = './data'
         documents, _ = load_modification_data(data_directory)
         
-        db_path = "./chroma_db"
+        db_path = "./database/chroma_db_modification"
         if os.path.exists(db_path):
             shutil.rmtree(db_path)
             logger.info("Existing modification database deleted.")
@@ -33,7 +33,7 @@ def update_generation_database():
         data_directory = './data'
         documents, _ = load_generation_data(data_directory)
         
-        db_path = "./chroma_db_generation"
+        db_path = "./database/chroma_db_generation"
         if os.path.exists(db_path):
             shutil.rmtree(db_path)
             logger.info("Existing generation database deleted.")
@@ -48,7 +48,7 @@ def update_component_database():
         data_directory = './data'
         documents, _ = load_component_data(data_directory)
         
-        db_path = "./chroma_db_components"
+        db_path = "./database/chroma_db_components"
         if os.path.exists(db_path):
             shutil.rmtree(db_path)
             logger.info("Existing component database deleted.")

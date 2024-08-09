@@ -6,7 +6,7 @@ from bpy.types import Panel, Operator
 from bpy.props import FloatProperty, StringProperty
 
 # 设置截图保存路径
-SCREENSHOTS_PATH = os.path.join(os.path.dirname(__file__), 'screenshots')
+SCREENSHOTS_PATH = os.path.join(os.path.dirname(__file__), '..', '..', 'resources', 'screenshots')
 
 def ensure_camera():
     camera = bpy.context.scene.camera

@@ -11,53 +11,53 @@ project_path = os.path.abspath(os.path.dirname(__file__))
 if project_path not in sys.path:
     sys.path.append(project_path)
 
-from gpt_module import (
+from src.llm_modules.gpt_module import (
     OBJECT_OT_send_to_gpt, GPT_PT_panel, OBJECT_OT_send_screenshots_to_gpt, OBJECT_OT_analyze_screenshots
 )
-from model_viewer_module import (
+from src.utils.model_viewer_module import (
     ApplyScale, ModelViewerPanel, SaveScreenshotOperator, update_model_dimensions
 )
-from rotation_module import (
+from src.blender_operations_modules.rotation_module import (
     RotateObjectCW_X_Degree, RotateObjectCW_Y_Degree, RotateObjectCW_Z_Degree, RotateObjectCW_X, RotateObjectCW_Y, RotateObjectCW_Z, RotatePanel, MirrorObject_X, MirrorObject_Y, MirrorObject_Z
 )
-from location_module import (
+from src.blender_operations_modules.location_module import (
     ResetObjectLocation, LocationPanel
 )
-from boolean_operations_module import (
+from src.blender_operations_modules.boolean_operations_module import (
     BooleanUnionOperator, BooleanDifferenceOperator, BooleanIntersectOperator, BooleanPanel
 )
-from geometry_module import (
+from src.blender_operations_modules.geometry_module import (
     GeometryProperties, MoveGeometryWithoutAffectingOrigin, ResetGeometryToOrigin, GeometryPanel
 )
-from subdivision_decimate_module import (
+from src.blender_operations_modules.subdivision_decimate_module import (
     SubdivisionDecimateProperties, ApplySubdivisionSurface, ApplyDecimate, SubdivisionDecimatePanel
 )
-from align_module import (
+from src.blender_operations_modules.align_module import (
     AlignProperties, SetAlignPointOperator, AlignObjectsOperator, AlignPanel
 )
-from claude_module import (
+from src.llm_modules.claude_module import (
     OBJECT_OT_send_to_claude, OBJECT_OT_send_screenshots_to_claude, CLAUDE_PT_panel, OBJECT_OT_analyze_screenshots_claude
 )
-from conversation_manager import (
+from src.llm_modules.conversation_manager import (
     Message, ConversationManager, CONVERSATION_OT_print_all, CONVERSATION_OT_print_latest, CONVERSATION_PT_panel
 )
-from llama_index_model_modification import (
+from src.llama_index_modules.llama_index_model_modification import (
     ModificationProperties, MODIFICATION_OT_query, MODIFICATION_OT_query_with_screenshots, MODIFICATION_PT_panel, initialize_modification_db, MODIFICATION_OT_query_and_generate
 )
-from llama_index_model_generation import (
+from src.llama_index_modules.llama_index_model_generation import (
     GenerationProperties, GENERATION_OT_query, GENERATION_OT_generate_model, GENERATION_PT_panel, initialize_generation_db
 )
-from bevel_corners_module import (
+from src.blender_operations_modules.bevel_corners_module import (
     BevelEdgesOperator, OBJECT_PT_bevel_panel,BevelProperties
 )
-from model_generation import (
+from src.core.model_generation import (
     ModelGenerationProperties, MODEL_GENERATION_OT_generate, MODEL_GENERATION_OT_optimize_once, MODEL_GENERATION_PT_panel
 )
-from LLM_common_utils import LLMToolProperties
-from llama_index_component_library import (
+from src.llm_modules.LLM_common_utils import LLMToolProperties
+from src.llama_index_modules.llama_index_component_library import (
     ComponentProperties, COMPONENT_OT_query, COMPONENT_OT_generate_component, COMPONENT_PT_panel, initialize_component_db
 )
-from evaluators_module import (
+from src.core.evaluators_module import (
     OBJECT_OT_evaluate_model, Evaluator_PT_panel
 )
 

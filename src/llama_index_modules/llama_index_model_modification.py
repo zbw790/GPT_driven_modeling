@@ -18,9 +18,9 @@ from llama_index.core.postprocessor import SimilarityPostprocessor
 from llama_index.embeddings.openai import OpenAIEmbedding
 from dotenv import load_dotenv
 from llama_index.core.response_synthesizers import get_response_synthesizer
-from LLM_common_utils import execute_blender_command, initialize_conversation, add_history_to_prompt, get_scene_info, format_scene_info
-from gpt_module import generate_text_with_context, analyze_screenshots_with_gpt4
-from claude_module import generate_text_with_claude, analyze_screenshots_with_claude
+from src.llm_modules.LLM_common_utils import execute_blender_command, initialize_conversation, add_history_to_prompt, get_scene_info, format_scene_info
+from src.llm_modules.gpt_module import generate_text_with_context, analyze_screenshots_with_gpt4
+from src.llm_modules.claude_module import generate_text_with_claude, analyze_screenshots_with_claude
 
 # 设置日志记录
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -70,7 +70,7 @@ def load_modification_data(directory_path):
 
 # 创建向量存储索引
 def create_modification_index(documents):
-    db_path = "./chroma_db_modification"
+    db_path = "./database/chroma_db_modification"
     if os.path.exists(db_path):
         shutil.rmtree(db_path)
         logger.info("Existing modification database deleted.")
@@ -231,7 +231,7 @@ class MODIFICATION_PT_panel(Panel):
         layout.operator("modification.query_and_generate")
 
 def initialize_modification_db():
-    db_path = "./chroma_db_modification"
+    db_path = "./database/chroma_db_modification"
     db = chromadb.PersistentClient(path=db_path)
     chroma_collection = db.get_or_create_collection("modification_index")
     vector_store = ChromaVectorStore(chroma_collection=chroma_collection)
