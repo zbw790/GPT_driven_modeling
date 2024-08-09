@@ -5,7 +5,7 @@ from bpy.types import Operator, Panel
 from abc import ABC, abstractmethod
 from gpt_module import analyze_screenshots_with_gpt4
 from claude_module import analyze_screenshots_with_claude
-from typing import List, Dict, Tuple
+from typing import List, Dict, Any, Tuple
 from enum import Enum
 from LLM_common_utils import get_screenshots
 import json
@@ -46,15 +46,15 @@ def parse_json_response(response, default_message="无法解析评估结果。")
 
 class BaseEvaluator(ABC):
     @abstractmethod
-    def get_prompt(self) -> str:
+    def get_prompt(self, context: Dict[str, Any]) -> str:
         pass
 
     @abstractmethod
     def analyze_screenshots(self, prompt: str, screenshots: List[str]) -> str:
         pass
 
-    def evaluate(self, screenshots: List[str]) -> EvaluationResult:
-        prompt = self.get_prompt()
+    def evaluate(self, screenshots: List[str], context: Dict[str, Any]) -> EvaluationResult:
+        prompt = self.get_prompt(context)
         response = self.analyze_screenshots(prompt, screenshots)
         result = parse_json_response(response)
         return EvaluationResult(
@@ -65,10 +65,14 @@ class BaseEvaluator(ABC):
         )
 
 class GPTOverallEvaluator(BaseEvaluator):
-    def get_prompt(self) -> str:
-        return """
+    def get_prompt(self, context: Dict[str, Any]) -> str:
+        return f"""
         Context:
         你是一个专门用于评估3D模型整体质量的AI助手。你需要分析提供的多角度截图，评估模型的整体结构和设计。
+
+        用户原始输入: {context['user_input']}
+        改写后的输入: {context['rewritten_input']}
+        模型描述: {json.dumps(context['model_description'], ensure_ascii=False, indent=2)}
 
         Objective:
         评估3D模型的整体质量，包括完整性、合理性和预期符合度，并提供详细的评估结果和改进建议。
@@ -94,7 +98,7 @@ class GPTOverallEvaluator(BaseEvaluator):
         4. suggestions: 改进建议列表
 
         Example:
-        {
+        {{
             "analysis": "该3D模型整体结构完整，主要组成部分都已包含。模型的整体形状符合预期，展现了良好的设计意图。然而，某些部分之间的连接看起来不够自然，特别是在[具体位置]处。此外，[某个部分]的细节处理略显粗糙，影响了整体的精致度。",
             "status": "PASS",
             "score": 7.5,
@@ -103,23 +107,28 @@ class GPTOverallEvaluator(BaseEvaluator):
                 "增加[某个部分]的细节，提高整体精致度",
                 "考虑调整[某个特定特征]的比例，以增强整体平衡感"
             ]
-        }
+        }}
 
         评估要点：
         1. 模型的主要组成部分是否完整？
         2. 各部分之间的连接是否合理？
         3. 模型的整体形状是否符合预期？
         4. 是否有明显的结构问题或不自然的部分？
+        5. 模型是否符合用户的原始输入和改写后的要求？
         """
 
     def analyze_screenshots(self, prompt: str, screenshots: List[str]) -> str:
         return analyze_screenshots_with_gpt4(prompt, screenshots)
 
 class ClaudeOverallEvaluator(BaseEvaluator):
-    def get_prompt(self) -> str:
-        return """
+    def get_prompt(self, context: Dict[str, Any]) -> str:
+        return f"""
         Context:
         你是一个专门用于评估3D模型整体质量的AI助手。你需要分析提供的多角度截图，评估模型的整体结构和设计。
+
+        用户原始输入: {context['user_input']}
+        改写后的输入: {context['rewritten_input']}
+        模型描述: {json.dumps(context['model_description'], ensure_ascii=False, indent=2)}
 
         Objective:
         使用Claude的独特视角评估3D模型的整体质量，包括完整性、合理性和预期符合度，并提供详细的评估结果和改进建议。
@@ -145,7 +154,7 @@ class ClaudeOverallEvaluator(BaseEvaluator):
         4. suggestions: 改进建议列表
 
         Example:
-        {
+        {{
             "analysis": "这个3D模型展现了独特的创意和良好的整体结构。模型的主要组成部分完整，整体形状符合设计意图。特别值得称赞的是[某个特定特征]的创新设计。然而，在[某个区域]的细节处理上还有提升空间。此外，[某些部分]之间的过渡可以更加流畅自然。",
             "status": "PASS",
             "score": 8.0,
@@ -154,23 +163,28 @@ class ClaudeOverallEvaluator(BaseEvaluator):
                 "改善[某些部分]之间的过渡，使整体更加协调",
                 "考虑在[某个位置]添加一些细微的装饰元素，以增强整体美感"
             ]
-        }
+        }}
 
         评估要点：
         1. 模型的主要组成部分是否完整？
         2. 各部分之间的连接是否合理？
         3. 模型的整体形状是否符合预期？
         4. 是否有明显的结构问题或不自然的部分？
+        5. 模型是否符合用户的原始输入和改写后的要求？
         """
 
     def analyze_screenshots(self, prompt: str, screenshots: List[str]) -> str:
         return analyze_screenshots_with_claude(prompt, screenshots)
 
 class SizeEvaluator(BaseEvaluator):
-    def get_prompt(self) -> str:
-        return """
+    def get_prompt(self, context: Dict[str, Any]) -> str:
+        return f"""
         Context:
         你是一个专门评估3D模型尺寸的AI助手。你需要分析提供的多角度截图，评估模型各部分的大小是否合适。
+
+        用户原始输入: {context['user_input']}
+        改写后的输入: {context['rewritten_input']}
+        模型描述: {json.dumps(context['model_description'], ensure_ascii=False, indent=2)}
 
         Objective:
         评估3D模型的尺寸是否合理，包括整体大小和各部分的相对尺寸，并提供详细的评估结果和改进建议。
@@ -196,7 +210,7 @@ class SizeEvaluator(BaseEvaluator):
         4. suggestions: 尺寸调整建议列表
 
         Example:
-        {
+        {{
             "analysis": "该3D模型的整体尺寸基本合理，符合预期用途。[某个主要部分]的大小恰当，为整体结构提供了良好的基础。然而，[某个次要部分]的尺寸略显过大，可能影响整体的协调性。此外，[某个细节部分]的尺寸过小，可能导致在实际使用中不够明显或功能受限。",
             "status": "PASS",
             "score": 7.0,
@@ -205,23 +219,28 @@ class SizeEvaluator(BaseEvaluator):
                 "增大[某个细节部分]的尺寸约20%，以增强其可见度和功能性",
                 "考虑调整[某个特定特征]的尺寸，使其与相邻部分更加协调"
             ]
-        }
+        }}
 
         评估要点：
         1. 模型的整体尺寸是否合理？
         2. 各部分的绝对尺寸是否符合预期？
         3. 是否有任何部分的尺寸明显不合适？
         4. 尺寸是否影响了模型的功能或美观？
+        5. 模型尺寸是否符合用户的原始输入和改写后的要求？
         """
 
     def analyze_screenshots(self, prompt: str, screenshots: List[str]) -> str:
         return analyze_screenshots_with_gpt4(prompt, screenshots)
 
 class ProportionEvaluator(BaseEvaluator):
-    def get_prompt(self) -> str:
-        return """
+    def get_prompt(self, context: Dict[str, Any]) -> str:
+        return f"""
         Context:
         你是一个专门评估3D模型比例的AI助手。你需要分析提供的多角度截图，评估模型各部分之间的比例关系。
+
+        用户原始输入: {context['user_input']}
+        改写后的输入: {context['rewritten_input']}
+        模型描述: {json.dumps(context['model_description'], ensure_ascii=False, indent=2)}
 
         Objective:
         评估3D模型的比例是否协调，包括各部分之间的大小关系，并提供详细的评估结果和改进建议。
@@ -247,7 +266,7 @@ class ProportionEvaluator(BaseEvaluator):
         4. suggestions: 比例调整建议列表
 
         Example:
-        {
+        {{
             "analysis": "该3D模型的整体比例展现了良好的平衡感。主体部分与支撑结构的比例恰当，创造出稳定而优雅的外观。[某个特定部分]的比例特别出色，增添了模型的视觉吸引力。然而，[某个次要部分]与周围元素的比例略显不协调，稍微影响了整体的和谐性。此外，[某个功能性部件]的比例可能略显不足，可能会影响其实际功能。",
             "status": "PASS",
             "score": 8.5,
@@ -256,23 +275,28 @@ class ProportionEvaluator(BaseEvaluator):
                 "增大[某个功能性部件]的比例约15%，以确保其功能性不受影响",
                 "考虑微调[某些细节元素]的比例，以进一步增强整体的视觉平衡"
             ]
-        }
+        }}
 
         评估要点：
         1. 模型各部分的大小关系是否合适？
         2. 是否有任何部分看起来不成比例？
         3. 比例是否符合模型的预期用途？
         4. 与真实物体相比，有哪些比例需要调整？
+        5. 模型比例是否符合用户的原始输入和改写后的要求？
         """
 
     def analyze_screenshots(self, prompt: str, screenshots: List[str]) -> str:
         return analyze_screenshots_with_gpt4(prompt, screenshots)
 
 class StructureEvaluator(BaseEvaluator):
-    def get_prompt(self) -> str:
-        return """
+    def get_prompt(self, context: Dict[str, Any]) -> str:
+        return f"""
         Context:
         你是一个专门评估3D模型结构的AI助手。你需要分析提供的多角度截图，评估模型的整体结构和细节处理。
+
+        用户原始输入: {context['user_input']}
+        改写后的输入: {context['rewritten_input']}
+        模型描述: {json.dumps(context['model_description'], ensure_ascii=False, indent=2)}
 
         Objective:
         评估3D模型的结构是否合理，包括整体布局、连接方式和细节处理，并提供详细的评估结果和改进建议。
@@ -298,7 +322,7 @@ class StructureEvaluator(BaseEvaluator):
         4. suggestions: 结构改进建议列表
 
         Example:
-        {
+        {{
             "analysis": "该3D模型的整体结构设计合理，展现了良好的工程学考量。主要支撑结构稳固，能够有效承载整体重量。[某个关键连接点]的设计特别出色，既保证了强度又不影响美观。然而，在[某个应力集中区域]可能存在潜在的结构弱点。此外，[某些细节部分]的连接方式可以进一步优化，以增强整体的结构完整性。",
             "status": "PASS",
             "score": 7.8,
@@ -308,13 +332,14 @@ class StructureEvaluator(BaseEvaluator):
                 "考虑在[某个位置]添加额外的支撑结构，以提高整体稳定性",
                 "重新设计[某个特定部件]的内部结构，以减轻重量同时保持强度"
             ]
-        }
+        }}
 
         评估要点：
         1. 模型的整体结构是否合理？
         2. 各部分之间的连接是否稳固和合适？
         3. 结构设计是否符合模型的预期用途？
         4. 是否存在潜在的结构弱点或不稳定因素？
+        5. 模型结构是否符合用户的原始输入和改写后的要求？
         """
 
     def analyze_screenshots(self, prompt: str, screenshots: List[str]) -> str:
@@ -330,10 +355,10 @@ class ModelEvaluator:
             StructureEvaluator(),
         ]
 
-    def evaluate(self, screenshots: List[str]) -> Dict[str, EvaluationResult]:
+    def evaluate(self, screenshots: List[str], context: Dict[str, Any]) -> Dict[str, EvaluationResult]:
         results = {}
         for evaluator in self.evaluators:
-            results[evaluator.__class__.__name__] = evaluator.evaluate(screenshots)
+            results[evaluator.__class__.__name__] = evaluator.evaluate(screenshots, context)
         return results
 
     def aggregate_results(self, results: Dict[str, EvaluationResult]) -> Tuple[str, EvaluationStatus, float, List[str]]:
@@ -361,7 +386,9 @@ class ModelEvaluator:
     def is_model_satisfactory(self, results: Dict[str, EvaluationResult]) -> bool:
         _, final_status, _, _ = self.aggregate_results(results)
         return final_status in [EvaluationStatus.PASS, EvaluationStatus.GOOD]
-    
+
+# 以下是用于Blender界面的操作符和面板类，可以根据需要保留或删除
+
 class OBJECT_OT_evaluate_model(Operator):
     bl_idname = "object.evaluate_model"
     bl_label = "Evaluate Model"
@@ -370,7 +397,15 @@ class OBJECT_OT_evaluate_model(Operator):
     def execute(self, context):
         screenshots = get_screenshots()
         evaluator = ModelEvaluator()
-        results = evaluator.evaluate(screenshots)
+        
+        # 这里需要提供评估所需的上下文信息
+        evaluation_context = {
+            "user_input": "用户的原始输入",  # 这里需要从某处获取用户输入
+            "rewritten_input": "重写后的输入",  # 这里需要从某处获取重写后的输入
+            "model_description": {}  # 这里需要从某处获取模型描述
+        }
+        
+        results = evaluator.evaluate(screenshots, evaluation_context)
         
         combined_analysis, final_status, average_score, suggestions = evaluator.aggregate_results(results)
 

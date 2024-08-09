@@ -46,10 +46,10 @@ Response:
 """
 
 def rewrite_prompt(original_prompt):
-    prompt = f"原始提示词：\n{original_prompt}\n\n改写后的提示词：{REWRITE_SYSTEM_PROMPT}"
+    prompt = f"原始提示词：\n{original_prompt}\n\n你的角色与对应的要求：{REWRITE_SYSTEM_PROMPT}"
     
     logger.info(f"Sending prompt to Claude for rewriting: {prompt}")
-    rewritten_prompt = generate_text_with_claude([], prompt)
+    rewritten_prompt = generate_text_with_claude(prompt)
     logger.info(f"Received rewritten prompt from Claude: {rewritten_prompt}")
     
     return rewritten_prompt.strip()

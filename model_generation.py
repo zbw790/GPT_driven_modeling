@@ -7,11 +7,12 @@ import os
 from bpy.types import Operator, Panel, PropertyGroup
 from bpy.props import StringProperty, PointerProperty
 from claude_module import generate_text_with_claude
-from LLM_common_utils import sanitize_command, initialize_conversation, execute_blender_command, add_history_to_prompt
+from LLM_common_utils import sanitize_command, initialize_conversation, execute_blender_command, add_history_to_prompt, get_screenshots
 from logger_module import setup_logger, log_context
 from prompt_rewriter import rewrite_prompt
 from gpt_module import generate_text_with_context
 from llama_index_model_generation import query_generation_documentation
+from evaluators_module import ModelEvaluator, EvaluationStatus
 
 # 创建专门的日志记录器
 logger = setup_logger('model_generation')
@@ -168,18 +169,15 @@ class MODEL_GENERATION_OT_generate(Operator):
                 self.update_blender_view(context)
                 bpy.ops.wm.redraw_timer(type='DRAW_WIN_SWAP', iterations=1)
                 
+                # 评估模型
+                self.evaluate_and_optimize_model(context, user_input, rewritten_input, model_description, log_dir)
+
                 # 保存当前场景的屏幕截图
                 screenshot_path = os.path.join(log_dir, "model_screenshot.png")
                 bpy.ops.screen.screenshot(filepath=screenshot_path)
                 logger.info(f"Screenshot saved to {screenshot_path}")
                 
-                self.report({'INFO'}, f"Model generated for {model_description['object_type']}. Logs saved in {log_dir}")
-            except json.JSONDecodeError:
-                logger.error("Failed to parse the model description.")
-                self.report({'ERROR'}, "Failed to parse the model description.")
-            except KeyError as e:
-                logger.error(f"Missing key in model description: {str(e)}")
-                self.report({'ERROR'}, f"Missing key in model description: {str(e)}")
+                self.report({'INFO'}, f"Model generated and optimized for {model_description['object_type']}. Logs saved in {log_dir}")
             except Exception as e:
                 logger.error(f"An error occurred: {str(e)}")
                 self.report({'ERROR'}, f"An error occurred: {str(e)}")
@@ -195,7 +193,6 @@ class MODEL_GENERATION_OT_generate(Operator):
         改写后的要求：{rewritten_input}
         模型描述（JSON格式）：{json.dumps(model_description, ensure_ascii=False, indent=2)}
         相关生成文档：{generation_docs}
-
 
         请生成适当的Blender Python命令来创建这个3D模型。注意以下几点：
         1. 使用 bpy 库来创建和操作对象。
@@ -234,50 +231,170 @@ class MODEL_GENERATION_OT_generate(Operator):
             self.report({'ERROR'}, f"Error executing Blender commands: {str(e)}")
 
     def update_blender_view(self, context):
-      # 确保更改立即可见
-      bpy.context.view_layer.update()
-      logger.info("Blender view updated.")
-    
-# class MODEL_GENERATION_OT_optimize_once(Operator):
-#     bl_idname = "model_generation.optimize_once"
-#     bl_label = "Optimize Model Once"
-#     bl_description = "Perform one iteration of model optimization"
+        # 确保更改立即可见
+        bpy.context.view_layer.update()
+        logger.info("Blender view updated.")
 
-#     def execute(self, context):
-#         try:
-#             # 获取当前模型
-#             model = context.active_object
+    def evaluate_and_optimize_model(self, context, user_input, rewritten_input, model_description, log_dir):
+        screenshots = get_screenshots()
+        evaluator = ModelEvaluator()
+        
+        evaluation_context = {
+            "user_input": user_input,
+            "rewritten_input": rewritten_input,
+            "model_description": model_description
+        }
+        
+        results = evaluator.evaluate(screenshots, evaluation_context)
+        
+        combined_analysis, final_status, average_score, suggestions = evaluator.aggregate_results(results)
 
-#             # 捕获模型截图
-#             screenshots = self.capture_model_screenshots(model)
+        logger.info(f"Evaluation results: Status: {final_status.name}, Score: {average_score:.2f}")
+        logger.info(f"Combined Analysis: {combined_analysis}")
+        logger.info("Suggestions:")
+        for suggestion in suggestions:
+            logger.info(f"- {suggestion}")
 
-#             # 评估模型
-#             evaluator = ModelEvaluator()
-#             evaluation_result = evaluator.evaluate(screenshots)
+        # 如果模型不满意，尝试优化
+        if final_status == EvaluationStatus.NOT_PASS:
+            # self.optimize_model(context, suggestions, evaluation_context, log_dir)
+            print("不满意")
 
-#             # 根据评估结果修改模型
-#             self.modify_model(model, evaluation_result.suggestions)
+    def optimize_model(self, context, suggestions, evaluation_context, log_dir):
+        # 准备优化提示
+        prompt = f"""
+        请根据以下信息优化现有的3D模型：
 
-#             # 更新视图
-#             self.update_blender_view(context)
+        原始用户输入：{evaluation_context['user_input']}
+        改写后的要求：{evaluation_context['rewritten_input']}
+        模型描述：{json.dumps(evaluation_context['model_description'], ensure_ascii=False, indent=2)}
+        优化建议：
+        {chr(10).join(f"- {suggestion}" for suggestion in suggestions)}
 
-#             self.report({'INFO'}, "Model optimization iteration completed.")
-#             return {'FINISHED'}
-#         except Exception as e:
-#             self.report({'ERROR'}, f"Error during optimization: {str(e)}")
-#             return {'CANCELLED'}
+        请生成Blender Python命令来优化这个3D模型。注意：
+        1. 使用 bpy 库来修改现有对象。
+        2. 仅修改需要优化的部分，保留其他部分不变。
+        3. 确保优化后的模型仍然符合原始描述和要求。
+        4. 如果需要添加新的组件，请确保它们与现有组件协调。
 
-#     def capture_model_screenshots(self, model):
-#         # 实现多视角截图逻辑
-#         pass
+        请只返回Python代码，不需要其他解释。
+        """
 
-#     def modify_model(self, model, suggestions):
-#         # 根据建议修改模型
-#         pass
+        # 使用 GPT 生成优化命令
+        conversation_manager = context.scene.conversation_manager
+        initialize_conversation(context)
+        prompt_with_history = add_history_to_prompt(context, prompt)
+        response = generate_text_with_context(prompt_with_history)
 
-#     def update_blender_view(self, context):
-#         # 更新Blender视图
-#         bpy.context.view_layer.update()
+        # 更新对话历史
+        conversation_manager.add_message("user", prompt)
+        conversation_manager.add_message("assistant", response)
+
+        logger.info(f"GPT Generated Optimization Commands: {response}")
+
+        # 保存生成的优化代码到文件
+        with open(os.path.join(log_dir, "generated_optimization_code.py"), "w", encoding='utf-8') as f:
+            f.write(response)
+
+        # 执行生成的Blender优化命令
+        try:
+            execute_blender_command(response)
+            logger.info("Successfully executed optimization commands.")
+        except Exception as e:
+            logger.error(f"Error executing optimization commands: {str(e)}")
+            self.report({'ERROR'}, f"Error executing optimization commands: {str(e)}")
+
+class MODEL_GENERATION_OT_optimize_once(Operator):
+    bl_idname = "model_generation.optimize_once"
+    bl_label = "Optimize Model Once"
+    bl_description = "Perform one iteration of model optimization"
+
+    def execute(self, context):
+        props = context.scene.model_generation_tool
+        user_input = props.input_text
+
+        with log_context(logger, "model_optimization") as log_dir:
+            try:
+                # 重新获取模型描述（如果需要的话）
+                rewritten_input = rewrite_prompt(user_input)
+                model_description = parse_user_input(user_input, rewritten_input)
+
+                # 评估和优化模型
+                self.evaluate_and_optimize_model(context, user_input, rewritten_input, model_description, log_dir)
+
+                self.report({'INFO'}, "Model optimization iteration completed.")
+                return {'FINISHED'}
+            except Exception as e:
+                logger.error(f"Error during optimization: {str(e)}")
+                self.report({'ERROR'}, f"Error during optimization: {str(e)}")
+                return {'CANCELLED'}
+
+    def evaluate_and_optimize_model(self, context, user_input, rewritten_input, model_description, log_dir):
+        screenshots = get_screenshots()
+        evaluator = ModelEvaluator()
+        
+        evaluation_context = {
+            "user_input": user_input,
+            "rewritten_input": rewritten_input,
+            "model_description": model_description
+        }
+        
+        results = evaluator.evaluate(screenshots, evaluation_context)
+        
+        combined_analysis, final_status, average_score, suggestions = evaluator.aggregate_results(results)
+
+        logger.info(f"Evaluation results: Status: {final_status.name}, Score: {average_score:.2f}")
+        logger.info(f"Combined Analysis: {combined_analysis}")
+        logger.info("Suggestions:")
+        for suggestion in suggestions:
+            logger.info(f"- {suggestion}")
+
+        # 无论评估结果如何，都尝试优化
+        self.optimize_model(context, suggestions, evaluation_context, log_dir)
+
+    def optimize_model(self, context, suggestions, evaluation_context, log_dir):
+        # 准备优化提示
+        prompt = f"""
+        请根据以下信息优化现有的3D模型：
+
+        原始用户输入：{evaluation_context['user_input']}
+        改写后的要求：{evaluation_context['rewritten_input']}
+        模型描述：{json.dumps(evaluation_context['model_description'], ensure_ascii=False, indent=2)}
+        优化建议：
+        {chr(10).join(f"- {suggestion}" for suggestion in suggestions)}
+
+        请生成Blender Python命令来优化这个3D模型。注意：
+        1. 使用 bpy 库来修改现有对象。
+        2. 仅修改需要优化的部分，保留其他部分不变。
+        3. 确保优化后的模型仍然符合原始描述和要求。
+        4. 如果需要添加新的组件，请确保它们与现有组件协调。
+
+        请只返回Python代码，不需要其他解释。
+        """
+
+        # 使用 GPT 生成优化命令
+        conversation_manager = context.scene.conversation_manager
+        initialize_conversation(context)
+        prompt_with_history = add_history_to_prompt(context, prompt)
+        response = generate_text_with_context(prompt_with_history)
+
+        # 更新对话历史
+        conversation_manager.add_message("user", prompt)
+        conversation_manager.add_message("assistant", response)
+
+        logger.info(f"GPT Generated Optimization Commands: {response}")
+
+        # 保存生成的优化代码到文件
+        with open(os.path.join(log_dir, "generated_optimization_code.py"), "w", encoding='utf-8') as f:
+            f.write(response)
+
+        # 执行生成的Blender优化命令
+        try:
+            execute_blender_command(response)
+            logger.info("Successfully executed optimization commands.")
+        except Exception as e:
+            logger.error(f"Error executing optimization commands: {str(e)}")
+            self.report({'ERROR'}, f"Error executing optimization commands: {str(e)}")
 
 class MODEL_GENERATION_PT_panel(Panel):
     bl_label = "Model Generation"
@@ -292,3 +409,4 @@ class MODEL_GENERATION_PT_panel(Panel):
 
         layout.prop(props, "input_text")
         layout.operator("model_generation.generate")
+        layout.operator("model_generation.optimize_once")
