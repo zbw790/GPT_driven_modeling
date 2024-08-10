@@ -13,6 +13,7 @@ from src.core.prompt_rewriter import rewrite_prompt
 from src.llm_modules.gpt_module import generate_text_with_context
 from src.llama_index_modules.llama_index_model_generation import query_generation_documentation
 from src.core.evaluators_module import ModelEvaluator, EvaluationStatus
+from src.utils.model_viewer_module import save_screenshots
 
 # 创建专门的日志记录器
 logger = setup_logger('model_generation')
@@ -168,6 +169,9 @@ class MODEL_GENERATION_OT_generate(Operator):
                 # 更新视图并等待一小段时间以确保视图已更新
                 self.update_blender_view(context)
                 bpy.ops.wm.redraw_timer(type='DRAW_WIN_SWAP', iterations=1)
+
+                # 更新resources内的截图
+                save_screenshots()
                 
                 # 评估模型
                 self.evaluate_and_optimize_model(context, user_input, rewritten_input, model_description, log_dir)

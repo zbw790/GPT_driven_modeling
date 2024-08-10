@@ -18,141 +18,131 @@ def ensure_camera():
         bpy.context.scene.camera = camera
     return camera
 
-def move_camera_to_position(camera, location, rotation):
-    camera.location = location
-    camera.rotation_euler = rotation
-    bpy.context.view_layer.update()
+def calculate_scene_center_and_size(objects):
+    if not objects:
+        return mathutils.Vector((0, 0, 0)), 0
 
-def activate_camera(camera):
-    bpy.context.view_layer.objects.active = camera
-    bpy.context.scene.camera = camera
-    for area in bpy.context.screen.areas:
-        if area.type == 'VIEW_3D':
-            area.spaces[0].region_3d.view_perspective = 'CAMERA'
-            area.spaces[0].lock_camera = True
-            break
-
-def add_track_to_constraint(camera, target):
-    constraint = camera.constraints.get('Track To')
-    if constraint is None:
-        constraint = camera.constraints.new(type='TRACK_TO')
-    constraint.target = target
-    constraint.track_axis = 'TRACK_NEGATIVE_Z'
-    constraint.up_axis = 'UP_Y'
-
-def remove_track_to_constraint(camera):
-    for constraint in camera.constraints:
-        if constraint.type == 'TRACK_TO':
-            camera.constraints.remove(constraint)
+    min_corner, max_corner = calculate_combined_bounding_box(objects)
+    center = mathutils.Vector([(min_corner[i] + max_corner[i]) / 2 for i in range(3)])
+    size = max((max_corner[i] - min_corner[i]) for i in range(3))
+    return center, size
 
 def calculate_combined_bounding_box(objects):
     min_x = min_y = min_z = float('inf')
     max_x = max_y = max_z = float('-inf')
     
     for obj in objects:
-        for corner in obj.bound_box:
-            world_corner = obj.matrix_world @ mathutils.Vector(corner)
-            min_x = min(min_x, world_corner.x)
-            max_x = max(max_x, world_corner.x)
-            min_y = min(min_y, world_corner.y)
-            max_y = max(max_y, world_corner.y)
-            min_z = min(min_z, world_corner.z)
-            max_z = max(max_z, world_corner.z)
+        bbox_corners = [obj.matrix_world @ mathutils.Vector(corner) for corner in obj.bound_box]
+        for corner in bbox_corners:
+            min_x = min(min_x, corner.x)
+            max_x = max(max_x, corner.x)
+            min_y = min(min_y, corner.y)
+            max_y = max(max_y, corner.y)
+            min_z = min(min_z, corner.z)
+            max_z = max(max_z, corner.z)
     
     return (min_x, min_y, min_z), (max_x, max_y, max_z)
 
-def adjust_camera_distance(camera, objects, margin):
-    min_corner, max_corner = calculate_combined_bounding_box(objects)
-    bbx_center = mathutils.Vector([(min_corner[i] + max_corner[i]) / 2 for i in range(3)])
-    
-    max_distance_x = max_corner[0] - min_corner[0]
-    max_distance_y = max_corner[1] - min_corner[1]
-    max_distance_z = max_corner[2] - min_corner[2]
-    
-    fov = camera.data.angle
+def set_camera_position_and_rotation(camera, look_from, look_at):
+    direction = look_at - look_from
+    rot_quat = direction.to_track_quat('-Z', 'Y')
+    camera.rotation_euler = rot_quat.to_euler()
+    camera.location = look_from
 
-    adjusted_distance_x = (max_distance_x / 2) / math.tan(fov / 2) + margin
-    adjusted_distance_y = (max_distance_y / 2) / math.tan(fov / 2) + margin
-    adjusted_distance_z = (max_distance_z / 2) / math.tan(fov / 2) + margin
-    adjusted_distance = max(adjusted_distance_x, adjusted_distance_y, adjusted_distance_z)
-
-    direction_vector = (camera.location - bbx_center).normalized()
-    
-    camera.location = bbx_center + direction_vector * adjusted_distance
-
-    camera.data.clip_start = adjusted_distance * 0.1
-    camera.data.clip_end = adjusted_distance * 10
-    camera.data.lens = 50
-
-def save_screenshots():
+def save_screenshots(distance_factor=1.5):
     scene = bpy.context.scene
 
-    # 保存原始渲染设置
+    # 保存原始设置
     original_resolution_x = scene.render.resolution_x
     original_resolution_y = scene.render.resolution_y
     original_resolution_percentage = scene.render.resolution_percentage
+    original_camera = scene.camera
+
+    # 保存原始 3D 视图设置
+    original_view_settings = {}
+    for area in bpy.context.screen.areas:
+        if area.type == 'VIEW_3D':
+            for space in area.spaces:
+                if space.type == 'VIEW_3D':
+                    original_view_settings[area] = {
+                        'view_perspective': space.region_3d.view_perspective,
+                        'view_matrix': space.region_3d.view_matrix.copy(),
+                        'lock_camera': space.lock_camera
+                    }
+                    break
 
     scene.render.resolution_x = 750
     scene.render.resolution_y = 750
     scene.render.resolution_percentage = 100
 
-    # 自动选择所有模型
-    bpy.ops.object.select_all(action='DESELECT')
-    for obj in bpy.context.scene.objects:
-        if obj.type == 'MESH':
-            obj.select_set(True)
+    mesh_objects = [obj for obj in bpy.context.scene.objects if obj.type == 'MESH']
 
-    selected_objects = bpy.context.selected_objects
-
-    if not selected_objects:
-        print("No objects selected")
+    if not mesh_objects:
+        print("No mesh objects found in the scene")
         return
 
     if not os.path.exists(SCREENSHOTS_PATH):
         os.makedirs(SCREENSHOTS_PATH)
 
     camera = ensure_camera()
-    target = selected_objects[0]  # Assuming only one object is selected
+    center, size = calculate_scene_center_and_size(mesh_objects)
+
+    # 设置相机的视野角度
+    camera.data.angle = math.radians(50)
+
+    # 计算相机距离
+    camera_distance = size * distance_factor
 
     angles = [
-        ((0, 0, 10), (0, math.radians(90), 0), "俯视图"),
-        ((0, 0, -10), (0, math.radians(-90), 0), "底视图"),
-        ((-10, 0, 0), (math.radians(90), 0, math.radians(90)), "左视图"),
-        ((10, 0, 0), (math.radians(90), 0, math.radians(-90)), "右视图"),
-        ((0, 10, 0), (math.radians(-90), 0, math.radians(180)), "后视图"),
-        ((0, -10, 0), (math.radians(90), 0, 0), "前视图"),
-        # ((-10, -10, 10), (math.radians(45), 0, math.radians(45)), "左前上视图"),
-        ((10, -10, 10), (math.radians(45), 0, math.radians(-45)), "右前上视图"),
-        # ((-10, 10, -10), (math.radians(-45), 0, math.radians(135)), "左后下视图"),
-        ((10, 10, -10), (math.radians(-45), 0, math.radians(-135)), "右后下视图"),
+        ((0, 0, 1), "俯视图"),
+        ((0, 0, -1), "底视图"),
+        ((-1, 0, 0), "左视图"),
+        ((1, 0, 0), "右视图"),
+        ((0, 1, 0), "后视图"),
+        ((0, -1, 0), "前视图"),
+        ((1, -1, 1), "右前上视图"),
+        ((1, 1, -1), "右后下视图"),
     ]
 
-    for location, rotation, view_name in angles:
-        move_camera_to_position(camera, location, rotation)
-        add_track_to_constraint(camera, target)
-        activate_camera(camera)
+    for direction, view_name in angles:
+        direction_vector = mathutils.Vector(direction).normalized()
+        camera_position = center + direction_vector * camera_distance
+        
+        set_camera_position_and_rotation(camera, camera_position, center)
+        
         bpy.context.view_layer.update()
 
-        adjust_camera_distance(camera, selected_objects, margin=4)
+        bpy.context.view_layer.objects.active = camera
+        scene.camera = camera
+
+        for area in bpy.context.screen.areas:
+            if area.type == 'VIEW_3D':
+                area.spaces[0].region_3d.view_perspective = 'CAMERA'
+                break
 
         screenshot_path = os.path.join(SCREENSHOTS_PATH, f"{view_name}.png")
-        bpy.context.scene.render.image_settings.file_format = 'PNG'
-        bpy.context.scene.render.filepath = screenshot_path
+        scene.render.filepath = screenshot_path
+        scene.render.image_settings.file_format = 'PNG'
 
         bpy.ops.render.opengl(write_still=True)
-    
-    remove_track_to_constraint(camera)
 
-    for area in bpy.context.screen.areas:
-        if area.type == 'VIEW_3D':
-            area.spaces[0].region_3d.view_perspective = 'PERSP'
-            area.spaces[0].lock_camera = False
-            break
-    
-    # 恢复原始渲染设置
+    # 恢复原始设置
     scene.render.resolution_x = original_resolution_x
     scene.render.resolution_y = original_resolution_y
     scene.render.resolution_percentage = original_resolution_percentage
+    scene.camera = original_camera
+
+    # 恢复原始 3D 视图设置
+    for area in bpy.context.screen.areas:
+        if area.type == 'VIEW_3D':
+            for space in area.spaces:
+                if space.type == 'VIEW_3D':
+                    if area in original_view_settings:
+                        settings = original_view_settings[area]
+                        space.region_3d.view_perspective = settings['view_perspective']
+                        space.region_3d.view_matrix = settings['view_matrix']
+                        space.lock_camera = settings['lock_camera']
+                    break
 
     print(f"Screenshots saved to {SCREENSHOTS_PATH}")
 
@@ -186,9 +176,8 @@ class SaveScreenshotOperator(Operator):
     bl_label = "Save Screenshot"
 
     def execute(self, context):
-        save_screenshots()
+        save_screenshots(distance_factor=2.0)
         return {'FINISHED'}
-
 class ModelViewerPanel(Panel):
     bl_label = "Model Viewer"
     bl_idname = "OBJECT_PT_model_viewer"
