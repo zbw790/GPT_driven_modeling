@@ -154,17 +154,13 @@ class MODEL_GENERATION_OT_generate(Operator):
                 model_description = parse_user_input(user_input, rewritten_input)
                 logger.info("Model Description:")
                 logger.info(json.dumps(model_description, ensure_ascii=False, indent=2))
-
-                logger.info("Querying generation documentation")
-                generation_docs = query_generation_documentation(bpy.types.Scene.generation_query_engine, rewritten_input)
-                logger.info(f"Generation documentation: {generation_docs}")
                 
                 # Save model description to file
                 with open(os.path.join(log_dir, "model_description.json"), "w", encoding='utf-8') as f:
                     json.dump(model_description, f, ensure_ascii=False, indent=2)
                 
                 # Generate 3D model using GPT
-                self.generate_3d_model(context, user_input, rewritten_input, model_description, generation_docs, log_dir)
+                self.generate_3d_model(context, user_input, rewritten_input, model_description, log_dir)
 
                 # 更新视图并等待一小段时间以确保视图已更新
                 self.update_blender_view(context)
@@ -172,10 +168,11 @@ class MODEL_GENERATION_OT_generate(Operator):
 
                 # 更新resources内的截图
                 save_screenshots()
-                
+
                 # 评估模型
                 self.evaluate_and_optimize_model(context, user_input, rewritten_input, model_description, log_dir)
 
+                logger.info(f"Log directory: {log_dir}")
                 # 保存当前场景的屏幕截图
                 screenshot_path = os.path.join(log_dir, "model_screenshot.png")
                 bpy.ops.screen.screenshot(filepath=screenshot_path)
@@ -188,7 +185,23 @@ class MODEL_GENERATION_OT_generate(Operator):
         
         return {'FINISHED'}
 
-    def generate_3d_model(self, context, user_input, rewritten_input, model_description, generation_docs, log_dir):
+
+
+
+
+
+
+
+
+
+
+    def generate_3d_model(self, context, user_input, rewritten_input, model_description, log_dir):
+
+        # 查询必要文件
+        logger.info("Querying generation documentation")
+        generation_docs = query_generation_documentation(bpy.types.Scene.generation_query_engine, rewritten_input)
+        logger.info(f"Generation documentation: {generation_docs}")
+
         # 准备提示信息
         prompt = f"""
         请根据以下信息生成Blender Python命令来创建3D模型：
@@ -234,10 +247,12 @@ class MODEL_GENERATION_OT_generate(Operator):
             logger.error(f"Error executing Blender commands: {str(e)}")
             self.report({'ERROR'}, f"Error executing Blender commands: {str(e)}")
 
+
     def update_blender_view(self, context):
         # 确保更改立即可见
         bpy.context.view_layer.update()
         logger.info("Blender view updated.")
+
 
     def evaluate_and_optimize_model(self, context, user_input, rewritten_input, model_description, log_dir):
         screenshots = get_screenshots()
@@ -263,6 +278,7 @@ class MODEL_GENERATION_OT_generate(Operator):
         if final_status == EvaluationStatus.NOT_PASS:
             # self.optimize_model(context, suggestions, evaluation_context, log_dir)
             print("不满意")
+
 
     def optimize_model(self, context, suggestions, evaluation_context, log_dir):
         # 准备优化提示
@@ -307,6 +323,7 @@ class MODEL_GENERATION_OT_generate(Operator):
         except Exception as e:
             logger.error(f"Error executing optimization commands: {str(e)}")
             self.report({'ERROR'}, f"Error executing optimization commands: {str(e)}")
+            
 
 class MODEL_GENERATION_OT_optimize_once(Operator):
     bl_idname = "model_generation.optimize_once"

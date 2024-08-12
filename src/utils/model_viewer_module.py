@@ -8,7 +8,7 @@ from bpy.types import Panel, Operator
 from bpy.props import FloatProperty, StringProperty
 
 # 设置截图保存路径
-SCREENSHOTS_PATH = os.path.join(os.path.dirname(__file__), '..', '..', 'resources', 'screenshots')
+SCREENSHOTS_PATH = r"D:\GPT_driven_modeling\resources\screenshots"
 
 def ensure_camera():
     camera = bpy.context.scene.camera

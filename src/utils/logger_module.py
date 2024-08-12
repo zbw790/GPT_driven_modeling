@@ -16,7 +16,8 @@ def setup_logger(name):
 def log_context(logger, input_text):
     # 创建日志文件夹
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    log_dir = os.path.join(os.path.dirname(__file__), '..', 'logs', 'model_generation_logs', timestamp)
+    base_log_dir = r"D:\GPT_driven_modeling\logs\model_generation_logs"
+    log_dir = os.path.join(base_log_dir, timestamp)
     os.makedirs(log_dir, exist_ok=True)
 
     # 配置文件处理器
@@ -43,4 +44,4 @@ def log_context(logger, input_text):
         file_handler.close()
 
 # 设置根日志记录器，这将影响所有未明确配置的日志记录器
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
