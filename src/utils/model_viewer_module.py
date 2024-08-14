@@ -4,6 +4,8 @@ import math
 import mathutils
 from bpy.types import Panel, Operator
 from bpy.props import FloatProperty, StringProperty
+from bpy_extras.object_utils import world_to_camera_view
+import bmesh
 
 # 设置截图保存路径
 SCREENSHOTS_PATH = r"D:\GPT_driven_modeling\resources\screenshots"
@@ -48,8 +50,13 @@ def set_camera_position_and_rotation(camera, look_from, look_at):
     camera.location = look_from
 
 def add_label_to_object(obj, camera, scene_size, up_vector):
-    # 使用物体的实际原点
-    center = obj.matrix_world.translation
+    # 检查物体是否在相机视图中可见
+    is_visible, visible_point = is_object_visible(obj, camera)
+    if not is_visible:
+        return None
+
+    # 使用可见点而不是物体的实际原点
+    center = visible_point
 
     # 创建新的文本对象
     bpy.ops.object.text_add(enter_editmode=False, location=(0, 0, 0))
@@ -60,12 +67,12 @@ def add_label_to_object(obj, camera, scene_size, up_vector):
     text_obj.data.align_x = 'CENTER'
     text_obj.data.align_y = 'CENTER'
     
-    # 计算摄像机到物体中心的方向向量
+    # 计算摄像机到可见点的方向向量
     direction = center - camera.location
     direction_length = direction.length
     direction.normalize()
     
-    # 计算文本位置（在物体中心和摄像机之间的30%处）
+    # 计算文本位置（在可见点和摄像机之间的30%处）
     text_position = camera.location + direction * (direction_length * 0.7)
     
     # 设置文本位置
@@ -117,6 +124,65 @@ def add_label_to_object(obj, camera, scene_size, up_vector):
     text_obj.show_in_front = True
     
     return text_obj
+
+import bmesh
+
+def is_object_visible(obj, camera):
+    def check_point(point):
+        co_ndc = world_to_camera_view(bpy.context.scene, camera, point)
+        if 0 <= co_ndc.x <= 1 and 0 <= co_ndc.y <= 1 and 0 < co_ndc.z:
+            direction = point - camera.location
+            depsgraph = bpy.context.evaluated_depsgraph_get()
+            
+            offsets = [
+                mathutils.Vector((0, 0, 0)),
+                mathutils.Vector((0.001, 0.001, 0.001)),
+                mathutils.Vector((-0.001, -0.001, -0.001))
+            ]
+            
+            for offset in offsets:
+                ray_origin = camera.location + offset
+                ray_cast_result = bpy.context.scene.ray_cast(depsgraph, ray_origin, direction.normalized())
+                if ray_cast_result[0] and ray_cast_result[4] == obj:
+                    return True
+        return False
+
+    # 首先检查物体的中心
+    center = obj.location
+    if check_point(center):
+        return True, center.copy()
+
+    # 如果中心点不可见，创建一个bmesh来访问物体的实际几何形状
+    bm = bmesh.new()
+    bm.from_mesh(obj.data)
+    bm.transform(obj.matrix_world)
+
+    result = False, None
+
+    # 检查所有顶点
+    for v in bm.verts:
+        if check_point(v.co):
+            result = True, v.co.copy()
+            break
+
+    # 如果顶点检查失败，检查所有边的中点
+    if not result[0]:
+        for e in bm.edges:
+            mid_point = (e.verts[0].co + e.verts[1].co) / 2
+            if check_point(mid_point):
+                result = True, mid_point.copy()
+                break
+
+    # 如果边检查失败，检查所有面的中心
+    if not result[0]:
+        for f in bm.faces:
+            face_center = f.calc_center_median()
+            if check_point(face_center):
+                result = True, face_center.copy()
+                break
+
+    bm.free()  # 释放 BMesh
+    return result
 
 def remove_labels():
     for obj in bpy.data.objects:
