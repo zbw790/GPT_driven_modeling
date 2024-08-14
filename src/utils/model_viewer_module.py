@@ -4,7 +4,6 @@ import math
 import mathutils
 from bpy.types import Panel, Operator
 from bpy.props import FloatProperty, StringProperty
-from mathutils.geometry import intersect_ray_tri
 
 # 设置截图保存路径
 SCREENSHOTS_PATH = r"D:\GPT_driven_modeling\resources\screenshots"
@@ -48,43 +47,9 @@ def set_camera_position_and_rotation(camera, look_from, look_at):
     camera.rotation_euler = rot_quat.to_euler()
     camera.location = look_from
 
-def is_point_visible(point, camera):
-    scene = bpy.context.scene
-    depsgraph = bpy.context.evaluated_depsgraph_get()
-    
-    # 获取从相机到点的方向
-    direction = point - camera.location
-    direction.normalize()
-    
-    # 执行射线检测
-    result, location, normal, index, object, matrix = scene.ray_cast(depsgraph, camera.location, direction)
-    
-    if result:
-        # 如果射线击中了物体，检查击中点是否接近我们的目标点
-        return (location - point).length < 0.01
-    return False
-
-def get_visible_center(obj, camera):
-    mesh = obj.data
-    visible_points = []
-    
-    for v in mesh.vertices:
-        world_coord = obj.matrix_world @ v.co
-        if is_point_visible(world_coord, camera):
-            visible_points.append(world_coord)
-    
-    if visible_points:
-        return sum(visible_points, mathutils.Vector()) / len(visible_points)
-    return None
-
 def add_label_to_object(obj, camera, scene_size, up_vector):
-    # 检查物体是否可见
-    visible_center = get_visible_center(obj, camera)
-    if visible_center is None:
-        return None  # 物体不可见，不添加标签
-
-    # 使用可见部分的中心
-    center = visible_center
+    # 使用物体的实际原点
+    center = obj.matrix_world.translation
 
     # 创建新的文本对象
     bpy.ops.object.text_add(enter_editmode=False, location=(0, 0, 0))
@@ -140,8 +105,9 @@ def add_label_to_object(obj, camera, scene_size, up_vector):
     up = right.cross(forward)
     
     # 使用四元数计算旋转
-    rot_matrix = mathutils.Matrix((-right, up, -forward)).to_3x3()
+    rot_matrix = mathutils.Matrix((-right, up, forward)).to_3x3()
     quat = rot_matrix.to_quaternion()
+    quat.invert()
     
     # 应用旋转和位置
     text_obj.rotation_mode = 'QUATERNION'
@@ -228,7 +194,6 @@ def save_screenshots(distance_factor=2.5):
 
             # 添加标签
             text_objects = [add_label_to_object(obj, camera, size, mathutils.Vector(up_vector)) for obj in mesh_objects]
-            text_objects = [obj for obj in text_objects if obj is not None]  # 移除 None 值
 
             for area in bpy.context.screen.areas:
                 if area.type == 'VIEW_3D':
