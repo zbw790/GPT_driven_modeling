@@ -318,7 +318,7 @@ class MODEL_GENERATION_OT_generate(Operator):
         3D模型设计师和开发人员
 
         Response:
-        请提供一个JSON对象，包含以下元素：
+        请提供一个JSON对象，包含以下元素，且必须是严格的示例形式，请参考example：
         1. priority_suggestions: 优先级最高的建议列表，这些建议对模型的外观和识别度有重大影响
         2. secondary_suggestions: 次要建议列表，这些建议可以改善模型但不是必须的
 
@@ -349,11 +349,14 @@ class MODEL_GENERATION_OT_generate(Operator):
         # 提取优先建议
         priority_suggestions = filtered_suggestions.get('priority_suggestions', [])
 
-        print("XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",suggestions)
+        print("XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",filtered_suggestions)
+        print("YYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY",priority_suggestions)
+
+        priority_suggestions_str = "\n".join(priority_suggestions)
 
         # 查询必要文件
         logger.info("Querying modification documentation")
-        modification_docs = query_modification_documentation(bpy.types.Scene.modification_query_engine, priority_suggestions)
+        modification_docs = query_modification_documentation(bpy.types.Scene.modification_query_engine, priority_suggestions_str)
         logger.info(f"modification documentation: {modification_docs}")
 
         # 准备优化提示
