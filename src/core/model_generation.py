@@ -366,7 +366,7 @@ class MODEL_GENERATION_OT_generate(Operator):
         原始用户输入：{evaluation_context['user_input']}
         改写后的要求：{evaluation_context['rewritten_input']}
         模型描述：{json.dumps(evaluation_context['model_description'], ensure_ascii=False, indent=2)}
-        优化建议：{chr(10).join(f"- {suggestion}" for suggestion in suggestions)}
+        优化建议：{chr(10).join(f"- {suggestion}" for suggestion in priority_suggestions)}
         相关优化文档：{modification_docs}
 
         请生成Blender Python命令来优化这个3D模型。注意：

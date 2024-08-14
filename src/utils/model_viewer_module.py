@@ -4,6 +4,7 @@ import math
 import mathutils
 from bpy.types import Panel, Operator
 from bpy.props import FloatProperty, StringProperty
+from mathutils.geometry import intersect_ray_tri
 
 # 设置截图保存路径
 SCREENSHOTS_PATH = r"D:\GPT_driven_modeling\resources\screenshots"
@@ -47,9 +48,43 @@ def set_camera_position_and_rotation(camera, look_from, look_at):
     camera.rotation_euler = rot_quat.to_euler()
     camera.location = look_from
 
-def add_label_to_object(obj, scene_size):
-    # 计算物体的精确中心
-    center = obj.location + obj.dimensions / 2
+def is_point_visible(point, camera):
+    scene = bpy.context.scene
+    depsgraph = bpy.context.evaluated_depsgraph_get()
+    
+    # 获取从相机到点的方向
+    direction = point - camera.location
+    direction.normalize()
+    
+    # 执行射线检测
+    result, location, normal, index, object, matrix = scene.ray_cast(depsgraph, camera.location, direction)
+    
+    if result:
+        # 如果射线击中了物体，检查击中点是否接近我们的目标点
+        return (location - point).length < 0.01
+    return False
+
+def get_visible_center(obj, camera):
+    mesh = obj.data
+    visible_points = []
+    
+    for v in mesh.vertices:
+        world_coord = obj.matrix_world @ v.co
+        if is_point_visible(world_coord, camera):
+            visible_points.append(world_coord)
+    
+    if visible_points:
+        return sum(visible_points, mathutils.Vector()) / len(visible_points)
+    return None
+
+def add_label_to_object(obj, camera, scene_size, up_vector):
+    # 检查物体是否可见
+    visible_center = get_visible_center(obj, camera)
+    if visible_center is None:
+        return None  # 物体不可见，不添加标签
+
+    # 使用可见部分的中心
+    center = visible_center
 
     # 创建新的文本对象
     bpy.ops.object.text_add(enter_editmode=False, location=(0, 0, 0))
@@ -60,8 +95,20 @@ def add_label_to_object(obj, scene_size):
     text_obj.data.align_x = 'CENTER'
     text_obj.data.align_y = 'CENTER'
     
-    # 调整文本大小为场景大小的 10%
-    text_obj.data.size = scene_size * 0.06
+    # 计算摄像机到物体中心的方向向量
+    direction = center - camera.location
+    direction_length = direction.length
+    direction.normalize()
+    
+    # 计算文本位置（在物体中心和摄像机之间的30%处）
+    text_position = camera.location + direction * (direction_length * 0.7)
+    
+    # 设置文本位置
+    text_obj.location = text_position
+    
+    # 根据到摄像机的距离调整文本大小
+    distance_to_camera = (text_position - camera.location).length
+    text_obj.data.size = scene_size * 0.02 * (distance_to_camera / scene_size)
 
     # 创建新材质并应用
     material = bpy.data.materials.new(name="Text_Material")
@@ -71,7 +118,7 @@ def add_label_to_object(obj, scene_size):
 
     # 设置为发光材质
     node_emission = nodes.new(type='ShaderNodeEmission')
-    node_emission.inputs[0].default_value = (1, 1, 0, 1)  # 亮黄色
+    node_emission.inputs[0].default_value = (1, 0, 0, 1)  # 红色
     node_emission.inputs[1].default_value = 2  # 发光强度
     node_output = nodes.new(type='ShaderNodeOutputMaterial')
     material.node_tree.links.new(node_emission.outputs[0], node_output.inputs[0])
@@ -85,22 +132,25 @@ def add_label_to_object(obj, scene_size):
     # 设置文本对象的原点为其边界框的中心
     bpy.ops.object.origin_set(type='ORIGIN_GEOMETRY', center='BOUNDS')
     
-    # 将文本移动到物体的精确中心
-    text_obj.location = center
+    # 计算文本的旋转
+    forward = camera.location - text_position
+    forward.normalize()
+    right = forward.cross(up_vector)
+    right.normalize()
+    up = right.cross(forward)
     
-    # 使文本始终面向摄像机
-    track_to = text_obj.constraints.new(type='TRACK_TO')
-    track_to.target = bpy.context.scene.camera
-    track_to.track_axis = 'TRACK_Z'
-    track_to.up_axis = 'UP_Y'
+    # 使用四元数计算旋转
+    rot_matrix = mathutils.Matrix((-right, up, -forward)).to_3x3()
+    quat = rot_matrix.to_quaternion()
     
-    # 将文本对象设置为原始对象的子对象
-    text_obj.parent = obj
+    # 应用旋转和位置
+    text_obj.rotation_mode = 'QUATERNION'
+    text_obj.rotation_quaternion = quat
+    text_obj.location = text_position
 
     text_obj.show_in_front = True
     
     return text_obj
-
 
 def remove_labels():
     for obj in bpy.data.objects:
@@ -126,7 +176,7 @@ def save_screenshots(distance_factor=2.5):
                         'view_perspective': space.region_3d.view_perspective,
                         'view_matrix': space.region_3d.view_matrix.copy(),
                         'lock_camera': space.lock_camera,
-                        'shading_type': space.shading.type  # 保存原始着色类型
+                        'shading_type': space.shading.type
                     }
                     break
 
@@ -146,33 +196,26 @@ def save_screenshots(distance_factor=2.5):
     camera = ensure_camera()
     center, size = calculate_scene_center_and_size(mesh_objects)
 
-    # 设置相机的视野角度
     camera.data.angle = math.radians(50)
-
-    # 计算相机距离
     camera_distance = size * distance_factor
 
     angles = [
-        ((0, 0, 1), "俯视图"),
-        ((0, 0, -1), "底视图"),
-        ((-1, 0, 0), "左视图"),
-        ((1, 0, 0), "右视图"),
-        ((0, 1, 0), "后视图"),
-        ((0, -1, 0), "前视图"),
-        ((1, -1, 1), "右前上视图"),
-        ((1, 1, -1), "右后下视图"),
+        ((0, 0, 1), "俯视图", (0, 1, 0)),
+        ((0, 0, -1), "底视图", (0, 1, 0)),
+        ((-1, 0, 0), "左视图", (0, 0, 1)),
+        ((1, 0, 0), "右视图", (0, 0, 1)),
+        ((0, 1, 0), "后视图", (0, 0, 1)),
+        ((0, -1, 0), "前视图", (0, 0, 1)),
+        ((1, -1, 1), "右前上视图", (0, 0, 1)),
+        ((1, 1, -1), "右后下视图", (0, 0, 1)),
     ]
 
-    # 添加标签
-    text_objects = [add_label_to_object(obj, size) for obj in mesh_objects]
-
     try:
+        for direction, view_name, up_vector in angles:
+            # 取消所有对象的选择
+            bpy.ops.object.select_all(action='DESELECT')
+            bpy.context.view_layer.objects.active = None
 
-        # 取消所有对象的选择
-        bpy.ops.object.select_all(action='DESELECT')
-        bpy.context.view_layer.objects.active = None
-        
-        for direction, view_name in angles:
             direction_vector = mathutils.Vector(direction).normalized()
             camera_position = center + direction_vector * camera_distance
             
@@ -183,12 +226,19 @@ def save_screenshots(distance_factor=2.5):
             bpy.context.view_layer.objects.active = camera
             scene.camera = camera
 
+            # 添加标签
+            text_objects = [add_label_to_object(obj, camera, size, mathutils.Vector(up_vector)) for obj in mesh_objects]
+            text_objects = [obj for obj in text_objects if obj is not None]  # 移除 None 值
+
             for area in bpy.context.screen.areas:
                 if area.type == 'VIEW_3D':
-                    # 切换到材质预览模式
                     area.spaces[0].shading.type = 'MATERIAL'
                     area.spaces[0].region_3d.view_perspective = 'CAMERA'
                     break
+
+            # 再次取消所有对象的选择，确保没有对象被选中
+            bpy.ops.object.select_all(action='DESELECT')
+            bpy.context.view_layer.objects.active = None
 
             screenshot_path = os.path.join(SCREENSHOTS_PATH, f"{view_name}.png")
             scene.render.filepath = screenshot_path
@@ -196,10 +246,10 @@ def save_screenshots(distance_factor=2.5):
 
             bpy.ops.render.opengl(write_still=True)
 
-    finally:
-        # 移除标签
-        remove_labels()
+            # 移除标签
+            remove_labels()
 
+    finally:
         # 恢复原始设置
         scene.render.resolution_x = original_resolution_x
         scene.render.resolution_y = original_resolution_y
@@ -216,7 +266,7 @@ def save_screenshots(distance_factor=2.5):
                             space.region_3d.view_perspective = settings['view_perspective']
                             space.region_3d.view_matrix = settings['view_matrix']
                             space.lock_camera = settings['lock_camera']
-                            space.shading.type = settings['shading_type']  # 恢复原始着色类型
+                            space.shading.type = settings['shading_type']
                         break
 
     print(f"Screenshots saved to {SCREENSHOTS_PATH}")
