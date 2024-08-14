@@ -139,7 +139,7 @@ class MODIFICATION_OT_query_with_screenshots(Operator):
             props = context.scene.modification_tool
             model_choice = props.model_choice
 
-            screenshots_path = os.path.join(os.path.dirname(__file__), 'screenshots')
+            screenshots_path = r"D:\GPT_driven_modeling\resources\screenshots"
             screenshots = [os.path.join(screenshots_path, f) for f in os.listdir(screenshots_path) if f.lower().endswith(('.png', '.jpg', '.jpeg', '.webp', '.gif'))]
 
             if model_choice == 'GPT':
@@ -170,7 +170,7 @@ class MODIFICATION_OT_query_and_generate(Operator):
             props = context.scene.modification_tool
             model_choice = props.model_choice
 
-            screenshots_path = os.path.join(os.path.dirname(__file__), 'screenshots')
+            screenshots_path = r"D:\GPT_driven_modeling\resources\screenshots"
             screenshots = [os.path.join(screenshots_path, f) for f in os.listdir(screenshots_path) if f.lower().endswith(('.png', '.jpg', '.jpeg', '.webp', '.gif'))]
 
             if model_choice == 'GPT':

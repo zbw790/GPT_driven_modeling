@@ -1,0 +1,33 @@
+{
+  "object_type": "圣诞树",
+  "components": [
+    {
+      "name": "树干",
+      "quantity": 1,
+      "shape": "cone",
+      "dimensions": {
+        "baseRadius": 50,
+        "height": 200,
+        "topRadius": 5
+      }
+    },
+    {
+      "name": "树枝层",
+      "quantity": 6,
+      "shape": "custom",
+      "dimensions": {
+        "description": "圆锥形,从底部到顶部逐层变小,每层略微向下弯曲"
+      }
+    },
+    {
+      "name": "树顶尖端",
+      "quantity": 1,
+      "shape": "cone",
+      "dimensions": {
+        "baseRadius": 5,
+        "height": 20,
+        "topRadius": 1
+      }
+    }
+  ]
+}

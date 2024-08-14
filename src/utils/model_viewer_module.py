@@ -1,5 +1,3 @@
-# model_viewer_modulke
-
 import bpy
 import os
 import math
@@ -49,7 +47,67 @@ def set_camera_position_and_rotation(camera, look_from, look_at):
     camera.rotation_euler = rot_quat.to_euler()
     camera.location = look_from
 
-def save_screenshots(distance_factor=1.5):
+def add_label_to_object(obj, scene_size):
+    # 计算物体的精确中心
+    center = obj.location + obj.dimensions / 2
+
+    # 创建新的文本对象
+    bpy.ops.object.text_add(enter_editmode=False, location=(0, 0, 0))
+    text_obj = bpy.context.active_object
+    
+    # 设置文本内容和属性
+    text_obj.data.body = obj.name
+    text_obj.data.align_x = 'CENTER'
+    text_obj.data.align_y = 'CENTER'
+    
+    # 调整文本大小为场景大小的 10%
+    text_obj.data.size = scene_size * 0.06
+
+    # 创建新材质并应用
+    material = bpy.data.materials.new(name="Text_Material")
+    material.use_nodes = True
+    nodes = material.node_tree.nodes
+    nodes.clear()
+
+    # 设置为发光材质
+    node_emission = nodes.new(type='ShaderNodeEmission')
+    node_emission.inputs[0].default_value = (1, 1, 0, 1)  # 亮黄色
+    node_emission.inputs[1].default_value = 2  # 发光强度
+    node_output = nodes.new(type='ShaderNodeOutputMaterial')
+    material.node_tree.links.new(node_emission.outputs[0], node_output.inputs[0])
+
+    # 将材质应用到文本对象
+    if text_obj.data.materials:
+        text_obj.data.materials[0] = material
+    else:
+        text_obj.data.materials.append(material)
+    
+    # 设置文本对象的原点为其边界框的中心
+    bpy.ops.object.origin_set(type='ORIGIN_GEOMETRY', center='BOUNDS')
+    
+    # 将文本移动到物体的精确中心
+    text_obj.location = center
+    
+    # 使文本始终面向摄像机
+    track_to = text_obj.constraints.new(type='TRACK_TO')
+    track_to.target = bpy.context.scene.camera
+    track_to.track_axis = 'TRACK_Z'
+    track_to.up_axis = 'UP_Y'
+    
+    # 将文本对象设置为原始对象的子对象
+    text_obj.parent = obj
+
+    text_obj.show_in_front = True
+    
+    return text_obj
+
+
+def remove_labels():
+    for obj in bpy.data.objects:
+        if obj.type == 'FONT':
+            bpy.data.objects.remove(obj, do_unlink=True)
+
+def save_screenshots(distance_factor=2.5):
     scene = bpy.context.scene
 
     # 保存原始设置
@@ -67,7 +125,8 @@ def save_screenshots(distance_factor=1.5):
                     original_view_settings[area] = {
                         'view_perspective': space.region_3d.view_perspective,
                         'view_matrix': space.region_3d.view_matrix.copy(),
-                        'lock_camera': space.lock_camera
+                        'lock_camera': space.lock_camera,
+                        'shading_type': space.shading.type  # 保存原始着色类型
                     }
                     break
 
@@ -104,45 +163,61 @@ def save_screenshots(distance_factor=1.5):
         ((1, 1, -1), "右后下视图"),
     ]
 
-    for direction, view_name in angles:
-        direction_vector = mathutils.Vector(direction).normalized()
-        camera_position = center + direction_vector * camera_distance
-        
-        set_camera_position_and_rotation(camera, camera_position, center)
-        
-        bpy.context.view_layer.update()
+    # 添加标签
+    text_objects = [add_label_to_object(obj, size) for obj in mesh_objects]
 
-        bpy.context.view_layer.objects.active = camera
-        scene.camera = camera
+    try:
 
+        # 取消所有对象的选择
+        bpy.ops.object.select_all(action='DESELECT')
+        bpy.context.view_layer.objects.active = None
+        
+        for direction, view_name in angles:
+            direction_vector = mathutils.Vector(direction).normalized()
+            camera_position = center + direction_vector * camera_distance
+            
+            set_camera_position_and_rotation(camera, camera_position, center)
+            
+            bpy.context.view_layer.update()
+
+            bpy.context.view_layer.objects.active = camera
+            scene.camera = camera
+
+            for area in bpy.context.screen.areas:
+                if area.type == 'VIEW_3D':
+                    # 切换到材质预览模式
+                    area.spaces[0].shading.type = 'MATERIAL'
+                    area.spaces[0].region_3d.view_perspective = 'CAMERA'
+                    break
+
+            screenshot_path = os.path.join(SCREENSHOTS_PATH, f"{view_name}.png")
+            scene.render.filepath = screenshot_path
+            scene.render.image_settings.file_format = 'PNG'
+
+            bpy.ops.render.opengl(write_still=True)
+
+    finally:
+        # 移除标签
+        remove_labels()
+
+        # 恢复原始设置
+        scene.render.resolution_x = original_resolution_x
+        scene.render.resolution_y = original_resolution_y
+        scene.render.resolution_percentage = original_resolution_percentage
+        scene.camera = original_camera
+
+        # 恢复原始 3D 视图设置
         for area in bpy.context.screen.areas:
             if area.type == 'VIEW_3D':
-                area.spaces[0].region_3d.view_perspective = 'CAMERA'
-                break
-
-        screenshot_path = os.path.join(SCREENSHOTS_PATH, f"{view_name}.png")
-        scene.render.filepath = screenshot_path
-        scene.render.image_settings.file_format = 'PNG'
-
-        bpy.ops.render.opengl(write_still=True)
-
-    # 恢复原始设置
-    scene.render.resolution_x = original_resolution_x
-    scene.render.resolution_y = original_resolution_y
-    scene.render.resolution_percentage = original_resolution_percentage
-    scene.camera = original_camera
-
-    # 恢复原始 3D 视图设置
-    for area in bpy.context.screen.areas:
-        if area.type == 'VIEW_3D':
-            for space in area.spaces:
-                if space.type == 'VIEW_3D':
-                    if area in original_view_settings:
-                        settings = original_view_settings[area]
-                        space.region_3d.view_perspective = settings['view_perspective']
-                        space.region_3d.view_matrix = settings['view_matrix']
-                        space.lock_camera = settings['lock_camera']
-                    break
+                for space in area.spaces:
+                    if space.type == 'VIEW_3D':
+                        if area in original_view_settings:
+                            settings = original_view_settings[area]
+                            space.region_3d.view_perspective = settings['view_perspective']
+                            space.region_3d.view_matrix = settings['view_matrix']
+                            space.lock_camera = settings['lock_camera']
+                            space.shading.type = settings['shading_type']  # 恢复原始着色类型
+                        break
 
     print(f"Screenshots saved to {SCREENSHOTS_PATH}")
 
@@ -176,8 +251,9 @@ class SaveScreenshotOperator(Operator):
     bl_label = "Save Screenshot"
 
     def execute(self, context):
-        save_screenshots(distance_factor=2.0)
+        save_screenshots(distance_factor=2.5)
         return {'FINISHED'}
+
 class ModelViewerPanel(Panel):
     bl_label = "Model Viewer"
     bl_idname = "OBJECT_PT_model_viewer"

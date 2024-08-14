@@ -4,6 +4,7 @@ import bpy
 import json
 import re
 import os
+from typing import List, Dict, Any
 from bpy.types import Operator, Panel, PropertyGroup
 from bpy.props import StringProperty, PointerProperty
 from src.llm_modules.claude_module import generate_text_with_claude
@@ -12,8 +13,10 @@ from src.utils.logger_module import setup_logger, log_context
 from src.core.prompt_rewriter import rewrite_prompt
 from src.llm_modules.gpt_module import generate_text_with_context
 from src.llama_index_modules.llama_index_model_generation import query_generation_documentation
+from src.llama_index_modules.llama_index_model_modification import query_modification_documentation
 from src.core.evaluators_module import ModelEvaluator, EvaluationStatus
 from src.utils.model_viewer_module import save_screenshots
+from src.llm_modules.claude_module import analyze_screenshots_with_claude
 
 # 创建专门的日志记录器
 logger = setup_logger('model_generation')
@@ -162,13 +165,6 @@ class MODEL_GENERATION_OT_generate(Operator):
                 # Generate 3D model using GPT
                 self.generate_3d_model(context, user_input, rewritten_input, model_description, log_dir)
 
-                # 更新视图并等待一小段时间以确保视图已更新
-                self.update_blender_view(context)
-                bpy.ops.wm.redraw_timer(type='DRAW_WIN_SWAP', iterations=1)
-
-                # 更新resources内的截图
-                save_screenshots()
-
                 # 评估模型
                 self.evaluate_and_optimize_model(context, user_input, rewritten_input, model_description, log_dir)
 
@@ -247,6 +243,13 @@ class MODEL_GENERATION_OT_generate(Operator):
             logger.error(f"Error executing Blender commands: {str(e)}")
             self.report({'ERROR'}, f"Error executing Blender commands: {str(e)}")
 
+        # 更新视图并等待一小段时间以确保视图已更新
+        self.update_blender_view(context)
+        bpy.ops.wm.redraw_timer(type='DRAW_WIN_SWAP', iterations=1)
+
+        # 更新resources内的截图
+        save_screenshots()
+
 
     def update_blender_view(self, context):
         # 确保更改立即可见
@@ -276,11 +279,83 @@ class MODEL_GENERATION_OT_generate(Operator):
 
         # 如果模型不满意，尝试优化
         if final_status == EvaluationStatus.NOT_PASS:
-            # self.optimize_model(context, suggestions, evaluation_context, log_dir)
-            print("不满意")
+            self.optimize_model(context, suggestions, evaluation_context, log_dir)
+            # print("不满意")
+
+    
+    def filter_and_consolidate_suggestions(self, suggestions, evaluation_context):
+        screenshots = get_screenshots()
+
+        prompt = f"""
+        Context:
+        你是一个专门负责整合用于优化3D模型的建议的AI助手，你根据图片和需要分析所有的建议，并从中选出需要保留的建议留下。
+
+        原始用户输入：{evaluation_context['user_input']}
+        改写后的要求：{evaluation_context['rewritten_input']}
+        模型描述：{json.dumps(evaluation_context['model_description'], ensure_ascii=False, indent=2)}
+        优化建议：{suggestions}
+
+        Objective:
+        该模型生成任务只需要生成模型的草模即可，换句话说就是模型只要长得像就算达到目标，不需要去追求更细节的改变。
+        例如一个桌子的桌面浮在空中且并未与桌腿相连，建议提出需要链接这两部分。这种类型的建议是必要的，否则桌子将不像是桌子
+        反之在桌腿之间增加横梁支撑结构，提高整体稳定性这种类型的建议并不是特别重要，因为增加横梁不会让一个桌子更像桌子。
+        该模型将用在虚拟场景中替换对应的物品，因此现实世界中的真实性和合理性不那么重要。
+        任何和材质纹理相关的建议都可忽略，这个任务不考虑针对物品材质的升级，灰模即可。
+        将同类型的问题合并，例如增加厚度和增加直径可以同时完成
+        将重复的问题移除
+
+        Style:
+        - 简洁：提供清晰、直接的建议
+        - 重点：专注于影响模型外观的关键改变
+        - 实用：确保建议可以直接应用于3D建模
+
+        Tone:
+        - 专业：使用3D建模相关的专业术语
+        - 直接：明确指出需要改变的地方
+        - 客观：基于模型的实际需求给出建议
+
+        Audience:
+        3D模型设计师和开发人员
+
+        Response:
+        请提供一个JSON对象，包含以下元素：
+        1. priority_suggestions: 优先级最高的建议列表，这些建议对模型的外观和识别度有重大影响
+        2. secondary_suggestions: 次要建议列表，这些建议可以改善模型但不是必须的
+
+        Example:
+        输出必须是以下形式
+        {{
+            "priority_suggestions": [
+                "将桌面与桌腿连接，确保结构的完整性",
+                "调整桌腿的位置，使其位于桌面四个角落，提供更好的稳定性"
+            ],
+            "secondary_suggestions": [
+                "考虑增加桌面厚度至4-5厘米，以提高视觉上的稳定性",
+                "将桌腿直径增加到6-8厘米，以更好地支撑桌面"
+            ],
+        }}
+        """
+        response = analyze_screenshots_with_claude(prompt, screenshots)
+        response = sanitize_command(response)
+        response = sanitize_reference(response)
+        return json.loads(response)
 
 
     def optimize_model(self, context, suggestions, evaluation_context, log_dir):
+
+        # 整合并剔除不必要的建议
+        filtered_suggestions  = self.filter_and_consolidate_suggestions(suggestions, evaluation_context)
+
+        # 提取优先建议
+        priority_suggestions = filtered_suggestions.get('priority_suggestions', [])
+
+        print("XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",suggestions)
+
+        # 查询必要文件
+        logger.info("Querying modification documentation")
+        modification_docs = query_modification_documentation(bpy.types.Scene.modification_query_engine, priority_suggestions)
+        logger.info(f"modification documentation: {modification_docs}")
+
         # 准备优化提示
         prompt = f"""
         请根据以下信息优化现有的3D模型：
@@ -288,8 +363,8 @@ class MODEL_GENERATION_OT_generate(Operator):
         原始用户输入：{evaluation_context['user_input']}
         改写后的要求：{evaluation_context['rewritten_input']}
         模型描述：{json.dumps(evaluation_context['model_description'], ensure_ascii=False, indent=2)}
-        优化建议：
-        {chr(10).join(f"- {suggestion}" for suggestion in suggestions)}
+        优化建议：{chr(10).join(f"- {suggestion}" for suggestion in suggestions)}
+        相关优化文档：{modification_docs}
 
         请生成Blender Python命令来优化这个3D模型。注意：
         1. 使用 bpy 库来修改现有对象。
@@ -313,7 +388,7 @@ class MODEL_GENERATION_OT_generate(Operator):
         logger.info(f"GPT Generated Optimization Commands: {response}")
 
         # 保存生成的优化代码到文件
-        with open(os.path.join(log_dir, "generated_optimization_code.py"), "w", encoding='utf-8') as f:
+        with open(os.path.join(log_dir, "optimization_code.py"), "w", encoding='utf-8') as f:
             f.write(response)
 
         # 执行生成的Blender优化命令
@@ -323,6 +398,10 @@ class MODEL_GENERATION_OT_generate(Operator):
         except Exception as e:
             logger.error(f"Error executing optimization commands: {str(e)}")
             self.report({'ERROR'}, f"Error executing optimization commands: {str(e)}")
+
+        # 更新视图并等待一小段时间以确保视图已更新
+        self.update_blender_view(context)
+        bpy.ops.wm.redraw_timer(type='DRAW_WIN_SWAP', iterations=1)
             
 
 class MODEL_GENERATION_OT_optimize_once(Operator):

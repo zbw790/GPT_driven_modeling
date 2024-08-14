@@ -1,0 +1,39 @@
+{
+  "object_type": "圣诞树",
+  "components": [
+    {
+      "name": "树干",
+      "quantity": 1,
+      "shape": "cone",
+      "dimensions": {
+        "base_radius": 50,
+        "height": 200
+      }
+    },
+    {
+      "name": "树枝",
+      "quantity": 1,
+      "shape": "custom",
+      "dimensions": {
+        "description": "向下倾斜的分支结构,覆盖整个圆锥形树干"
+      }
+    },
+    {
+      "name": "树顶装饰",
+      "quantity": 1,
+      "shape": "custom",
+      "dimensions": {
+        "description": "星形或天使形状,大约20-30厘米高"
+      }
+    },
+    {
+      "name": "树底座",
+      "quantity": 1,
+      "shape": "cylinder",
+      "dimensions": {
+        "radius": 30,
+        "height": 10
+      }
+    }
+  ]
+}

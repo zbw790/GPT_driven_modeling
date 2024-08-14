@@ -76,6 +76,7 @@ class GPTOverallEvaluator(BaseEvaluator):
 
         Objective:
         评估3D模型的整体质量，包括完整性、合理性和预期符合度，并提供详细的评估结果和改进建议。
+        一种常见的问题是，模型浮空，例如桌腿和桌面直接没有直接的连接，这种情况不符合要求
 
         Style:
         - 分析性：仔细观察模型的各个方面
@@ -132,6 +133,7 @@ class ClaudeOverallEvaluator(BaseEvaluator):
 
         Objective:
         使用Claude的独特视角评估3D模型的整体质量，包括完整性、合理性和预期符合度，并提供详细的评估结果和改进建议。
+        一种常见的问题是，模型浮空，例如桌腿和桌面直接没有直接的连接，这种情况不符合要求
 
         Style:
         - 全面性：考虑模型的各个方面
@@ -230,7 +232,7 @@ class SizeEvaluator(BaseEvaluator):
         """
 
     def analyze_screenshots(self, prompt: str, screenshots: List[str]) -> str:
-        return analyze_screenshots_with_gpt4(prompt, screenshots)
+        return analyze_screenshots_with_claude(prompt, screenshots)
 
 class ProportionEvaluator(BaseEvaluator):
     def get_prompt(self, context: Dict[str, Any]) -> str:
@@ -286,7 +288,7 @@ class ProportionEvaluator(BaseEvaluator):
         """
 
     def analyze_screenshots(self, prompt: str, screenshots: List[str]) -> str:
-        return analyze_screenshots_with_gpt4(prompt, screenshots)
+        return analyze_screenshots_with_claude(prompt, screenshots)
 
 class StructureEvaluator(BaseEvaluator):
     def get_prompt(self, context: Dict[str, Any]) -> str:

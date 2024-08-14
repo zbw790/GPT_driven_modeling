@@ -1,0 +1,39 @@
+{
+  "object_type": "玩具车",
+  "components": [
+    {
+      "name": "车身",
+      "quantity": 1,
+      "shape": "custom",
+      "dimensions": {
+        "description": "简化的车辆形状,长方体为主体,顶部略微弧形"
+      }
+    },
+    {
+      "name": "车轮",
+      "quantity": 4,
+      "shape": "cylinder",
+      "dimensions": {
+        "radius": 2,
+        "height": 1
+      }
+    },
+    {
+      "name": "车轴",
+      "quantity": 2,
+      "shape": "cylinder",
+      "dimensions": {
+        "radius": 0.5,
+        "height": 10
+      }
+    },
+    {
+      "name": "车窗",
+      "quantity": 4,
+      "shape": "custom",
+      "dimensions": {
+        "description": "简化的矩形或弧形窗户,嵌入车身"
+      }
+    }
+  ]
+}

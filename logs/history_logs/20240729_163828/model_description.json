@@ -1,0 +1,64 @@
+{
+  "object_type": "圣诞树",
+  "components": [
+    {
+      "name": "树干",
+      "quantity": 1,
+      "shape": "cone",
+      "dimensions": {
+        "baseRadius": 50,
+        "height": 200
+      }
+    },
+    {
+      "name": "树枝",
+      "quantity": 1,
+      "shape": "custom",
+      "dimensions": {
+        "description": "从树干向外延伸的多层分支结构"
+      }
+    },
+    {
+      "name": "树叶",
+      "quantity": 1,
+      "shape": "custom",
+      "dimensions": {
+        "description": "覆盖树枝的针叶状结构"
+      }
+    },
+    {
+      "name": "树顶装饰",
+      "quantity": 1,
+      "shape": "custom",
+      "dimensions": {
+        "description": "星星或天使造型,约20厘米高"
+      }
+    },
+    {
+      "name": "装饰球",
+      "quantity": 20,
+      "shape": "sphere",
+      "dimensions": {
+        "radius": 5
+      }
+    },
+    {
+      "name": "彩灯串",
+      "quantity": 1,
+      "shape": "custom",
+      "dimensions": {
+        "description": "缠绕在树上的灯串,总长约500厘米"
+      }
+    },
+    {
+      "name": "礼物盒",
+      "quantity": 5,
+      "shape": "cuboid",
+      "dimensions": {
+        "length": 30,
+        "width": 20,
+        "height": 15
+      }
+    }
+  ]
+}
