@@ -1,0 +1,4 @@
+2024-08-08 23:52:22,559 - model_generation - INFO - Starting model generation with input: 玩具车
+2024-08-08 23:52:22,560 - model_generation - INFO - Rewriting user input
+2024-08-08 23:52:22,562 - model_generation - ERROR - An error occurred: generate_text_with_claude() takes 1 positional argument but 2 were given
+2024-08-08 23:52:22,562 - model_generation - INFO - Model generation process completed

@@ -1,0 +1,23 @@
+{
+    "categories": [
+      {
+        "name": "furniture",
+        "subcategories": [
+          {
+            "name": "table",
+            "types": [
+              {"name": "书桌", "file": "desk.md"},
+              {"name": "餐桌", "file": "dining_table.md"}
+            ]
+          },
+          {
+            "name": "chair",
+            "types": [
+              {"name": "办公椅", "file": "office_chair.md"},
+              {"name": "休闲椅", "file": "lounge_chair.md"}
+            ]
+          }
+        ]
+      }
+    ]
+  }

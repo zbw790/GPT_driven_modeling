@@ -89,14 +89,23 @@ $RECYCLE.BIN/
 *.db
 
 # Ignore the data folder
-data/
+# data/
 
 # Ignore the pycache
 __pycache__/
 
-# Ignore chroma database
-chroma_db/
+# Ignore chroma_db_generation database
+chroma_db_generation/
+
+# Ignore chroma_db_modification database
+chroma_db_modification/
+
+# Ignore chroma_db_components database
+chroma_db_components/
 
 # Ignore screen shots
 screenshots/
+
+# Ignore logs
+model_generation_logs/
 

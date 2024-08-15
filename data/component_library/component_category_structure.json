@@ -1,0 +1,17 @@
+{
+    "categories": [
+      {
+        "name": "furniture",
+        "components": [
+          {
+            "name": "legs",
+            "file": "furniture_legs.md"
+          },
+          {
+            "name": "surface",
+            "file": "furniture_surface.md"
+          }
+        ]
+      }
+    ]
+  }
