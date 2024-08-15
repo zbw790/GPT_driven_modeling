@@ -1,3 +1,5 @@
+# model_viewer_module.py
+
 import bpy
 import os
 import math
@@ -6,9 +8,6 @@ from bpy.types import Panel, Operator
 from bpy.props import FloatProperty, StringProperty
 from bpy_extras.object_utils import world_to_camera_view
 import bmesh
-
-# 设置截图保存路径
-SCREENSHOTS_PATH = r"D:\GPT_driven_modeling\resources\screenshots"
 
 def ensure_camera():
     camera = bpy.context.scene.camera
@@ -125,8 +124,6 @@ def add_label_to_object(obj, camera, scene_size, up_vector):
     
     return text_obj
 
-import bmesh
-
 def is_object_visible(obj, camera):
     def check_point(point):
         co_ndc = world_to_camera_view(bpy.context.scene, camera, point)
@@ -189,7 +186,7 @@ def remove_labels():
         if obj.type == 'FONT':
             bpy.data.objects.remove(obj, do_unlink=True)
 
-def save_screenshots(distance_factor=2.5):
+def _save_screenshots_common(output_path, distance_factor=2.5):
     scene = bpy.context.scene
 
     # 保存原始设置
@@ -220,10 +217,10 @@ def save_screenshots(distance_factor=2.5):
 
     if not mesh_objects:
         print("No mesh objects found in the scene")
-        return
+        return []
 
-    if not os.path.exists(SCREENSHOTS_PATH):
-        os.makedirs(SCREENSHOTS_PATH)
+    if not os.path.exists(output_path):
+        os.makedirs(output_path)
 
     camera = ensure_camera()
     center, size = calculate_scene_center_and_size(mesh_objects)
@@ -241,6 +238,8 @@ def save_screenshots(distance_factor=2.5):
         ((1, -1, 1), "右前上视图", (0, 0, 1)),
         ((1, 1, -1), "右后下视图", (0, 0, 1)),
     ]
+
+    screenshot_paths = []
 
     try:
         for direction, view_name, up_vector in angles:
@@ -271,11 +270,12 @@ def save_screenshots(distance_factor=2.5):
             bpy.ops.object.select_all(action='DESELECT')
             bpy.context.view_layer.objects.active = None
 
-            screenshot_path = os.path.join(SCREENSHOTS_PATH, f"{view_name}.png")
+            screenshot_path = os.path.join(output_path, f"{view_name}.png")
             scene.render.filepath = screenshot_path
             scene.render.image_settings.file_format = 'PNG'
 
             bpy.ops.render.opengl(write_still=True)
+            screenshot_paths.append(screenshot_path)
 
             # 移除标签
             remove_labels()
@@ -300,7 +300,14 @@ def save_screenshots(distance_factor=2.5):
                             space.shading.type = settings['shading_type']
                         break
 
-    print(f"Screenshots saved to {SCREENSHOTS_PATH}")
+    return screenshot_paths
+
+def save_screenshots():
+    output_path = r"D:\GPT_driven_modeling\resources\screenshots"
+    return _save_screenshots_common(output_path)
+
+def save_screenshots_to_path(output_path):
+    return _save_screenshots_common(output_path)
 
 class ApplyScale(Operator):
     bl_idname = "model_viewer.apply_scale"
@@ -332,7 +339,7 @@ class SaveScreenshotOperator(Operator):
     bl_label = "Save Screenshot"
 
     def execute(self, context):
-        save_screenshots(distance_factor=2.5)
+        save_screenshots()
         return {'FINISHED'}
 
 class ModelViewerPanel(Panel):

@@ -9,13 +9,13 @@ from bpy.types import Operator, Panel, PropertyGroup
 from bpy.props import StringProperty, PointerProperty
 from src.llm_modules.claude_module import generate_text_with_claude, analyze_screenshots_with_claude
 from src.llm_modules.LLM_common_utils import sanitize_command, initialize_conversation, execute_blender_command, add_history_to_prompt, get_screenshots
-from src.utils.logger_module import setup_logger, log_context
+from src.utils.logger_module import setup_logger, log_context, save_screenshot
 from src.core.prompt_rewriter import rewrite_prompt
 from src.llm_modules.gpt_module import generate_text_with_context
 from src.llama_index_modules.llama_index_model_generation import query_generation_documentation
 from src.llama_index_modules.llama_index_model_modification import query_modification_documentation
 from src.core.evaluators_module import ModelEvaluator, EvaluationStatus
-from src.utils.model_viewer_module import save_screenshots
+from src.utils.model_viewer_module import save_screenshots, save_screenshots_to_path
 
 # 创建专门的日志记录器
 logger = setup_logger('model_generation')
@@ -167,11 +167,11 @@ class MODEL_GENERATION_OT_generate(Operator):
                 # 评估模型
                 self.evaluate_and_optimize_model(context, user_input, rewritten_input, model_description, log_dir)
 
-                logger.info(f"Log directory: {log_dir}")
+                logger.debug(f"Log directory: {log_dir}")
                 # 保存当前场景的屏幕截图
                 screenshot_path = os.path.join(log_dir, "model_screenshot.png")
                 bpy.ops.screen.screenshot(filepath=screenshot_path)
-                logger.info(f"Screenshot saved to {screenshot_path}")
+                logger.debug(f"Screenshot saved to {screenshot_path}")
                 
                 self.report({'INFO'}, f"Model generated and optimized for {model_description['object_type']}. Logs saved in {log_dir}")
             except Exception as e:
@@ -180,18 +180,7 @@ class MODEL_GENERATION_OT_generate(Operator):
         
         return {'FINISHED'}
 
-
-
-
-
-
-
-
-
-
-
     def generate_3d_model(self, context, user_input, rewritten_input, model_description, log_dir):
-
         # 查询必要文件
         logger.info("Querying generation documentation")
         generation_docs = query_generation_documentation(bpy.types.Scene.generation_query_engine, rewritten_input)
@@ -228,7 +217,7 @@ class MODEL_GENERATION_OT_generate(Operator):
         conversation_manager.add_message("user", prompt)
         conversation_manager.add_message("assistant", response)
 
-        logger.info(f"GPT Generated Commands for 3D Model: {response}")
+        logger.info(f"GPT Generated Commands for 3D Model:\n```python\n{response}\n```")
 
         # 保存生成的代码到文件
         with open(os.path.join(log_dir, "generated_blender_code.py"), "w", encoding='utf-8') as f:
@@ -237,7 +226,7 @@ class MODEL_GENERATION_OT_generate(Operator):
         # 执行生成的Blender命令
         try:
             execute_blender_command(response)
-            logger.info("Successfully executed Blender commands.")
+            logger.debug("Successfully executed Blender commands.")
         except Exception as e:
             logger.error(f"Error executing Blender commands: {str(e)}")
             self.report({'ERROR'}, f"Error executing Blender commands: {str(e)}")
@@ -247,14 +236,16 @@ class MODEL_GENERATION_OT_generate(Operator):
         bpy.ops.wm.redraw_timer(type='DRAW_WIN_SWAP', iterations=1)
 
         # 更新resources内的截图
-        save_screenshots()
-
+        screenshots = save_screenshots()
+        screenshot_dir = os.path.join(log_dir, "generation")
+        save_screenshots_to_path(screenshot_dir)
+        for screenshot in screenshots:
+            logger.debug(f"Generation screenshot saved: {screenshot}")
 
     def update_blender_view(self, context):
         # 确保更改立即可见
         bpy.context.view_layer.update()
-        logger.info("Blender view updated.")
-
+        logger.debug("Blender view updated.")
 
     def evaluate_and_optimize_model(self, context, user_input, rewritten_input, model_description, log_dir):
         screenshots = get_screenshots()
@@ -273,15 +264,12 @@ class MODEL_GENERATION_OT_generate(Operator):
         logger.info(f"Evaluation results: Status: {final_status.name}, Score: {average_score:.2f}")
         logger.info(f"Combined Analysis: {combined_analysis}")
         logger.info("Suggestions:")
-        for suggestion in suggestions:
-            logger.info(f"- {suggestion}")
+        logger.info(f"- {suggestions}")
 
         # 如果模型不满意，尝试优化
         if final_status == EvaluationStatus.NOT_PASS:
             self.optimize_model(context, suggestions, evaluation_context, log_dir)
-            # print("不满意")
 
-    
     def filter_and_consolidate_suggestions(self, suggestions, evaluation_context):
         screenshots = get_screenshots()
 
@@ -339,17 +327,12 @@ class MODEL_GENERATION_OT_generate(Operator):
         response = sanitize_reference(response)
         return json.loads(response)
 
-
     def optimize_model(self, context, suggestions, evaluation_context, log_dir):
-
         # 整合并剔除不必要的建议
         filtered_suggestions  = self.filter_and_consolidate_suggestions(suggestions, evaluation_context)
 
         # 提取优先建议
         priority_suggestions = filtered_suggestions.get('priority_suggestions', [])
-
-        print("XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",filtered_suggestions)
-        print("YYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY",priority_suggestions)
 
         priority_suggestions_str = "\n".join(priority_suggestions)
 
@@ -387,7 +370,7 @@ class MODEL_GENERATION_OT_generate(Operator):
         conversation_manager.add_message("user", prompt)
         conversation_manager.add_message("assistant", response)
 
-        logger.info(f"GPT Generated Optimization Commands: {response}")
+        logger.info(f"GPT Generated Optimization Commands:\n```python\n{response}\n```")
 
         # 保存生成的优化代码到文件
         with open(os.path.join(log_dir, "optimization_code.py"), "w", encoding='utf-8') as f:
@@ -396,7 +379,7 @@ class MODEL_GENERATION_OT_generate(Operator):
         # 执行生成的Blender优化命令
         try:
             execute_blender_command(response)
-            logger.info("Successfully executed optimization commands.")
+            logger.debug("Successfully executed optimization commands.")
         except Exception as e:
             logger.error(f"Error executing optimization commands: {str(e)}")
             self.report({'ERROR'}, f"Error executing optimization commands: {str(e)}")
@@ -404,7 +387,13 @@ class MODEL_GENERATION_OT_generate(Operator):
         # 更新视图并等待一小段时间以确保视图已更新
         self.update_blender_view(context)
         bpy.ops.wm.redraw_timer(type='DRAW_WIN_SWAP', iterations=1)
-            
+
+        # 保存优化后的截图
+        screenshots = save_screenshots()
+        screenshot_dir = os.path.join(log_dir, "optimization")
+        save_screenshots_to_path(screenshot_dir)
+        for screenshot in screenshots:
+            logger.debug(f"Optimization screenshot saved: {screenshot}")
 
 class MODEL_GENERATION_OT_optimize_once(Operator):
     bl_idname = "model_generation.optimize_once"
@@ -448,8 +437,7 @@ class MODEL_GENERATION_OT_optimize_once(Operator):
         logger.info(f"Evaluation results: Status: {final_status.name}, Score: {average_score:.2f}")
         logger.info(f"Combined Analysis: {combined_analysis}")
         logger.info("Suggestions:")
-        for suggestion in suggestions:
-            logger.info(f"- {suggestion}")
+        logger.info(f"- {suggestions}")
 
         # 无论评估结果如何，都尝试优化
         self.optimize_model(context, suggestions, evaluation_context, log_dir)
@@ -484,7 +472,7 @@ class MODEL_GENERATION_OT_optimize_once(Operator):
         conversation_manager.add_message("user", prompt)
         conversation_manager.add_message("assistant", response)
 
-        logger.info(f"GPT Generated Optimization Commands: {response}")
+        logger.info(f"GPT Generated Optimization Commands:\n```python\n{response}\n```")
 
         # 保存生成的优化代码到文件
         with open(os.path.join(log_dir, "generated_optimization_code.py"), "w", encoding='utf-8') as f:
@@ -493,10 +481,16 @@ class MODEL_GENERATION_OT_optimize_once(Operator):
         # 执行生成的Blender优化命令
         try:
             execute_blender_command(response)
-            logger.info("Successfully executed optimization commands.")
+            logger.debug("Successfully executed optimization commands.")
         except Exception as e:
             logger.error(f"Error executing optimization commands: {str(e)}")
             self.report({'ERROR'}, f"Error executing optimization commands: {str(e)}")
+
+        # 保存优化后的截图
+        screenshots = save_screenshots()
+        for screenshot in screenshots:
+            new_path = save_screenshot(log_dir, screenshot, "optimization")
+            logger.debug(f"Optimization screenshot saved: {new_path}")
 
 class MODEL_GENERATION_PT_panel(Panel):
     bl_label = "Model Generation"
