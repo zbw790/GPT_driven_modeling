@@ -1,3 +1,5 @@
+# gpt_module.py
+
 import requests
 import os
 import logging
@@ -21,7 +23,7 @@ def generate_text_with_context(prompt):
         response = client.chat.completions.create(
             model="gpt-4o",
             messages=[{"role": "user", "content": prompt}],
-            max_tokens=2560,
+            max_tokens=4096,
             temperature=0.8,
             top_p=1,
             frequency_penalty=0,
@@ -69,7 +71,7 @@ def analyze_screenshots_with_gpt4(prompt, screenshots):
                 "content": [text_message] + image_messages
             }
         ],
-        "max_tokens": 2560,
+        "max_tokens": 4096,
         "temperature": 0.8,
         "top_p": 1,
         "frequency_penalty": 0,

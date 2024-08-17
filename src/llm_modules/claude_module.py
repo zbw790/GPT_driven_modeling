@@ -1,3 +1,5 @@
+# claude_module.py
+
 import bpy
 import os
 import logging

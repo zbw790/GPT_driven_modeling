@@ -61,16 +61,12 @@ bpy.ops.object.delete()
 ## 生成步骤
 
 1. 清空场景中的所有现有对象
-2. 创建主集合 "Desk"
-3. 创建子集合 "Legs", "Cabinet" 和 "Drawers"
-4. 创建桌面 (`table_top`)
-5. 创建两条桌腿 (`leg1`, `leg2`)
-6. 创建柜体外壳 (`cabinet_shell`)
-7. 创建三个抽屉 (`drawer_0`, `drawer_1`, `drawer_2`)
-8. 将各部件添加到相应的集合中
-9. 调整各部件的位置,确保它们正确对齐
-10. 从场景集合中移除所有对象,确保它们只存在于自定义集合中
-11. 更新场景视图
+2. 创建桌面 (`table_top`)
+3. 创建两条桌腿 (`leg1`, `leg2`)
+4. 创建柜体外壳 (`cabinet_shell`)
+5. 创建三个抽屉 (`drawer_0`, `drawer_1`, `drawer_2`)
+6. 调整各部件的位置,确保它们正确对齐
+7. 更新场景视图
 
 ## 注意事项
 
@@ -82,7 +78,6 @@ bpy.ops.object.delete()
 - 可以根据需要调整尺寸,但要保持合理的比例
 - 生成的模型应尽可能位于场景的中心点附近 (0, 0, 0)
 - 保持各个部件独立,不要合并成一个整体模型
-- 正确管理集合,确保部件被添加到适当的集合中
 
 ## Blender操作提示
 
@@ -106,53 +101,19 @@ bpy.ops.object.delete()
 # 删除所有多余的集合
 for collection in bpy.data.collections:
     bpy.data.collections.remove(collection)
-    
-# 创建主集合
-main_collection = bpy.data.collections.new("Dining Table")
-bpy.context.scene.collection.children.link(main_collection)
 
-# 创建桌脚子集合
-legs_collection = bpy.data.collections.new("Legs")
-main_collection.children.link(legs_collection)
-
-# 创建柜子子集合
-cabinet_collection = bpy.data.collections.new("Cabinet")
-main_collection.children.link(cabinet_collection)
-
-# 创建抽屉子集合
-drawers_collection = bpy.data.collections.new("Drawers")
-cabinet_collection.children.link(drawers_collection)
-
-# 设置主集合为活动集合
-layer_collection = bpy.context.view_layer.layer_collection.children[main_collection.name]
-bpy.context.view_layer.active_layer_collection = layer_collection
-
-# 创建桌板
+# 创建桌面
 bpy.ops.mesh.primitive_cube_add(size=1, location=(0, 0, 0.75))
 tabletop = bpy.context.active_object
 tabletop.scale = (1.5, 0.9, 0.03)
 tabletop.name = "table_top"
 
-# 确保桌板只在主集合中
-for coll in tabletop.users_collection:
-    if coll != main_collection:
-        coll.objects.unlink(tabletop)
-
 # 创建桌腿
 def create_leg(name, location):
-    bpy.context.view_layer.active_layer_collection = bpy.context.view_layer.layer_collection.children[main_collection.name].children[legs_collection.name]
-    
     bpy.ops.mesh.primitive_cube_add(size=1, location=location)
     leg = bpy.context.active_object
     leg.scale = (0.05, 0.05, 0.75)
     leg.name = name
-    
-    for coll in leg.users_collection:
-        if coll != legs_collection:
-            coll.objects.unlink(leg)
-    
-    bpy.context.view_layer.active_layer_collection = layer_collection
-    
     return leg
 
 # 创建两条桌腿
@@ -164,8 +125,6 @@ cabinet_thickness = 0.02
 
 # 创建柜子外壳
 def create_cabinet_shell(length, width, height, thickness):
-    bpy.context.view_layer.active_layer_collection = bpy.context.view_layer.layer_collection.children[main_collection.name].children[cabinet_collection.name]
-
     location = (-length/2, 0, height/2)
     bpy.ops.mesh.primitive_cube_add(size=1, location=location)
     cabinet = bpy.context.active_object
@@ -176,8 +135,6 @@ def create_cabinet_shell(length, width, height, thickness):
 
     # 执行布尔差运算
     boolean_difference(cabinet, inner_cube)
-
-    bpy.context.view_layer.active_layer_collection = layer_collection
     
     return cabinet
 
@@ -207,20 +164,16 @@ def boolean_difference(obj1, obj2):
 
 # 创建抽屉
 def create_drawer(length, width, height, thickness, location):
-    bpy.context.view_layer.active_layer_collection = bpy.context.view_layer.layer_collection.children[main_collection.name].children[cabinet_collection.name].children[drawers_collection.name]
-
     # 创建抽屉外壳
     bpy.ops.mesh.primitive_cube_add(size=1, location=location)
     drawer = bpy.context.active_object
     drawer.scale = (length, width, height)
-    drawer.name = f"drawer_{len(drawers_collection.objects)}"
+    drawer.name = f"drawer_{bpy.context.scene.objects.find(drawer.name)}"
 
     inner_cube = create_drawer_inner_cube(length, width, height, thickness, location)
 
     # 执行布尔差运算
     boolean_difference(drawer, inner_cube)
-
-    bpy.context.view_layer.active_layer_collection = layer_collection
 
     return drawer
 
@@ -232,12 +185,12 @@ def create_drawer_inner_cube(length, width, height, thickness, drawer_location):
     # 计算inner_cube的位置
     inner_x = drawer_location[0]
     inner_y = drawer_location[1]
-    inner_z = drawer_location[2] + (thickness/2 + 0.001)  # 将inner_cube向上移动thickness/2,这里多加0.001是因为完全贴合的两个模型有时候不能正常移除某一边的面，使得外观看上去没有变化
+    inner_z = drawer_location[2] + (thickness/2 + 0.001)
     
     bpy.ops.mesh.primitive_cube_add(size=1, location=(inner_x, inner_y, inner_z))
     inner_cube = bpy.context.active_object
     inner_cube.scale = (inner_length, inner_width, inner_height)
-    inner_cube.name = f"drawer_inner_{len(drawers_collection.objects)}"
+    inner_cube.name = f"drawer_inner_{bpy.context.scene.objects.find(inner_cube.name)}"
     
     return inner_cube
 
@@ -249,7 +202,7 @@ def create_cabinet_with_drawers():
     
     cabinet_length = 0.36  # 自定义长度
     cabinet_width = tabletop.scale[1] # 与桌面宽度相同
-    cabinet_height = leg.scale[2]# 与桌腿高度相同
+    cabinet_height = leg.scale[2] * 2 # 与桌腿高度相同
     
     # 创建柜子外壳
     cabinet_shell = create_cabinet_shell(cabinet_length, cabinet_width, cabinet_height, cabinet_thickness)

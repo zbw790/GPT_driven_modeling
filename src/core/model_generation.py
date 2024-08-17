@@ -9,9 +9,9 @@ from bpy.types import Operator, Panel, PropertyGroup
 from bpy.props import StringProperty, PointerProperty
 from src.llm_modules.claude_module import generate_text_with_claude, analyze_screenshots_with_claude
 from src.llm_modules.LLM_common_utils import sanitize_command, initialize_conversation, execute_blender_command, add_history_to_prompt, get_screenshots
-from src.utils.logger_module import setup_logger, log_context, save_screenshot
+from src.utils.logger_module import setup_logger, log_context
 from src.core.prompt_rewriter import rewrite_prompt
-from src.llm_modules.gpt_module import generate_text_with_context
+from src.llm_modules.gpt_module import generate_text_with_context, analyze_screenshots_with_gpt4
 from src.llama_index_modules.llama_index_model_generation import query_generation_documentation
 from src.llama_index_modules.llama_index_model_modification import query_modification_documentation
 from src.core.evaluators_module import ModelEvaluator, EvaluationStatus
@@ -164,7 +164,7 @@ class MODEL_GENERATION_OT_generate(Operator):
                 # Generate 3D model using GPT
                 self.generate_3d_model(context, user_input, rewritten_input, model_description, log_dir)
 
-                # 评估模型
+                # 评估并优化模型
                 self.evaluate_and_optimize_model(context, user_input, rewritten_input, model_description, log_dir)
 
                 logger.debug(f"Log directory: {log_dir}")
@@ -237,7 +237,7 @@ class MODEL_GENERATION_OT_generate(Operator):
 
         # 更新resources内的截图
         screenshots = save_screenshots()
-        screenshot_dir = os.path.join(log_dir, "generation")
+        screenshot_dir = os.path.join(log_dir, "generation_screenshots")
         save_screenshots_to_path(screenshot_dir)
         for screenshot in screenshots:
             logger.debug(f"Generation screenshot saved: {screenshot}")
@@ -246,29 +246,72 @@ class MODEL_GENERATION_OT_generate(Operator):
         # 确保更改立即可见
         bpy.context.view_layer.update()
         logger.debug("Blender view updated.")
-
+    
     def evaluate_and_optimize_model(self, context, user_input, rewritten_input, model_description, log_dir):
-        screenshots = get_screenshots()
-        evaluator = ModelEvaluator()
+        max_iterations = 5  # 设置最大迭代次数
+        iteration = 0
         
-        evaluation_context = {
-            "user_input": user_input,
-            "rewritten_input": rewritten_input,
-            "model_description": model_description
-        }
-        
-        results = evaluator.evaluate(screenshots, evaluation_context)
-        
-        combined_analysis, final_status, average_score, suggestions = evaluator.aggregate_results(results)
+        while iteration < max_iterations:
+            # 为每次迭代创建一个新的子目录
+            iteration_dir = os.path.join(log_dir, f"iteration_{iteration + 1}")
+            os.makedirs(iteration_dir, exist_ok=True)
 
-        logger.info(f"Evaluation results: Status: {final_status.name}, Score: {average_score:.2f}")
-        logger.info(f"Combined Analysis: {combined_analysis}")
-        logger.info("Suggestions:")
-        logger.info(f"- {suggestions}")
+            screenshots = get_screenshots()
 
-        # 如果模型不满意，尝试优化
-        if final_status == EvaluationStatus.NOT_PASS:
-            self.optimize_model(context, suggestions, evaluation_context, log_dir)
+            evaluator = ModelEvaluator()
+            
+            evaluation_context = {
+                "user_input": user_input,
+                "rewritten_input": rewritten_input,
+                "model_description": model_description
+            }
+            
+            results = evaluator.evaluate(screenshots, evaluation_context)
+            combined_analysis, final_status, average_score, suggestions = evaluator.aggregate_results(results)
+            # 整合并剔除不必要的建议
+            filtered_suggestions  = self.filter_and_consolidate_suggestions(suggestions, evaluation_context)
+            # 提取优先建议
+            priority_suggestions = filtered_suggestions.get('priority_suggestions', [])
+            priority_suggestions_str = "\n".join(priority_suggestions)
+
+            logger.info(f"Iteration {iteration + 1}: Status: {final_status.name}, Score: {average_score:.2f}")
+            logger.info(f"Combined Analysis: {combined_analysis}")
+            logger.info("Suggestions:")
+            logger.info(f"- {suggestions}")
+            logger.info(f"Priority Suggesitons: {priority_suggestions_str}")
+
+            # 保存评估结果到文件
+            with open(os.path.join(iteration_dir, "evaluation_results.json"), "w", encoding='utf-8') as f:
+                json.dump({
+                    "iteration": iteration + 1,
+                    "status": final_status.name,
+                    "score": average_score,
+                    "analysis": combined_analysis,
+                    "suggestions": suggestions,
+                    "priority_suggestions": priority_suggestions_str
+                }, f, ensure_ascii=False, indent=2)
+
+            # 如果模型满意或达到最大迭代次数，退出循环
+            if final_status == EvaluationStatus.PASS or iteration == max_iterations - 1:
+                break
+
+            # 否则，继续优化模型
+            self.optimize_model(context, priority_suggestions_str, evaluation_context, screenshots, iteration_dir, iteration)
+            iteration += 1
+
+        if final_status == EvaluationStatus.PASS:
+            logger.info(f"Model optimization completed successfully after {iteration + 1} iterations.")
+            self.report({'INFO'}, f"Model optimized successfully after {iteration + 1} iterations.")
+        else:
+            logger.warning(f"Model optimization did not reach satisfactory results after {max_iterations} iterations.")
+            self.report({'WARNING'}, f"Model optimization completed with suboptimal results after {max_iterations} iterations.")
+
+        # 保存最终模型的截图
+        final_screenshots = save_screenshots()
+        final_screenshot_dir = os.path.join(log_dir, "final_model")
+        save_screenshots_to_path(final_screenshot_dir)
+        for screenshot in final_screenshots:
+            logger.debug(f"Final model screenshot saved: {screenshot}")
 
     def filter_and_consolidate_suggestions(self, suggestions, evaluation_context):
         screenshots = get_screenshots()
@@ -327,15 +370,7 @@ class MODEL_GENERATION_OT_generate(Operator):
         response = sanitize_reference(response)
         return json.loads(response)
 
-    def optimize_model(self, context, suggestions, evaluation_context, log_dir):
-        # 整合并剔除不必要的建议
-        filtered_suggestions  = self.filter_and_consolidate_suggestions(suggestions, evaluation_context)
-
-        # 提取优先建议
-        priority_suggestions = filtered_suggestions.get('priority_suggestions', [])
-
-        priority_suggestions_str = "\n".join(priority_suggestions)
-
+    def optimize_model(self, context, priority_suggestions_str, evaluation_context, screenshots, iteration_dir, iteration):
         # 查询必要文件
         logger.info("Querying modification documentation")
         modification_docs = query_modification_documentation(bpy.types.Scene.modification_query_engine, priority_suggestions_str)
@@ -348,7 +383,7 @@ class MODEL_GENERATION_OT_generate(Operator):
         原始用户输入：{evaluation_context['user_input']}
         改写后的要求：{evaluation_context['rewritten_input']}
         模型描述：{json.dumps(evaluation_context['model_description'], ensure_ascii=False, indent=2)}
-        优化建议：{chr(10).join(f"- {suggestion}" for suggestion in priority_suggestions)}
+        优化建议：{priority_suggestions_str}
         相关优化文档：{modification_docs}
 
         请生成Blender Python命令来优化这个3D模型。注意：
@@ -356,6 +391,7 @@ class MODEL_GENERATION_OT_generate(Operator):
         2. 仅修改需要优化的部分，保留其他部分不变。
         3. 确保优化后的模型仍然符合原始描述和要求。
         4. 如果需要添加新的组件，请确保它们与现有组件协调。
+        5. 如无必要，请不要删除已有的模型并生成全新的模型。
 
         请只返回Python代码，不需要其他解释。
         """
@@ -364,7 +400,9 @@ class MODEL_GENERATION_OT_generate(Operator):
         conversation_manager = context.scene.conversation_manager
         initialize_conversation(context)
         prompt_with_history = add_history_to_prompt(context, prompt)
-        response = generate_text_with_context(prompt_with_history)
+        # response = generate_text_with_context(prompt_with_history)
+        # response = analyze_screenshots_with_gpt4(prompt_with_history, screenshots)
+        response = analyze_screenshots_with_claude(prompt_with_history, screenshots)
 
         # 更新对话历史
         conversation_manager.add_message("user", prompt)
@@ -373,7 +411,7 @@ class MODEL_GENERATION_OT_generate(Operator):
         logger.info(f"GPT Generated Optimization Commands:\n```python\n{response}\n```")
 
         # 保存生成的优化代码到文件
-        with open(os.path.join(log_dir, "optimization_code.py"), "w", encoding='utf-8') as f:
+        with open(os.path.join(iteration_dir, "optimization_code.py"), "w", encoding='utf-8') as f:
             f.write(response)
 
         # 执行生成的Blender优化命令
@@ -388,109 +426,12 @@ class MODEL_GENERATION_OT_generate(Operator):
         self.update_blender_view(context)
         bpy.ops.wm.redraw_timer(type='DRAW_WIN_SWAP', iterations=1)
 
-        # 保存优化后的截图
+        # 保存当前迭代的截图
         screenshots = save_screenshots()
-        screenshot_dir = os.path.join(log_dir, "optimization")
+        screenshot_dir = os.path.join(iteration_dir, "evaluation_screenshots")
         save_screenshots_to_path(screenshot_dir)
         for screenshot in screenshots:
-            logger.debug(f"Optimization screenshot saved: {screenshot}")
-
-class MODEL_GENERATION_OT_optimize_once(Operator):
-    bl_idname = "model_generation.optimize_once"
-    bl_label = "Optimize Model Once"
-    bl_description = "Perform one iteration of model optimization"
-
-    def execute(self, context):
-        props = context.scene.model_generation_tool
-        user_input = props.input_text
-
-        with log_context(logger, "model_optimization") as log_dir:
-            try:
-                # 重新获取模型描述（如果需要的话）
-                rewritten_input = rewrite_prompt(user_input)
-                model_description = parse_user_input(user_input, rewritten_input)
-
-                # 评估和优化模型
-                self.evaluate_and_optimize_model(context, user_input, rewritten_input, model_description, log_dir)
-
-                self.report({'INFO'}, "Model optimization iteration completed.")
-                return {'FINISHED'}
-            except Exception as e:
-                logger.error(f"Error during optimization: {str(e)}")
-                self.report({'ERROR'}, f"Error during optimization: {str(e)}")
-                return {'CANCELLED'}
-
-    def evaluate_and_optimize_model(self, context, user_input, rewritten_input, model_description, log_dir):
-        screenshots = get_screenshots()
-        evaluator = ModelEvaluator()
-        
-        evaluation_context = {
-            "user_input": user_input,
-            "rewritten_input": rewritten_input,
-            "model_description": model_description
-        }
-        
-        results = evaluator.evaluate(screenshots, evaluation_context)
-        
-        combined_analysis, final_status, average_score, suggestions = evaluator.aggregate_results(results)
-
-        logger.info(f"Evaluation results: Status: {final_status.name}, Score: {average_score:.2f}")
-        logger.info(f"Combined Analysis: {combined_analysis}")
-        logger.info("Suggestions:")
-        logger.info(f"- {suggestions}")
-
-        # 无论评估结果如何，都尝试优化
-        self.optimize_model(context, suggestions, evaluation_context, log_dir)
-
-    def optimize_model(self, context, suggestions, evaluation_context, log_dir):
-        # 准备优化提示
-        prompt = f"""
-        请根据以下信息优化现有的3D模型：
-
-        原始用户输入：{evaluation_context['user_input']}
-        改写后的要求：{evaluation_context['rewritten_input']}
-        模型描述：{json.dumps(evaluation_context['model_description'], ensure_ascii=False, indent=2)}
-        优化建议：
-        {chr(10).join(f"- {suggestion}" for suggestion in suggestions)}
-
-        请生成Blender Python命令来优化这个3D模型。注意：
-        1. 使用 bpy 库来修改现有对象。
-        2. 仅修改需要优化的部分，保留其他部分不变。
-        3. 确保优化后的模型仍然符合原始描述和要求。
-        4. 如果需要添加新的组件，请确保它们与现有组件协调。
-
-        请只返回Python代码，不需要其他解释。
-        """
-
-        # 使用 GPT 生成优化命令
-        conversation_manager = context.scene.conversation_manager
-        initialize_conversation(context)
-        prompt_with_history = add_history_to_prompt(context, prompt)
-        response = generate_text_with_context(prompt_with_history)
-
-        # 更新对话历史
-        conversation_manager.add_message("user", prompt)
-        conversation_manager.add_message("assistant", response)
-
-        logger.info(f"GPT Generated Optimization Commands:\n```python\n{response}\n```")
-
-        # 保存生成的优化代码到文件
-        with open(os.path.join(log_dir, "generated_optimization_code.py"), "w", encoding='utf-8') as f:
-            f.write(response)
-
-        # 执行生成的Blender优化命令
-        try:
-            execute_blender_command(response)
-            logger.debug("Successfully executed optimization commands.")
-        except Exception as e:
-            logger.error(f"Error executing optimization commands: {str(e)}")
-            self.report({'ERROR'}, f"Error executing optimization commands: {str(e)}")
-
-        # 保存优化后的截图
-        screenshots = save_screenshots()
-        for screenshot in screenshots:
-            new_path = save_screenshot(log_dir, screenshot, "optimization")
-            logger.debug(f"Optimization screenshot saved: {new_path}")
+            logger.debug(f"Iteration {iteration + 1} evaluation screenshot saved: {screenshot}")
 
 class MODEL_GENERATION_PT_panel(Panel):
     bl_label = "Model Generation"
@@ -505,4 +446,4 @@ class MODEL_GENERATION_PT_panel(Panel):
 
         layout.prop(props, "input_text")
         layout.operator("model_generation.generate")
-        layout.operator("model_generation.optimize_once")
+        # layout.operator("model_generation.optimize_once")
