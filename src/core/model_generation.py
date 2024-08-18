@@ -8,12 +8,13 @@ from typing import List, Dict, Any
 from bpy.types import Operator, Panel, PropertyGroup
 from bpy.props import StringProperty, PointerProperty
 from src.llm_modules.claude_module import generate_text_with_claude, analyze_screenshots_with_claude
-from src.llm_modules.LLM_common_utils import sanitize_command, initialize_conversation, execute_blender_command, add_history_to_prompt, get_screenshots
+from src.llm_modules.LLM_common_utils import sanitize_command, initialize_conversation, execute_blender_command, add_history_to_prompt, get_screenshots, get_scene_info, format_scene_info
 from src.utils.logger_module import setup_logger, log_context
 from src.core.prompt_rewriter import rewrite_prompt
 from src.llm_modules.gpt_module import generate_text_with_context, analyze_screenshots_with_gpt4
 from src.llama_index_modules.llama_index_model_generation import query_generation_documentation
 from src.llama_index_modules.llama_index_model_modification import query_modification_documentation
+from src.llama_index_modules.llama_index_component_library import query_component_documentation
 from src.core.evaluators_module import ModelEvaluator, EvaluationStatus
 from src.utils.model_viewer_module import save_screenshots, save_screenshots_to_path
 
@@ -186,6 +187,10 @@ class MODEL_GENERATION_OT_generate(Operator):
         generation_docs = query_generation_documentation(bpy.types.Scene.generation_query_engine, rewritten_input)
         logger.info(f"Generation documentation: {generation_docs}")
 
+        # 查询部件库
+        component_docs = self.query_component_library(model_description)
+        logger.info(f"Component library documentation: {component_docs}")
+
         # 准备提示信息
         prompt = f"""
         Context:
@@ -195,9 +200,10 @@ class MODEL_GENERATION_OT_generate(Operator):
         改写后的要求：{rewritten_input}
         模型描述（JSON格式）：{json.dumps(model_description, ensure_ascii=False, indent=2)}
         相关生成文档：{generation_docs}
+        部件库文档：{component_docs}
 
         Objective:
-        生成适当的Blender Python命令来创建指定的3D模型。代码应该准确反映用户的需求，并遵循Blender API的最佳实践。
+        生成适当的Blender Python命令来创建指定的3D模型。代码应该准确反映用户的需求，并遵循Blender API的最佳实践。同时，参考部件库文档中的指南来创建各个部件。
 
         Style:
         - 精确：使用正确的Blender Python语法和函数
@@ -222,6 +228,7 @@ class MODEL_GENERATION_OT_generate(Operator):
         6. 添加简单的材质（如果需要）
         7. 生成正确的集合以便于模型管理
         8. 确保所有生成的模型都是3D的，有适当的厚度
+        9. 参考部件库文档中的指南来创建各个部件
 
         请直接返回Python代码，不需要其他解释或注释。
         """ 
@@ -260,6 +267,15 @@ class MODEL_GENERATION_OT_generate(Operator):
         save_screenshots_to_path(screenshot_dir)
         for screenshot in screenshots:
             logger.debug(f"Generation screenshot saved: {screenshot}")
+
+    def query_component_library(self, model_description):
+        component_docs = []
+        for component in model_description.get('components', []):
+            component_name = component.get('name', '')
+            if component_name:
+                results = query_component_documentation(bpy.types.Scene.component_query_engine, component_name)
+                component_docs.extend(results)
+        return "\n\n".join(component_docs)
 
     def update_blender_view(self, context):
         # 确保更改立即可见
@@ -395,6 +411,11 @@ class MODEL_GENERATION_OT_generate(Operator):
         modification_docs = query_modification_documentation(bpy.types.Scene.modification_query_engine, priority_suggestions_str)
         logger.info(f"modification documentation: {modification_docs}")
 
+        # 获取场景信息
+        scene_info = get_scene_info()
+        formatted_scene_info = format_scene_info(scene_info)
+        logger.info(f"场景内的模型信息: {formatted_scene_info}")
+
         # 准备优化提示
         prompt = f"""
         Context:
@@ -405,6 +426,7 @@ class MODEL_GENERATION_OT_generate(Operator):
         模型描述：{json.dumps(evaluation_context['model_description'], ensure_ascii=False, indent=2)}
         优化建议：{priority_suggestions_str}
         相关优化文档：{modification_docs}
+        以下是场景中所有存在的对象的详细信息：{formatted_scene_info}
 
         Objective:
         生成Blender Python命令来优化现有的3D模型,同时保持模型的基本结构和特征。主要任务是优化模型,而不是创建全新的模型。只有在现有模型的某些部分完全不可用时,才考虑删除并重新生成。

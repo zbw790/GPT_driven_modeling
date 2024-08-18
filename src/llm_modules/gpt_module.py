@@ -21,7 +21,7 @@ client = OpenAI(api_key=api_key)
 def generate_text_with_context(prompt):
     try:
         response = client.chat.completions.create(
-            model="gpt-4o",
+            model="gpt-4-turbo",
             messages=[{"role": "user", "content": prompt}],
             max_tokens=4096,
             temperature=0.8,
@@ -64,7 +64,7 @@ def analyze_screenshots_with_gpt4(prompt, screenshots):
     }
 
     request_data = {
-        "model": "gpt-4o",
+        "model": "gpt-4-turbo",
         "messages": [
             {
                 "role": "user",

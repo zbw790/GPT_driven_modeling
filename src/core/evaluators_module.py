@@ -8,8 +8,12 @@ from src.llm_modules.claude_module import analyze_screenshots_with_claude
 from typing import List, Dict, Any, Tuple
 from enum import Enum
 from src.llm_modules.LLM_common_utils import get_screenshots
+from src.utils.logger_module import setup_logger, log_context
 import json
 import re
+
+# 创建专门的日志记录器
+logger = setup_logger('model_generation')
 
 class EvaluationStatus(Enum):
     NOT_PASS = 0
@@ -363,7 +367,19 @@ class ModelEvaluator:
     def evaluate(self, screenshots: List[str], context: Dict[str, Any]) -> Dict[str, EvaluationResult]:
         results = {}
         for evaluator in self.evaluators:
-            results[evaluator.__class__.__name__] = evaluator.evaluate(screenshots, context)
+            result = evaluator.evaluate(screenshots, context)
+            results[evaluator.__class__.__name__] = result
+            
+            # 使用 logger 记录每个评估器的结果
+            logger.info(f"\n--- {evaluator.__class__.__name__} Results ---")
+            logger.info(f"Analysis: {result.analysis}")
+            logger.info(f"Status: {result.status.name}")
+            logger.info(f"Score: {result.score}")
+            logger.info("Suggestions:")
+            for suggestion in result.suggestions:
+                logger.info(f"- {suggestion}")
+            logger.info("-----------------------------------")
+
         return results
 
     def aggregate_results(self, results: Dict[str, EvaluationResult]) -> Tuple[str, EvaluationStatus, float, List[str]]:
