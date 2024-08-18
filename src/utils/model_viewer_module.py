@@ -10,11 +10,17 @@ from bpy_extras.object_utils import world_to_camera_view
 import bmesh
 
 def ensure_camera():
-    camera = bpy.context.scene.camera
-    if camera is None:
-        bpy.ops.object.camera_add()
-        camera = bpy.context.object
+    if bpy.context.scene.camera is None:
+        existing_camera = bpy.data.objects.get("camera")
+        if existing_camera:
+            camera = existing_camera
+        else:
+            bpy.ops.object.camera_add()
+            camera = bpy.context.object
+            camera.name = "camera"
         bpy.context.scene.camera = camera
+    else:
+        camera = bpy.context.scene.camera
     return camera
 
 def calculate_scene_center_and_size(objects):

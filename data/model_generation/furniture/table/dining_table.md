@@ -109,6 +109,76 @@ leg4 = create_leg("leg4", (-0.7, -0.4, 0.375))
 # 更新场景
 bpy.context.view_layer.update()
 ```
+## 高级生成技巧：2D到3D
+
+除了使用基本的立方体并调整其尺寸外，还可以使用更高级的技巧来创建复杂的形状，如六边形桌面。这种方法首先创建一个2D形状，然后将其挤出成3D对象。以下是创建六边形桌面的步骤：
+
+1. 创建一个圆形
+2. 将圆形转换为六边形
+3. 挤出六边形以创建厚度
+
+### 示例代码：创建六边形桌面
+
+```python
+import bpy
+import bmesh
+import math
+
+def create_hexagonal_table_top(radius=1.0, thickness=0.03):
+    # 创建一个新的网格
+    mesh = bpy.data.meshes.new(name="HexagonalTableTop")
+    obj = bpy.data.objects.new("table_top", mesh)
+
+    # 将对象链接到场景
+    bpy.context.collection.objects.link(obj)
+
+    # 创建一个新的 BMesh
+    bm = bmesh.new()
+
+    # 添加一个圆形
+    bmesh.ops.create_circle(
+        bm,
+        cap_ends=True,
+        cap_tris=False,
+        segments=6,
+        radius=radius
+    )
+
+    # 挤出面以创建厚度
+    bmesh.ops.extrude_face_region(bm, geom=bm.faces)
+    bmesh.ops.translate(bm, vec=(0, 0, thickness), verts=bm.verts[-6:])
+
+    # 将 BMesh 数据更新到网格
+    bm.to_mesh(mesh)
+    bm.free()
+
+    # 更新网格
+    mesh.update()
+
+    return obj
+
+# 使用函数创建六边形桌面
+hexagonal_table_top = create_hexagonal_table_top(radius=0.75, thickness=0.03)
+
+# 将桌面移动到适当的位置
+hexagonal_table_top.location = (0, 0, 0.75)
+
+# 更新场景
+bpy.context.view_layer.update()
+```
+
+这个示例展示了如何创建一个六边形的桌面。你可以通过调整 `radius` 参数来改变桌面的大小，通过 `thickness` 参数来改变桌面的厚度。
+
+这种方法的优点是：
+1. 可以创建更复杂的形状，不限于简单的立方体。
+2. 提供了更多的控制，可以精确地定义形状的每个方面。
+3. 可以轻松地创建具有特定边数的多边形形状。
+
+注意事项：
+- 这种方法需要更多的几何知识和编程技巧。
+- 对于简单的形状，使用基本的立方体可能更快、更简单。
+- 在使用这种方法时，确保正确处理了所有的几何细节，如面的法线方向等。
+
 注意该代码仅为示例使用，实际的物品名称可能有所变化，请根据物品名称进行适当的改动，实际的餐桌生成需要最大程度的参考用户提供的要求
 
 

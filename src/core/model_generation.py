@@ -188,24 +188,43 @@ class MODEL_GENERATION_OT_generate(Operator):
 
         # 准备提示信息
         prompt = f"""
-        请根据以下信息生成Blender Python命令来创建3D模型：
+        Context:
+        你是一个专门用于生成Blender Python命令的AI助手，负责创建3D模型。你需要根据用户的描述和相关文档生成适当的Python代码。
 
         用户原始输入的要求：{user_input}
         改写后的要求：{rewritten_input}
         模型描述（JSON格式）：{json.dumps(model_description, ensure_ascii=False, indent=2)}
         相关生成文档：{generation_docs}
 
-        请生成适当的Blender Python命令来创建这个3D模型。注意以下几点：
-        1. 使用 bpy 库来创建和操作对象。
-        2. 为每个组件创建单独的对象，并根据其形状和尺寸进行设置。
-        3. 正确放置每个组件，确保它们的相对位置正确。
-        4. 如果需要，可以使用循环来创建重复的组件（如多个桌腿）。
-        5. 为生成的对象设置合适的名称，以便于识别。
-        6. 如果需要，可以添加简单的材质。
-        7. 生成正确的集合以便于模型管理。
+        Objective:
+        生成适当的Blender Python命令来创建指定的3D模型。代码应该准确反映用户的需求，并遵循Blender API的最佳实践。
 
-        请只返回Python代码，不需要其他解释。
-        """
+        Style:
+        - 精确：使用正确的Blender Python语法和函数
+        - 简洁：只包含必要的代码，不添加多余的注释或解释
+        - 结构化：按照逻辑顺序组织代码，使用适当的缩进
+
+        Tone:
+        - 专业：使用Blender API的专业术语和函数
+        - 直接：直接给出代码，不需要额外的解释
+        - 技术性：专注于技术实现，不需要解释代码的意图
+
+        Audience:
+        熟悉Blender Python API的3D建模工程师和开发人员
+
+        Response:
+        请提供创建3D模型的Blender Python代码。代码应该：
+        1. 使用bpy库来创建和操作对象
+        2. 为每个组件创建单独的对象，并根据其形状和尺寸进行设置
+        3. 正确放置每个组件，确保它们的相对位置正确
+        4. 使用循环来创建重复的组件（如多个桌腿）
+        5. 为生成的对象设置合适的名称，以便于识别
+        6. 添加简单的材质（如果需要）
+        7. 生成正确的集合以便于模型管理
+        8. 确保所有生成的模型都是3D的，有适当的厚度
+
+        请直接返回Python代码，不需要其他解释或注释。
+        """ 
 
         # 使用 GPT 生成响应
         conversation_manager = context.scene.conversation_manager
@@ -378,7 +397,8 @@ class MODEL_GENERATION_OT_generate(Operator):
 
         # 准备优化提示
         prompt = f"""
-        请根据以下信息优化现有的3D模型：
+        Context:
+        你是一个专门负责优化3D模型的AI助手。你的任务是根据给定的信息和建议,生成Blender Python命令来优化现有的3D模型。
 
         原始用户输入：{evaluation_context['user_input']}
         改写后的要求：{evaluation_context['rewritten_input']}
@@ -386,14 +406,31 @@ class MODEL_GENERATION_OT_generate(Operator):
         优化建议：{priority_suggestions_str}
         相关优化文档：{modification_docs}
 
-        请生成Blender Python命令来优化这个3D模型。注意：
-        1. 使用 bpy 库来修改现有对象。
-        2. 仅修改需要优化的部分，保留其他部分不变。
-        3. 确保优化后的模型仍然符合原始描述和要求。
-        4. 如果需要添加新的组件，请确保它们与现有组件协调。
-        5. 如无必要，请不要删除已有的模型并生成全新的模型。
+        Objective:
+        生成Blender Python命令来优化现有的3D模型,同时保持模型的基本结构和特征。主要任务是优化模型,而不是创建全新的模型。只有在现有模型的某些部分完全不可用时,才考虑删除并重新生成。
 
-        请只返回Python代码，不需要其他解释。
+        Style:
+        - 精确：使用准确的Blender Python命令
+        - 简洁：只包含必要的代码,不添加多余的注释或解释
+        - 结构化：按照逻辑顺序组织代码
+
+        Tone:
+        - 专业：使用Blender API的专业术语和函数
+        - 直接：直接给出代码,不需要额外的解释
+        - 技术性：专注于技术实现,不需要解释代码的意图
+
+        Audience:
+        熟悉Blender Python API的3D建模工程师和开发人员
+
+        Response:
+        请提供优化3D模型的Blender Python代码。代码应该：
+        1. 使用bpy库来修改现有对象
+        2. 只修改需要优化的部分,保留其他部分不变
+        3. 确保优化后的模型符合原始描述和要求
+        4. 如果需要添加新组件,确保它们与现有组件协调
+        5. 除非绝对必要,不要删除现有模型并生成全新模型
+
+        请直接返回Python代码,不需要其他解释或注释。
         """
 
         # 使用 GPT 生成优化命令
@@ -402,7 +439,11 @@ class MODEL_GENERATION_OT_generate(Operator):
         prompt_with_history = add_history_to_prompt(context, prompt)
         # response = generate_text_with_context(prompt_with_history)
         # response = analyze_screenshots_with_gpt4(prompt_with_history, screenshots)
-        response = analyze_screenshots_with_claude(prompt_with_history, screenshots)
+        if iteration % 2 == 0:
+            response = analyze_screenshots_with_claude(prompt_with_history, screenshots)
+        else:
+            response = analyze_screenshots_with_gpt4(prompt_with_history, screenshots)
+            
 
         # 更新对话历史
         conversation_manager.add_message("user", prompt)
