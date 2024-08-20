@@ -499,7 +499,11 @@ class MODEL_GENERATION_OT_generate(Operator):
         for screenshot in screenshots:
             logger.debug(f"Iteration {iteration + 1} evaluation screenshot saved: {screenshot}")
 
-    def apply_materials(self, context, user_input, rewritten_input, model_description, log_dir, formatted_scene_info):
+    def apply_materials(self, context, user_input, rewritten_input, model_description, log_dir):
+        # 获取场景信息
+        scene_info = get_scene_info()
+        formatted_scene_info = format_scene_info(scene_info)
+        
         # 准备提示信息
         prompt = f"""
         Context:
@@ -690,6 +694,158 @@ class MODEL_GENERATION_OT_generate(Operator):
         3. 将材质应用到相应的对象上
 
         请直接返回Python代码，不需要其他解释或注释。
+
+        Example:
+        import bpy
+
+        def create_wood_texture(material):
+            nodes = material.node_tree.nodes
+            links = material.node_tree.links
+
+            # 保留原有的Principled BSDF节点
+            principled = nodes["Principled BSDF"]
+            
+            # 创建新节点
+            tex_coord = nodes.new(type='ShaderNodeTexCoord')
+            mapping = nodes.new(type='ShaderNodeMapping')
+            noise_texture = nodes.new(type='ShaderNodeTexNoise')
+            color_ramp = nodes.new(type='ShaderNodeValToRGB')
+            mix_rgb = nodes.new(type='ShaderNodeMixRGB')
+
+            # 设置节点
+            mapping.inputs['Scale'].default_value = (10, 5, 5)
+            noise_texture.inputs['Scale'].default_value = 5
+            noise_texture.inputs['Detail'].default_value = 8
+            noise_texture.inputs['Roughness'].default_value = 0.6
+
+            # 设置颜色渐变
+            color_ramp.color_ramp.elements[0].position = 0.4
+            color_ramp.color_ramp.elements[0].color = (0.7, 0.5, 0.3, 1.0)
+            color_ramp.color_ramp.elements[1].position = 0.6
+            color_ramp.color_ramp.elements[1].color = (0.9, 0.7, 0.5, 1.0)
+
+            # 连接节点
+            links.new(tex_coord.outputs['Generated'], mapping.inputs['Vector'])
+            links.new(mapping.outputs['Vector'], noise_texture.inputs['Vector'])
+            links.new(noise_texture.outputs['Fac'], color_ramp.inputs['Fac'])
+            links.new(color_ramp.outputs['Color'], mix_rgb.inputs[1])
+            
+            # 安全地处理Base Color连接
+            if principled.inputs['Base Color'].links:
+                links.new(principled.inputs['Base Color'].links[0].from_socket, mix_rgb.inputs[2])
+            else:
+                mix_rgb.inputs[2].default_value = principled.inputs['Base Color'].default_value
+
+            links.new(mix_rgb.outputs['Color'], principled.inputs['Base Color'])
+
+            mix_rgb.blend_type = 'OVERLAY'
+            mix_rgb.inputs[0].default_value = 0.3
+
+        def create_metal_texture(material):
+            nodes = material.node_tree.nodes
+            links = material.node_tree.links
+
+            # 保留原有的Principled BSDF节点
+            principled = nodes["Principled BSDF"]
+            
+            # 创建新节点
+            tex_coord = nodes.new(type='ShaderNodeTexCoord')
+            mapping = nodes.new(type='ShaderNodeMapping')
+            noise_texture = nodes.new(type='ShaderNodeTexNoise')
+            color_ramp = nodes.new(type='ShaderNodeValToRGB')
+
+            # 设置节点
+            mapping.inputs['Scale'].default_value = (20, 20, 20)
+            noise_texture.inputs['Scale'].default_value = 10
+            noise_texture.inputs['Detail'].default_value = 10
+            noise_texture.inputs['Roughness'].default_value = 0.3
+
+            # 设置颜色渐变
+            color_ramp.color_ramp.elements[0].position = 0.4
+            color_ramp.color_ramp.elements[0].color = (0.9, 0.9, 0.9, 1.0)
+            color_ramp.color_ramp.elements[1].position = 0.6
+            color_ramp.color_ramp.elements[1].color = (1.0, 1.0, 1.0, 1.0)
+
+            # 连接节点
+            links.new(tex_coord.outputs['Generated'], mapping.inputs['Vector'])
+            links.new(mapping.outputs['Vector'], noise_texture.inputs['Vector'])
+            links.new(noise_texture.outputs['Fac'], color_ramp.inputs['Fac'])
+            links.new(color_ramp.outputs['Color'], principled.inputs['Base Color'])
+
+        # Ellipse_Table_Top material
+        mat_table_top = bpy.data.materials.new(name="Ellipse_Table_Top_Material")
+        mat_table_top.use_nodes = True
+        nodes = mat_table_top.node_tree.nodes
+        principled = nodes["Principled BSDF"]
+        principled.inputs["Base Color"].default_value = [0.8, 0.6, 0.4, 1.0]
+        principled.inputs["Metallic"].default_value = 0.0
+        principled.inputs["Roughness"].default_value = 0.7
+        principled.inputs["IOR"].default_value = 1.5
+        principled.inputs["Alpha"].default_value = 1.0
+        principled.inputs["Normal"].default_value = [0.0, 0.0, 1.0]
+        principled.inputs["Specular IOR Level"].default_value = 0.5
+        principled.inputs["Specular Tint"].default_value = [1.0, 1.0, 1.0, 1.0]
+        principled.inputs["Anisotropic"].default_value = 0.2
+        principled.inputs["Anisotropic Rotation"].default_value = 0.0
+        principled.inputs["Transmission Weight"].default_value = 0.0
+        principled.inputs["Coat Weight"].default_value = 0.1
+        principled.inputs["Coat Roughness"].default_value = 0.1
+        principled.inputs["Coat IOR"].default_value = 1.5
+        principled.inputs["Coat Tint"].default_value = [1.0, 1.0, 1.0, 1.0]
+
+        create_wood_texture(mat_table_top)
+
+        bpy.data.objects["Ellipse_Table_Top"].data.materials.append(mat_table_top)
+
+        # Support_Column material
+        mat_support = bpy.data.materials.new(name="Support_Column_Material")
+        mat_support.use_nodes = True
+        nodes = mat_support.node_tree.nodes
+        principled = nodes["Principled BSDF"]
+        principled.inputs["Base Color"].default_value = [0.9, 0.9, 0.9, 1.0]
+        principled.inputs["Metallic"].default_value = 0.8
+        principled.inputs["Roughness"].default_value = 0.2
+        principled.inputs["IOR"].default_value = 2.5
+        principled.inputs["Alpha"].default_value = 1.0
+        principled.inputs["Normal"].default_value = [0.0, 0.0, 1.0]
+        principled.inputs["Specular IOR Level"].default_value = 0.5
+        principled.inputs["Specular Tint"].default_value = [1.0, 1.0, 1.0, 1.0]
+        principled.inputs["Anisotropic"].default_value = 0.5
+        principled.inputs["Anisotropic Rotation"].default_value = 0.0
+        principled.inputs["Transmission Weight"].default_value = 0.0
+        principled.inputs["Coat Weight"].default_value = 0.3
+        principled.inputs["Coat Roughness"].default_value = 0.1
+        principled.inputs["Coat IOR"].default_value = 1.5
+        principled.inputs["Coat Tint"].default_value = [1.0, 1.0, 1.0, 1.0]
+
+        create_metal_texture(mat_support)
+
+        bpy.data.objects["Support_Column"].data.materials.append(mat_support)
+
+        # Base material
+        mat_base = bpy.data.materials.new(name="Base_Material")
+        mat_base.use_nodes = True
+        nodes = mat_base.node_tree.nodes
+        principled = nodes["Principled BSDF"]
+        principled.inputs["Base Color"].default_value = [0.8, 0.8, 0.8, 1.0]
+        principled.inputs["Metallic"].default_value = 0.9
+        principled.inputs["Roughness"].default_value = 0.3
+        principled.inputs["IOR"].default_value = 2.5
+        principled.inputs["Alpha"].default_value = 1.0
+        principled.inputs["Normal"].default_value = [0.0, 0.0, 1.0]
+        principled.inputs["Specular IOR Level"].default_value = 0.6
+        principled.inputs["Specular Tint"].default_value = [1.0, 1.0, 1.0, 1.0]
+        principled.inputs["Anisotropic"].default_value = 0.4
+        principled.inputs["Anisotropic Rotation"].default_value = 0.0
+        principled.inputs["Transmission Weight"].default_value = 0.0
+        principled.inputs["Coat Weight"].default_value = 0.2
+        principled.inputs["Coat Roughness"].default_value = 0.15
+        principled.inputs["Coat IOR"].default_value = 1.5
+        principled.inputs["Coat Tint"].default_value = [1.0, 1.0, 1.0, 1.0]
+
+        create_metal_texture(mat_base)
+
+        bpy.data.objects["Base"].data.materials.append(mat_base)
         """
 
         # 使用GPT生成应用材质的代码
@@ -934,6 +1090,158 @@ class MODEL_GENERATION_OT_apply_materials(Operator):
         1. 为每个部件创建新的材质
         2. 设置材质的各项参数（如颜色、光泽度、粗糙度等）
         3. 将材质应用到相应的对象上
+
+        Example:
+        import bpy
+
+        def create_wood_texture(material):
+            nodes = material.node_tree.nodes
+            links = material.node_tree.links
+
+            # 保留原有的Principled BSDF节点
+            principled = nodes["Principled BSDF"]
+            
+            # 创建新节点
+            tex_coord = nodes.new(type='ShaderNodeTexCoord')
+            mapping = nodes.new(type='ShaderNodeMapping')
+            noise_texture = nodes.new(type='ShaderNodeTexNoise')
+            color_ramp = nodes.new(type='ShaderNodeValToRGB')
+            mix_rgb = nodes.new(type='ShaderNodeMixRGB')
+
+            # 设置节点
+            mapping.inputs['Scale'].default_value = (10, 5, 5)
+            noise_texture.inputs['Scale'].default_value = 5
+            noise_texture.inputs['Detail'].default_value = 8
+            noise_texture.inputs['Roughness'].default_value = 0.6
+
+            # 设置颜色渐变
+            color_ramp.color_ramp.elements[0].position = 0.4
+            color_ramp.color_ramp.elements[0].color = (0.7, 0.5, 0.3, 1.0)
+            color_ramp.color_ramp.elements[1].position = 0.6
+            color_ramp.color_ramp.elements[1].color = (0.9, 0.7, 0.5, 1.0)
+
+            # 连接节点
+            links.new(tex_coord.outputs['Generated'], mapping.inputs['Vector'])
+            links.new(mapping.outputs['Vector'], noise_texture.inputs['Vector'])
+            links.new(noise_texture.outputs['Fac'], color_ramp.inputs['Fac'])
+            links.new(color_ramp.outputs['Color'], mix_rgb.inputs[1])
+            
+            # 安全地处理Base Color连接
+            if principled.inputs['Base Color'].links:
+                links.new(principled.inputs['Base Color'].links[0].from_socket, mix_rgb.inputs[2])
+            else:
+                mix_rgb.inputs[2].default_value = principled.inputs['Base Color'].default_value
+
+            links.new(mix_rgb.outputs['Color'], principled.inputs['Base Color'])
+
+            mix_rgb.blend_type = 'OVERLAY'
+            mix_rgb.inputs[0].default_value = 0.3
+
+        def create_metal_texture(material):
+            nodes = material.node_tree.nodes
+            links = material.node_tree.links
+
+            # 保留原有的Principled BSDF节点
+            principled = nodes["Principled BSDF"]
+            
+            # 创建新节点
+            tex_coord = nodes.new(type='ShaderNodeTexCoord')
+            mapping = nodes.new(type='ShaderNodeMapping')
+            noise_texture = nodes.new(type='ShaderNodeTexNoise')
+            color_ramp = nodes.new(type='ShaderNodeValToRGB')
+
+            # 设置节点
+            mapping.inputs['Scale'].default_value = (20, 20, 20)
+            noise_texture.inputs['Scale'].default_value = 10
+            noise_texture.inputs['Detail'].default_value = 10
+            noise_texture.inputs['Roughness'].default_value = 0.3
+
+            # 设置颜色渐变
+            color_ramp.color_ramp.elements[0].position = 0.4
+            color_ramp.color_ramp.elements[0].color = (0.9, 0.9, 0.9, 1.0)
+            color_ramp.color_ramp.elements[1].position = 0.6
+            color_ramp.color_ramp.elements[1].color = (1.0, 1.0, 1.0, 1.0)
+
+            # 连接节点
+            links.new(tex_coord.outputs['Generated'], mapping.inputs['Vector'])
+            links.new(mapping.outputs['Vector'], noise_texture.inputs['Vector'])
+            links.new(noise_texture.outputs['Fac'], color_ramp.inputs['Fac'])
+            links.new(color_ramp.outputs['Color'], principled.inputs['Base Color'])
+
+        # Ellipse_Table_Top material
+        mat_table_top = bpy.data.materials.new(name="Ellipse_Table_Top_Material")
+        mat_table_top.use_nodes = True
+        nodes = mat_table_top.node_tree.nodes
+        principled = nodes["Principled BSDF"]
+        principled.inputs["Base Color"].default_value = [0.8, 0.6, 0.4, 1.0]
+        principled.inputs["Metallic"].default_value = 0.0
+        principled.inputs["Roughness"].default_value = 0.7
+        principled.inputs["IOR"].default_value = 1.5
+        principled.inputs["Alpha"].default_value = 1.0
+        principled.inputs["Normal"].default_value = [0.0, 0.0, 1.0]
+        principled.inputs["Specular IOR Level"].default_value = 0.5
+        principled.inputs["Specular Tint"].default_value = [1.0, 1.0, 1.0, 1.0]
+        principled.inputs["Anisotropic"].default_value = 0.2
+        principled.inputs["Anisotropic Rotation"].default_value = 0.0
+        principled.inputs["Transmission Weight"].default_value = 0.0
+        principled.inputs["Coat Weight"].default_value = 0.1
+        principled.inputs["Coat Roughness"].default_value = 0.1
+        principled.inputs["Coat IOR"].default_value = 1.5
+        principled.inputs["Coat Tint"].default_value = [1.0, 1.0, 1.0, 1.0]
+
+        create_wood_texture(mat_table_top)
+
+        bpy.data.objects["Ellipse_Table_Top"].data.materials.append(mat_table_top)
+
+        # Support_Column material
+        mat_support = bpy.data.materials.new(name="Support_Column_Material")
+        mat_support.use_nodes = True
+        nodes = mat_support.node_tree.nodes
+        principled = nodes["Principled BSDF"]
+        principled.inputs["Base Color"].default_value = [0.9, 0.9, 0.9, 1.0]
+        principled.inputs["Metallic"].default_value = 0.8
+        principled.inputs["Roughness"].default_value = 0.2
+        principled.inputs["IOR"].default_value = 2.5
+        principled.inputs["Alpha"].default_value = 1.0
+        principled.inputs["Normal"].default_value = [0.0, 0.0, 1.0]
+        principled.inputs["Specular IOR Level"].default_value = 0.5
+        principled.inputs["Specular Tint"].default_value = [1.0, 1.0, 1.0, 1.0]
+        principled.inputs["Anisotropic"].default_value = 0.5
+        principled.inputs["Anisotropic Rotation"].default_value = 0.0
+        principled.inputs["Transmission Weight"].default_value = 0.0
+        principled.inputs["Coat Weight"].default_value = 0.3
+        principled.inputs["Coat Roughness"].default_value = 0.1
+        principled.inputs["Coat IOR"].default_value = 1.5
+        principled.inputs["Coat Tint"].default_value = [1.0, 1.0, 1.0, 1.0]
+
+        create_metal_texture(mat_support)
+
+        bpy.data.objects["Support_Column"].data.materials.append(mat_support)
+
+        # Base material
+        mat_base = bpy.data.materials.new(name="Base_Material")
+        mat_base.use_nodes = True
+        nodes = mat_base.node_tree.nodes
+        principled = nodes["Principled BSDF"]
+        principled.inputs["Base Color"].default_value = [0.8, 0.8, 0.8, 1.0]
+        principled.inputs["Metallic"].default_value = 0.9
+        principled.inputs["Roughness"].default_value = 0.3
+        principled.inputs["IOR"].default_value = 2.5
+        principled.inputs["Alpha"].default_value = 1.0
+        principled.inputs["Normal"].default_value = [0.0, 0.0, 1.0]
+        principled.inputs["Specular IOR Level"].default_value = 0.6
+        principled.inputs["Specular Tint"].default_value = [1.0, 1.0, 1.0, 1.0]
+        principled.inputs["Anisotropic"].default_value = 0.4
+        principled.inputs["Anisotropic Rotation"].default_value = 0.0
+        principled.inputs["Transmission Weight"].default_value = 0.0
+        principled.inputs["Coat Weight"].default_value = 0.2
+        principled.inputs["Coat Roughness"].default_value = 0.15
+        principled.inputs["Coat IOR"].default_value = 1.5
+        principled.inputs["Coat Tint"].default_value = [1.0, 1.0, 1.0, 1.0]
+
+        create_metal_texture(mat_base)
+
+        bpy.data.objects["Base"].data.materials.append(mat_base)
 
         请直接返回Python代码，不需要其他解释或注释。
         """
