@@ -168,6 +168,9 @@ class MODEL_GENERATION_OT_generate(Operator):
                 # 评估并优化模型
                 self.evaluate_and_optimize_model(context, user_input, rewritten_input, model_description, log_dir)
 
+                # 添加新的材质应用步骤
+                self.apply_materials(context, user_input, rewritten_input, model_description, log_dir)
+
                 logger.debug(f"Log directory: {log_dir}")
                 # 保存当前场景的屏幕截图
                 screenshot_path = os.path.join(log_dir, "model_screenshot.png")
@@ -496,6 +499,475 @@ class MODEL_GENERATION_OT_generate(Operator):
         for screenshot in screenshots:
             logger.debug(f"Iteration {iteration + 1} evaluation screenshot saved: {screenshot}")
 
+    def apply_materials(self, context, user_input, rewritten_input, model_description, log_dir, formatted_scene_info):
+        # 准备提示信息
+        prompt = f"""
+        Context:
+        你是一个专门负责为3D模型添加材质的AI助手。你的任务是分析现有的3D模型，并为每个部件推荐合适的材质。
+        我使用的blender版本是最新版的，你必须严格遵守以下规则：
+        1. 只能使用下面列出的Principled BSDF输入参数。
+        2. 不得使用任何未列出的节点或节点。
+        3. 违反这些规则将导致严重错误，可能使整个系统崩溃。
+        4. 必须严格遵守示例中的JSON格式，包括双大括号和缩进。
+
+        注意：
+        1. 不要使用 "Subsurface", "Sheen", "Emission" 等作为直接输入参数。这些是复合参数，需要通过其他允许的参数来实现效果。
+        2. 对于颜色和向量类型的输入，请始终使用列表格式，而不是单个浮点数。例如：
+        - 对于颜色输入（如Base Color, Specular Tint等），使用4个值的列表：[R, G, B, A]
+        - 对于向量输入（如Normal），使用3个值的列表：[X, Y, Z]
+        - 对于单一数值输入，直接使用浮点数
+
+        这是为了避免常见的"ValueError: bpy_struct: item.attr = val: sequence expected at dimension 1, not 'float'"错误。
+
+        原始用户输入：{user_input}
+        改写后的要求：{rewritten_input}
+        模型描述：{json.dumps(model_description, ensure_ascii=False, indent=2)}
+        场景中的对象信息：{formatted_scene_info}
+
+        Objective:
+        分析模型的各个部件，并为每个部件推荐合适的材质。你需要考虑模型的用途、外观和真实感。
+
+        Style:
+        - 精确：为每个部件提供具体的材质建议
+        - 详细：包括材质的名称、颜色、光泽度等节点
+        - 结构化：使用JSON格式组织信息，严格遵守示例中的格式
+        - 全面：考虑所有可能的材质节点和纹理细节
+        - 严格：只使用允许的节点，不得添加任何其他节点
+
+        Response:
+        请提供一个JSON对象，包含以下信息：
+        1. 每个部件的名称
+        2. 推荐的材质类型
+        3. 详细的材质节点（仅限于下面列出的Principled BSDF输入）
+        4. 纹理信息（如木纹、金属纹理、划痕等，但仅使用允许的节点来描述）
+
+        再此重申，只能使用下面列出的Principled BSDF输入节点。
+
+        Principled BSDF唯一允许使用的输入节点（禁止使用任何其他节点）:
+        - Base Color
+        - Metallic
+        - Roughness
+        - IOR
+        - Alpha
+        - Normal
+        - Weight
+        - Subsurface Weight
+        - Subsurface Radius
+        - Subsurface Scale
+        - Subsurface Anisotropy
+        - Specular IOR Level
+        - Specular Tint
+        - Anisotropic
+        - Anisotropic Rotation
+        - Tangent
+        - Transmission Weight
+        - Coat Weight
+        - Coat Roughness
+        - Coat IOR
+        - Coat Tint
+        - Coat Normal
+        - Sheen Weight
+        - Sheen Roughness
+        - Sheen Tint
+        - Emission Color
+        - Emission Strength
+
+        警告：使用任何未列出的参数将导致严重错误。确保你的响应中只包含这些允许的节点。
+        再此重申：只能使用下面列出的Principled BSDF节点。
+
+        Example:
+        {{
+            "桌面": {{
+                "material_type": "wood",
+                "base_color": [0.8, 0.6, 0.4, 1.0],
+                "metallic": 0.0,
+                "roughness": 0.7,
+                "ior": 1.5,
+                "alpha": 1.0,
+                "normal": (0, 0, 1),
+                "subsurface_weight": 0.1,
+                "subsurface_radius": [0.1, 0.05, 0.03],
+                "subsurface_scale": 0.1,
+                "subsurface_ior": 1.4,
+                "subsurface_anisotropy": 0.0,
+                "specular_ior_level": 0.5,
+                "specular_tint": [1.0, 1.0, 1.0, 1.0],
+                "anisotropic": 0.2,
+                "anisotropic_rotation": 0.0,
+                "transmission_weight": 0.0,
+                "coat_weight": 0.1,
+                "coat_roughness": 0.1,
+                "coat_ior": 1.5,
+                "coat_tint": [1.0, 1.0, 1.0, 1.0],
+                "sheen_weight": 0.05,
+                "sheen_roughness": 0.3,
+                "sheen_tint": [1.0, 1.0, 1.0, 1.0],
+                "emission_color": [0.0, 0.0, 0.0, 1.0],
+                "emission_strength": 0.0,
+                "wood_grain_texture": {{
+                    "scale": 2.0,
+                    "detail": 8,
+                    "distortion": 0.2,
+                    "color_ramp": [
+                        {{"position": 0.0, "color": [0.7, 0.5, 0.3, 1.0]}},
+                        {{"position": 1.0, "color": [0.9, 0.7, 0.5, 1.0]}}
+                    ]
+                }}
+            }},
+            "桌腿": {{
+                "material_type": "metal",
+                "base_color": [0.9, 0.9, 0.9, 1.0],
+                "metallic": 0.8,
+                "roughness": 0.2,
+                "ior": 2.5,
+                "alpha": 1.0,
+                "normal": (0, 0, 1),
+                "specular_ior_level": 0.5,
+                "specular_tint": [1.0, 1.0, 1.0, 1.0],
+                "anisotropic": 0.5,
+                "anisotropic_rotation": 0.0,
+                "coat_weight": 0.3,
+                "coat_roughness": 0.1,
+                "coat_ior": 1.5,
+                "coat_tint": [1.0, 1.0, 1.0, 1.0],
+                "emission_color": [0.0, 0.0, 0.0, 1.0],
+                "emission_strength": 0.0,
+                "metal_flake_texture": {{
+                    "scale": 500.0,
+                    "intensity": 0.2,
+                    "color_variation": 0.1
+                }},
+                "scratches_texture": {{
+                    "scale": 10.0,
+                    "depth": 0.05,
+                    "roughness_influence": 0.3
+                }}
+            }}
+        }}
+
+        只能使用上面列出的Principled BSDF节点。
+        请在生成之后再次比对，确保你达到了我说的要求，同时注意数据类型是否正确。
+        请直接返回JSON格式的响应，不需要其他解释或注释。确保为模型中的每个部件提供详细的材质信息，但严格限制在允许的参数范围内。再次强调，使用任何未列出的参数将导致严重错误。
+        """
+
+        # 使用Claude生成材质建议
+        response = generate_text_with_claude(prompt)
+        material_suggestions = json.loads(sanitize_reference(response))
+
+        # 保存材质建议到文件
+        with open(os.path.join(log_dir, "material_suggestions.json"), "w", encoding='utf-8') as f:
+            json.dump(material_suggestions, f, ensure_ascii=False, indent=2)
+
+        # 生成应用材质的Blender Python代码
+        code_prompt = f"""
+        Context:
+        你是一个专门用于生成Blender Python命令的AI助手，负责为3D模型添加材质。你需要根据给定的材质建议生成适当的Python代码。
+        我使用的blender为最新版本，旧版本的一些节点已被移除，请你确保没有使用任何旧版的节点（例如Specular已被移除）
+        生成时请
+
+        注意：
+        1. 不要使用 "Subsurface", "Sheen", "Emission" 等作为直接输入参数。这些是复合参数，需要通过其他允许的参数来实现效果。
+        2. 对于颜色和向量类型的输入，请始终使用列表格式，而不是单个浮点数。例如：
+        - 对于颜色输入（如Base Color, Specular Tint等），使用4个值的列表：[R, G, B, A]
+        - 对于向量输入（如Normal），使用3个值的列表：[X, Y, Z]
+        - 对于单一数值输入，直接使用浮点数
+
+        材质建议：{json.dumps(material_suggestions, ensure_ascii=False, indent=2)}
+        场景中的对象信息：{formatted_scene_info}
+
+        Objective:
+        生成Blender Python代码来为模型的各个部件添加材质。
+
+        Style:
+        - 精确：使用正确的Blender Python语法和函数
+        - 简洁：只包含必要的代码，不添加多余的注释或解释
+        - 结构化：按照逻辑顺序组织代码
+
+        Response:
+        请提供添加材质的Blender Python代码。代码应该：
+        1. 为每个部件创建新的材质
+        2. 设置材质的各项参数（如颜色、光泽度、粗糙度等）
+        3. 将材质应用到相应的对象上
+
+        请直接返回Python代码，不需要其他解释或注释。
+        """
+
+        # 使用GPT生成应用材质的代码
+        material_code = generate_text_with_claude(code_prompt)
+
+        # 保存生成的材质代码到文件
+        with open(os.path.join(log_dir, "material_application_code.py"), "w", encoding='utf-8') as f:
+            f.write(material_code)
+
+        # 执行生成的Blender材质命令
+        try:
+            execute_blender_command(material_code)
+            logger.debug("Successfully applied materials.")
+        except Exception as e:
+            logger.error(f"Error applying materials: {str(e)}")
+            self.report({'ERROR'}, f"Error applying materials: {str(e)}")
+
+        # 更新视图
+        self.update_blender_view(context)
+
+        # 保存应用材质后的截图
+        screenshots = save_screenshots()
+        screenshot_dir = os.path.join(log_dir, "material_screenshots")
+        save_screenshots_to_path(screenshot_dir)
+        for screenshot in screenshots:
+            logger.debug(f"Material application screenshot saved: {screenshot}")
+
+class MODEL_GENERATION_OT_apply_materials(Operator):
+    bl_idname = "model_generation.apply_materials"
+    bl_label = "Apply Materials"
+    bl_description = "Apply materials to the generated model"
+
+    def execute(self, context):
+        props = context.scene.model_generation_tool
+        user_input = props.input_text
+
+        with log_context(logger, user_input) as log_dir:
+            try:
+                # 获取场景信息
+                scene_info = get_scene_info()
+                formatted_scene_info = format_scene_info(scene_info)
+
+                # 获取存储在场景中的model_description
+                model_description = context.scene.get("model_description", {})
+
+                # 调用材质应用函数
+                self.apply_materials(context, user_input, user_input, model_description, log_dir, formatted_scene_info)
+
+                self.report({'INFO'}, f"Materials applied successfully. Logs saved in {log_dir}")
+            except Exception as e:
+                logger.error(f"An error occurred while applying materials: {str(e)}")
+                self.report({'ERROR'}, f"An error occurred while applying materials: {str(e)}")
+        
+        return {'FINISHED'}
+
+    def apply_materials(self, context, user_input, rewritten_input, model_description, log_dir, formatted_scene_info):
+        # 准备提示信息
+        prompt = f"""
+        Context:
+        你是一个专门负责为3D模型添加材质的AI助手。你的任务是分析现有的3D模型，并为每个部件推荐合适的材质。
+        我使用的blender版本是最新版的，你必须严格遵守以下规则：
+        1. 只能使用下面列出的Principled BSDF输入参数。
+        2. 不得使用任何未列出的节点或节点。
+        3. 违反这些规则将导致严重错误，可能使整个系统崩溃。
+        4. 必须严格遵守示例中的JSON格式，包括双大括号和缩进。
+
+        注意：
+        1. 不要使用 "Subsurface", "Sheen", "Emission" 等作为直接输入参数。这些是复合参数，需要通过其他允许的参数来实现效果。
+        2. 对于颜色和向量类型的输入，请始终使用列表格式，而不是单个浮点数。例如：
+        - 对于颜色输入（如Base Color, Specular Tint等），使用4个值的列表：[R, G, B, A]
+        - 对于向量输入（如Normal），使用3个值的列表：[X, Y, Z]
+        - 对于单一数值输入，直接使用浮点数
+
+        这是为了避免常见的"ValueError: bpy_struct: item.attr = val: sequence expected at dimension 1, not 'float'"错误。
+
+        原始用户输入：{user_input}
+        改写后的要求：{rewritten_input}
+        模型描述：{json.dumps(model_description, ensure_ascii=False, indent=2)}
+        场景中的对象信息：{formatted_scene_info}
+
+        Objective:
+        分析模型的各个部件，并为每个部件推荐合适的材质。你需要考虑模型的用途、外观和真实感。
+
+        Style:
+        - 精确：为每个部件提供具体的材质建议
+        - 详细：包括材质的名称、颜色、光泽度等节点
+        - 结构化：使用JSON格式组织信息，严格遵守示例中的格式
+        - 全面：考虑所有可能的材质节点和纹理细节
+        - 严格：只使用允许的节点，不得添加任何其他节点
+
+        Response:
+        请提供一个JSON对象，包含以下信息：
+        1. 每个部件的名称
+        2. 推荐的材质类型
+        3. 详细的材质节点（仅限于下面列出的Principled BSDF输入）
+        4. 纹理信息（如木纹、金属纹理、划痕等，但仅使用允许的节点来描述）
+
+        再此重申，只能使用下面列出的Principled BSDF输入节点。
+
+        Principled BSDF唯一允许使用的输入节点（禁止使用任何其他节点）:
+        - Base Color
+        - Metallic
+        - Roughness
+        - IOR
+        - Alpha
+        - Normal
+        - Weight
+        - Subsurface Weight
+        - Subsurface Radius
+        - Subsurface Scale
+        - Subsurface Anisotropy
+        - Specular IOR Level
+        - Specular Tint
+        - Anisotropic
+        - Anisotropic Rotation
+        - Tangent
+        - Transmission Weight
+        - Coat Weight
+        - Coat Roughness
+        - Coat IOR
+        - Coat Tint
+        - Coat Normal
+        - Sheen Weight
+        - Sheen Roughness
+        - Sheen Tint
+        - Emission Color
+        - Emission Strength
+
+        警告：使用任何未列出的参数将导致严重错误。确保你的响应中只包含这些允许的节点。
+        再此重申：只能使用下面列出的Principled BSDF节点。
+
+        Example:
+        {{
+            "桌面": {{
+                "material_type": "wood",
+                "base_color": [0.8, 0.6, 0.4, 1.0],
+                "metallic": 0.0,
+                "roughness": 0.7,
+                "ior": 1.5,
+                "alpha": 1.0,
+                "normal": (0, 0, 1),
+                "subsurface_weight": 0.1,
+                "subsurface_radius": [0.1, 0.05, 0.03],
+                "subsurface_scale": 0.1,
+                "subsurface_ior": 1.4,
+                "subsurface_anisotropy": 0.0,
+                "specular_ior_level": 0.5,
+                "specular_tint": [1.0, 1.0, 1.0, 1.0],
+                "anisotropic": 0.2,
+                "anisotropic_rotation": 0.0,
+                "transmission_weight": 0.0,
+                "coat_weight": 0.1,
+                "coat_roughness": 0.1,
+                "coat_ior": 1.5,
+                "coat_tint": [1.0, 1.0, 1.0, 1.0],
+                "sheen_weight": 0.05,
+                "sheen_roughness": 0.3,
+                "sheen_tint": [1.0, 1.0, 1.0, 1.0],
+                "emission_color": [0.0, 0.0, 0.0, 1.0],
+                "emission_strength": 0.0,
+                "wood_grain_texture": {{
+                    "scale": 2.0,
+                    "detail": 8,
+                    "distortion": 0.2,
+                    "color_ramp": [
+                        {{"position": 0.0, "color": [0.7, 0.5, 0.3, 1.0]}},
+                        {{"position": 1.0, "color": [0.9, 0.7, 0.5, 1.0]}}
+                    ]
+                }}
+            }},
+            "桌腿": {{
+                "material_type": "metal",
+                "base_color": [0.9, 0.9, 0.9, 1.0],
+                "metallic": 0.8,
+                "roughness": 0.2,
+                "ior": 2.5,
+                "alpha": 1.0,
+                "normal": (0, 0, 1),
+                "specular_ior_level": 0.5,
+                "specular_tint": [1.0, 1.0, 1.0, 1.0],
+                "anisotropic": 0.5,
+                "anisotropic_rotation": 0.0,
+                "coat_weight": 0.3,
+                "coat_roughness": 0.1,
+                "coat_ior": 1.5,
+                "coat_tint": [1.0, 1.0, 1.0, 1.0],
+                "emission_color": [0.0, 0.0, 0.0, 1.0],
+                "emission_strength": 0.0,
+                "metal_flake_texture": {{
+                    "scale": 500.0,
+                    "intensity": 0.2,
+                    "color_variation": 0.1
+                }},
+                "scratches_texture": {{
+                    "scale": 10.0,
+                    "depth": 0.05,
+                    "roughness_influence": 0.3
+                }}
+            }}
+        }}
+
+        只能使用上面列出的Principled BSDF节点。
+        请在生成之后再次比对，确保你达到了我说的要求，同时注意数据类型是否正确。
+        请直接返回JSON格式的响应，不需要其他解释或注释。确保为模型中的每个部件提供详细的材质信息，但严格限制在允许的参数范围内。再次强调，使用任何未列出的参数将导致严重错误。
+        """
+
+        # 使用Claude生成材质建议
+        response = generate_text_with_claude(prompt)
+        material_suggestions = json.loads(sanitize_reference(response))
+
+        # 保存材质建议到文件
+        with open(os.path.join(log_dir, "material_suggestions.json"), "w", encoding='utf-8') as f:
+            json.dump(material_suggestions, f, ensure_ascii=False, indent=2)
+
+        # 生成应用材质的Blender Python代码
+        code_prompt = f"""
+        Context:
+        你是一个专门用于生成Blender Python命令的AI助手，负责为3D模型添加材质。你需要根据给定的材质建议生成适当的Python代码。
+        我使用的blender为最新版本，旧版本的一些节点已被移除，请你确保没有使用任何旧版的节点（例如Specular已被移除）
+        生成时请
+
+        注意：
+        1. 不要使用 "Subsurface", "Sheen", "Emission" 等作为直接输入参数。这些是复合参数，需要通过其他允许的参数来实现效果。
+        2. 对于颜色和向量类型的输入，请始终使用列表格式，而不是单个浮点数。例如：
+        - 对于颜色输入（如Base Color, Specular Tint等），使用4个值的列表：[R, G, B, A]
+        - 对于向量输入（如Normal），使用3个值的列表：[X, Y, Z]
+        - 对于单一数值输入，直接使用浮点数
+
+        材质建议：{json.dumps(material_suggestions, ensure_ascii=False, indent=2)}
+        场景中的对象信息：{formatted_scene_info}
+
+        Objective:
+        生成Blender Python代码来为模型的各个部件添加材质。
+
+        Style:
+        - 精确：使用正确的Blender Python语法和函数
+        - 简洁：只包含必要的代码，不添加多余的注释或解释
+        - 结构化：按照逻辑顺序组织代码
+
+        Response:
+        请提供添加材质的Blender Python代码。代码应该：
+        1. 为每个部件创建新的材质
+        2. 设置材质的各项参数（如颜色、光泽度、粗糙度等）
+        3. 将材质应用到相应的对象上
+
+        请直接返回Python代码，不需要其他解释或注释。
+        """
+
+        # 使用GPT生成应用材质的代码
+        material_code = generate_text_with_claude(code_prompt)
+
+        # 保存生成的材质代码到文件
+        with open(os.path.join(log_dir, "material_application_code.py"), "w", encoding='utf-8') as f:
+            f.write(material_code)
+
+        # 执行生成的Blender材质命令
+        try:
+            execute_blender_command(material_code)
+            logger.debug("Successfully applied materials.")
+        except Exception as e:
+            logger.error(f"Error applying materials: {str(e)}")
+            self.report({'ERROR'}, f"Error applying materials: {str(e)}")
+
+        # 更新视图
+        self.update_blender_view(context)
+
+        # 保存应用材质后的截图
+        screenshots = save_screenshots()
+        screenshot_dir = os.path.join(log_dir, "material_screenshots")
+        save_screenshots_to_path(screenshot_dir)
+        for screenshot in screenshots:
+            logger.debug(f"Material application screenshot saved: {screenshot}")
+
+    def update_blender_view(self, context):
+        # 确保更改立即可见
+        bpy.context.view_layer.update()
+        logger.debug("Blender view updated.")
+
 class MODEL_GENERATION_PT_panel(Panel):
     bl_label = "Model Generation"
     bl_idname = "MODEL_GENERATION_PT_panel"
@@ -510,3 +982,4 @@ class MODEL_GENERATION_PT_panel(Panel):
         layout.prop(props, "input_text")
         layout.operator("model_generation.generate")
         # layout.operator("model_generation.optimize_once")
+        layout.operator("model_generation.apply_materials")

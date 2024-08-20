@@ -26,9 +26,6 @@ def get_face_center_by_normal(obj, normal_direction):
     bm.free()
     return None
 
-if bpy.context.active_object:
-    bpy.ops.object.mode_set(mode='OBJECT')
-
 table_top = bpy.data.objects['TableTop']
 bottom_face_center = get_face_center_by_normal(table_top, Vector((0, 0, -1)))
 

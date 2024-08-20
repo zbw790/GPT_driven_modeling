@@ -51,7 +51,7 @@ from src.blender_operations_modules.bevel_corners_module import (
     BevelEdgesOperator, OBJECT_PT_bevel_panel,BevelProperties
 )
 from src.core.model_generation import (
-    ModelGenerationProperties, MODEL_GENERATION_OT_generate, MODEL_GENERATION_PT_panel
+    ModelGenerationProperties, MODEL_GENERATION_OT_generate, MODEL_GENERATION_PT_panel, MODEL_GENERATION_OT_apply_materials
 )
 from src.llm_modules.LLM_common_utils import LLMToolProperties
 from src.llama_index_modules.llama_index_component_library import (
@@ -95,6 +95,7 @@ classes = (
     COMPONENT_PT_panel,
     ModelGenerationProperties,
     MODEL_GENERATION_OT_generate,
+    MODEL_GENERATION_OT_apply_materials,
     MODEL_GENERATION_PT_panel,
     RotateObjectCW_X,
     RotateObjectCW_Y,

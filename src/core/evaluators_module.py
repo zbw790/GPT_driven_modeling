@@ -124,8 +124,9 @@ class GPTOverallEvaluator(BaseEvaluator):
         """
 
     def analyze_screenshots(self, prompt: str, screenshots: List[str]) -> str:
-        return analyze_screenshots_with_gpt4(prompt, screenshots)
-
+        # return analyze_screenshots_with_gpt4(prompt, screenshots)
+        return analyze_screenshots_with_claude(prompt, screenshots)
+    
 class ClaudeOverallEvaluator(BaseEvaluator):
     def get_prompt(self, context: Dict[str, Any]) -> str:
         return f"""
