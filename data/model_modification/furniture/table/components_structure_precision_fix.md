@@ -56,8 +56,6 @@ def align_leg_to_table(table_top, leg, table_corner_type, leg_corner_type):
         print(f"无法找到{leg.name}的顶面或桌面的底面")
 
 # 主脚本
-if bpy.context.active_object:
-    bpy.ops.object.mode_set(mode='OBJECT')
 
 table_top = bpy.data.objects['TableTop']
 legs = [bpy.data.objects[f'Leg{i}'] for i in range(1, 5)]

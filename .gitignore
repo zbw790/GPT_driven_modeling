@@ -103,6 +103,9 @@ chroma_db_modification/
 # Ignore chroma_db_components database
 chroma_db_components/
 
+# Ignore chroma_db_components database
+chroma_db_materials/
+
 # Ignore screen shots
 screenshots/
 

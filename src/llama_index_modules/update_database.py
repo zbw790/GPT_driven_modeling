@@ -1,9 +1,12 @@
+# update_database.py
+
 import os
 import shutil
 import logging
 from src.llama_index_modules.llama_index_model_modification import load_modification_data, create_modification_index
 from src.llama_index_modules.llama_index_model_generation import load_generation_data, create_generation_index
 from src.llama_index_modules.llama_index_component_library import load_component_data, create_component_index
+from src.llama_index_modules.llama_index_material_library import load_material_data, create_material_index
 from dotenv import load_dotenv
 
 # 设置日志记录
@@ -58,10 +61,26 @@ def update_component_database():
     except Exception as e:
         logger.error(f"Error updating component database: {str(e)}")
 
+def update_material_database():
+    try:
+        data_directory = './data'
+        documents, _ = load_material_data(data_directory)
+        
+        db_path = "./database/chroma_db_materials"
+        if os.path.exists(db_path):
+            shutil.rmtree(db_path)
+            logger.info("Existing material database deleted.")
+        
+        create_material_index(documents)
+        logger.info("Material database updated successfully.")
+    except Exception as e:
+        logger.error(f"Error updating material database: {str(e)}")
+
 def update_all_databases():
     update_modification_database()
     update_generation_database()
     update_component_database()
+    update_material_database()
 
 if __name__ == "__main__":
     update_all_databases()

@@ -51,7 +51,7 @@ from src.blender_operations_modules.bevel_corners_module import (
     BevelEdgesOperator, OBJECT_PT_bevel_panel,BevelProperties
 )
 from src.core.model_generation import (
-    ModelGenerationProperties, MODEL_GENERATION_OT_generate, MODEL_GENERATION_PT_panel, MODEL_GENERATION_OT_apply_materials
+    ModelGenerationProperties, MODEL_GENERATION_OT_generate, MODEL_GENERATION_PT_panel, 
 )
 from src.llm_modules.LLM_common_utils import LLMToolProperties
 from src.llama_index_modules.llama_index_component_library import (
@@ -59,6 +59,9 @@ from src.llama_index_modules.llama_index_component_library import (
 )
 from src.core.evaluators_module import (
     OBJECT_OT_evaluate_model, Evaluator_PT_panel
+)
+from src.llama_index_modules.llama_index_material_library import (
+    MaterialProperties, MATERIAL_OT_query, MATERIAL_OT_generate_material, MATERIAL_PT_panel, initialize_material_db
 )
 
 # 设置日志记录
@@ -93,9 +96,12 @@ classes = (
     COMPONENT_OT_query,
     COMPONENT_OT_generate_component,
     COMPONENT_PT_panel,
+    MaterialProperties,
+    MATERIAL_OT_query,
+    MATERIAL_OT_generate_material,
+    MATERIAL_PT_panel,
     ModelGenerationProperties,
     MODEL_GENERATION_OT_generate,
-    MODEL_GENERATION_OT_apply_materials,
     MODEL_GENERATION_PT_panel,
     RotateObjectCW_X,
     RotateObjectCW_Y,
@@ -166,10 +172,12 @@ def register():
         bpy.types.Scene.model_generation_tool = PointerProperty(type=ModelGenerationProperties)
         bpy.types.Scene.llm_tool = PointerProperty(type=LLMToolProperties)
         bpy.types.Scene.component_tool = PointerProperty(type=ComponentProperties)
+        bpy.types.Scene.material_tool = PointerProperty(type=MaterialProperties)
         
         initialize_modification_db()
         initialize_generation_db()
         initialize_component_db()
+        initialize_material_db()
         
         logger.info("Registered all classes successfully.")
     except Exception as e:
@@ -210,6 +218,8 @@ def unregister():
             del bpy.types.Scene.llm_tool
         if hasattr(bpy.types.Scene, "component_tool"):
             del bpy.types.Scene.component_tool
+        if hasattr(bpy.types.Scene, "material_tool"):
+            del bpy.types.Scene.material_tool
         
         logger.info("Unregistered all classes successfully.")
     except Exception as e:

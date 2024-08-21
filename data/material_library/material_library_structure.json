@@ -1,0 +1,20 @@
+{
+    "materials": [
+      {
+        "name": "Wood",
+        "file": "wood.md"
+      },
+      {
+        "name": "Metal",
+        "file": "metal.md"
+      },
+      {
+        "name": "Plastic",
+        "file": "plastic.md"
+      },
+      {
+        "name": "Glass",
+        "file": "glass.md"
+      }
+    ]
+  }

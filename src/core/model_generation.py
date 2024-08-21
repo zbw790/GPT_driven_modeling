@@ -17,6 +17,7 @@ from src.llama_index_modules.llama_index_model_modification import query_modific
 from src.llama_index_modules.llama_index_component_library import query_component_documentation
 from src.core.evaluators_module import ModelEvaluator, EvaluationStatus
 from src.utils.model_viewer_module import save_screenshots, save_screenshots_to_path
+from src.llama_index_modules.llama_index_material_library import query_material_documentation
 
 # 创建专门的日志记录器
 logger = setup_logger('model_generation')
@@ -394,12 +395,14 @@ class MODEL_GENERATION_OT_generate(Operator):
         输出必须是以下形式
         {{
             "priority_suggestions": [
-                "将桌面与桌腿连接，确保结构的完整性",
-                "调整桌腿的位置，使其位于桌面四个角落，提供更好的稳定性"
+                "建议1",
+                "建议2",
+                "建议3"
             ],
             "secondary_suggestions": [
-                "考虑增加桌面厚度至4-5厘米，以提高视觉上的稳定性",
-                "将桌腿直径增加到6-8厘米，以更好地支撑桌面"
+                "建议1",
+                "建议2",
+                "建议3"
             ],
         }}
         """
@@ -500,54 +503,99 @@ class MODEL_GENERATION_OT_generate(Operator):
             logger.debug(f"Iteration {iteration + 1} evaluation screenshot saved: {screenshot}")
 
     def apply_materials(self, context, user_input, rewritten_input, model_description, log_dir):
-        # 获取场景信息
-        scene_info = get_scene_info()
-        formatted_scene_info = format_scene_info(scene_info)
-        
-        # 准备提示信息
+        try:
+            # 获取场景信息
+            scene_info = get_scene_info()
+            formatted_scene_info = format_scene_info(scene_info)
+
+            # 步骤1：分析场景信息并确定所需的材质
+            material_requirements = self.analyze_scene_for_materials(user_input, rewritten_input, formatted_scene_info, model_description)
+
+            # 步骤2：查询相关的材质文档
+            material_docs = self.query_material_docs(material_requirements)
+
+            # 步骤3：生成并应用材质
+            self.generate_and_apply_materials(context, user_input, rewritten_input, formatted_scene_info, model_description, material_requirements, material_docs, log_dir)
+
+            self.report({'INFO'}, f"Materials applied successfully. Logs saved in {log_dir}")
+        except Exception as e:
+            logger.error(f"An error occurred while applying materials: {str(e)}")
+            self.report({'ERROR'}, f"An error occurred while applying materials: {str(e)}")
+
+    def analyze_scene_for_materials(self, user_input, rewritten_input, formatted_scene_info, model_description):
         prompt = f"""
         Context:
-        你是一个专门负责为3D模型添加材质的AI助手。你的任务是分析现有的3D模型，并为每个部件推荐合适的材质。
-        我使用的blender版本是最新版的，你必须严格遵守以下规则：
-        1. 只能使用下面列出的Principled BSDF输入参数。
-        2. 不得使用任何未列出的节点或节点。
-        3. 违反这些规则将导致严重错误，可能使整个系统崩溃。
-        4. 必须严格遵守示例中的JSON格式，包括双大括号和缩进。
+        你是一个专门分析3D场景并确定所需材质的AI助手。根据提供的场景信息和模型描述，确定每个对象需要的材质类型。
+
+        用户原始输入：{user_input}
+        改写后的要求：{rewritten_input}
+        场景信息：{formatted_scene_info}
+        模型描述：{json.dumps(model_description, ensure_ascii=False, indent=2)}
+
+        Task:
+        分析场景中的每个对象，并确定它们可能需要的材质类型。考虑对象的名称、形状和可能的用途。
+
+        Output:
+        请提供一个JSON对象，其中包含每个对象的名称作为键，以及建议的材质类型作为值,注意一些材质为blender场景自带的，例如摄像机Camera等，该类物品不需要添加材质：
+        {{
+            "Table_Top": "wood",
+            "Table_Leg": "metal",
+            "Chair_Seat": "fabric",
+            "Lamp_Shade": "glass"
+        }}
+
+        只需提供JSON对象，不需要其他解释。
+        """
+        response = generate_text_with_claude(prompt)
+        return json.loads(response)
+
+    def query_material_docs(self, material_requirements):
+        material_docs = {}
+        unique_docs = set()  # 用于存储唯一的文档
+
+        for obj_name, material_type in material_requirements.items():
+            query = f"材质类型：{material_type}"
+            results = query_material_documentation(bpy.types.Scene.material_query_engine, query)
+            
+            # 过滤并只添加唯一的文档
+            unique_results = []
+            for result in results:
+                if result not in unique_docs:
+                    unique_docs.add(result)
+                    unique_results.append(result)
+            
+            material_docs[obj_name] = unique_results
+
+        # 将所有唯一的文档合并为一个列表
+        all_unique_docs = list(unique_docs)
+
+        return all_unique_docs
+
+    def generate_and_apply_materials(self, context, user_input, rewritten_input, formatted_scene_info, model_description, material_requirements, material_docs, log_dir):
+        logger.info(f"材质需求： {material_requirements}")
+        logger.info(f"材质文档： {material_docs}")
+        prompt = f"""
+        Context:
+        你是一个专门为3D模型生成材质的AI助手。根据提供的材质需求和相关文档，生成Blender Python代码来创建和应用材质。
 
         注意：
-        1. 不要使用 "Subsurface", "Sheen", "Emission" 等作为直接输入参数。这些是复合参数，需要通过其他允许的参数来实现效果。
+        1. 不要使用 "Subsurface", "Sheen", "Emission", "Transmission" 等作为直接输入参数。这些是复合参数，需要通过其他允许的参数来实现效果。
         2. 对于颜色和向量类型的输入，请始终使用列表格式，而不是单个浮点数。例如：
         - 对于颜色输入（如Base Color, Specular Tint等），使用4个值的列表：[R, G, B, A]
         - 对于向量输入（如Normal），使用3个值的列表：[X, Y, Z]
         - 对于单一数值输入，直接使用浮点数
 
-        这是为了避免常见的"ValueError: bpy_struct: item.attr = val: sequence expected at dimension 1, not 'float'"错误。
-
-        原始用户输入：{user_input}
+        场景内的部件名称等信息：{formatted_scene_info}
+        用户原始输入：{user_input}
         改写后的要求：{rewritten_input}
         模型描述：{json.dumps(model_description, ensure_ascii=False, indent=2)}
-        场景中的对象信息：{formatted_scene_info}
+        材质需求：{json.dumps(material_requirements, ensure_ascii=False, indent=2)}
+        材质文档：{json.dumps(material_docs, ensure_ascii=False, indent=2)}
 
-        Objective:
-        分析模型的各个部件，并为每个部件推荐合适的材质。你需要考虑模型的用途、外观和真实感。
+        Task:
+        为每个对象生成适当的材质，并创建Blender Python代码来应用这些材质。使用Principled BSDF着色器，并仅使用以下允许的输入参数：
 
-        Style:
-        - 精确：为每个部件提供具体的材质建议
-        - 详细：包括材质的名称、颜色、光泽度等节点
-        - 结构化：使用JSON格式组织信息，严格遵守示例中的格式
-        - 全面：考虑所有可能的材质节点和纹理细节
-        - 严格：只使用允许的节点，不得添加任何其他节点
-
-        Response:
-        请提供一个JSON对象，包含以下信息：
-        1. 每个部件的名称
-        2. 推荐的材质类型
-        3. 详细的材质节点（仅限于下面列出的Principled BSDF输入）
-        4. 纹理信息（如木纹、金属纹理、划痕等，但仅使用允许的节点来描述）
-
-        再此重申，只能使用下面列出的Principled BSDF输入节点。
-
-        Principled BSDF唯一允许使用的输入节点（禁止使用任何其他节点）:
+        允许的Principled BSDF输入参数：
         - Base Color
         - Metallic
         - Roughness
@@ -576,280 +624,16 @@ class MODEL_GENERATION_OT_generate(Operator):
         - Emission Color
         - Emission Strength
 
-        警告：使用任何未列出的参数将导致严重错误。确保你的响应中只包含这些允许的节点。
-        再此重申：只能使用下面列出的Principled BSDF节点。
-
-        Example:
-        {{
-            "桌面": {{
-                "material_type": "wood",
-                "base_color": [0.8, 0.6, 0.4, 1.0],
-                "metallic": 0.0,
-                "roughness": 0.7,
-                "ior": 1.5,
-                "alpha": 1.0,
-                "normal": (0, 0, 1),
-                "subsurface_weight": 0.1,
-                "subsurface_radius": [0.1, 0.05, 0.03],
-                "subsurface_scale": 0.1,
-                "subsurface_ior": 1.4,
-                "subsurface_anisotropy": 0.0,
-                "specular_ior_level": 0.5,
-                "specular_tint": [1.0, 1.0, 1.0, 1.0],
-                "anisotropic": 0.2,
-                "anisotropic_rotation": 0.0,
-                "transmission_weight": 0.0,
-                "coat_weight": 0.1,
-                "coat_roughness": 0.1,
-                "coat_ior": 1.5,
-                "coat_tint": [1.0, 1.0, 1.0, 1.0],
-                "sheen_weight": 0.05,
-                "sheen_roughness": 0.3,
-                "sheen_tint": [1.0, 1.0, 1.0, 1.0],
-                "emission_color": [0.0, 0.0, 0.0, 1.0],
-                "emission_strength": 0.0,
-                "wood_grain_texture": {{
-                    "scale": 2.0,
-                    "detail": 8,
-                    "distortion": 0.2,
-                    "color_ramp": [
-                        {{"position": 0.0, "color": [0.7, 0.5, 0.3, 1.0]}},
-                        {{"position": 1.0, "color": [0.9, 0.7, 0.5, 1.0]}}
-                    ]
-                }}
-            }},
-            "桌腿": {{
-                "material_type": "metal",
-                "base_color": [0.9, 0.9, 0.9, 1.0],
-                "metallic": 0.8,
-                "roughness": 0.2,
-                "ior": 2.5,
-                "alpha": 1.0,
-                "normal": (0, 0, 1),
-                "specular_ior_level": 0.5,
-                "specular_tint": [1.0, 1.0, 1.0, 1.0],
-                "anisotropic": 0.5,
-                "anisotropic_rotation": 0.0,
-                "coat_weight": 0.3,
-                "coat_roughness": 0.1,
-                "coat_ior": 1.5,
-                "coat_tint": [1.0, 1.0, 1.0, 1.0],
-                "emission_color": [0.0, 0.0, 0.0, 1.0],
-                "emission_strength": 0.0,
-                "metal_flake_texture": {{
-                    "scale": 500.0,
-                    "intensity": 0.2,
-                    "color_variation": 0.1
-                }},
-                "scratches_texture": {{
-                    "scale": 10.0,
-                    "depth": 0.05,
-                    "roughness_influence": 0.3
-                }}
-            }}
-        }}
-
-        只能使用上面列出的Principled BSDF节点。
-        请在生成之后再次比对，确保你达到了我说的要求，同时注意数据类型是否正确。
-        请直接返回JSON格式的响应，不需要其他解释或注释。确保为模型中的每个部件提供详细的材质信息，但严格限制在允许的参数范围内。再次强调，使用任何未列出的参数将导致严重错误。
-        """
-
-        # 使用Claude生成材质建议
-        response = generate_text_with_claude(prompt)
-        material_suggestions = json.loads(sanitize_reference(response))
-
-        # 保存材质建议到文件
-        with open(os.path.join(log_dir, "material_suggestions.json"), "w", encoding='utf-8') as f:
-            json.dump(material_suggestions, f, ensure_ascii=False, indent=2)
-
-        # 生成应用材质的Blender Python代码
-        code_prompt = f"""
-        Context:
-        你是一个专门用于生成Blender Python命令的AI助手，负责为3D模型添加材质。你需要根据给定的材质建议生成适当的Python代码。
-        我使用的blender为最新版本，旧版本的一些节点已被移除，请你确保没有使用任何旧版的节点（例如Specular已被移除）
-        生成时请
-
-        注意：
-        1. 不要使用 "Subsurface", "Sheen", "Emission" 等作为直接输入参数。这些是复合参数，需要通过其他允许的参数来实现效果。
-        2. 对于颜色和向量类型的输入，请始终使用列表格式，而不是单个浮点数。例如：
-        - 对于颜色输入（如Base Color, Specular Tint等），使用4个值的列表：[R, G, B, A]
-        - 对于向量输入（如Normal），使用3个值的列表：[X, Y, Z]
-        - 对于单一数值输入，直接使用浮点数
-
-        材质建议：{json.dumps(material_suggestions, ensure_ascii=False, indent=2)}
-        场景中的对象信息：{formatted_scene_info}
-
-        Objective:
-        生成Blender Python代码来为模型的各个部件添加材质。
-
-        Style:
-        - 精确：使用正确的Blender Python语法和函数
-        - 简洁：只包含必要的代码，不添加多余的注释或解释
-        - 结构化：按照逻辑顺序组织代码
-
-        Response:
-        请提供添加材质的Blender Python代码。代码应该：
-        1. 为每个部件创建新的材质
-        2. 设置材质的各项参数（如颜色、光泽度、粗糙度等）
+        Output:
+        请提供可以直接在Blender中执行的Python代码。代码应该：
+        1. 为每个对象创建新的材质
+        2. 设置材质的各项参数
         3. 将材质应用到相应的对象上
+        4. 使用节点来创建更复杂的材质效果（如木纹、金属纹理等）
 
-        请直接返回Python代码，不需要其他解释或注释。
-
-        Example:
-        import bpy
-
-        def create_wood_texture(material):
-            nodes = material.node_tree.nodes
-            links = material.node_tree.links
-
-            # 保留原有的Principled BSDF节点
-            principled = nodes["Principled BSDF"]
-            
-            # 创建新节点
-            tex_coord = nodes.new(type='ShaderNodeTexCoord')
-            mapping = nodes.new(type='ShaderNodeMapping')
-            noise_texture = nodes.new(type='ShaderNodeTexNoise')
-            color_ramp = nodes.new(type='ShaderNodeValToRGB')
-            mix_rgb = nodes.new(type='ShaderNodeMixRGB')
-
-            # 设置节点
-            mapping.inputs['Scale'].default_value = (10, 5, 5)
-            noise_texture.inputs['Scale'].default_value = 5
-            noise_texture.inputs['Detail'].default_value = 8
-            noise_texture.inputs['Roughness'].default_value = 0.6
-
-            # 设置颜色渐变
-            color_ramp.color_ramp.elements[0].position = 0.4
-            color_ramp.color_ramp.elements[0].color = (0.7, 0.5, 0.3, 1.0)
-            color_ramp.color_ramp.elements[1].position = 0.6
-            color_ramp.color_ramp.elements[1].color = (0.9, 0.7, 0.5, 1.0)
-
-            # 连接节点
-            links.new(tex_coord.outputs['Generated'], mapping.inputs['Vector'])
-            links.new(mapping.outputs['Vector'], noise_texture.inputs['Vector'])
-            links.new(noise_texture.outputs['Fac'], color_ramp.inputs['Fac'])
-            links.new(color_ramp.outputs['Color'], mix_rgb.inputs[1])
-            
-            # 安全地处理Base Color连接
-            if principled.inputs['Base Color'].links:
-                links.new(principled.inputs['Base Color'].links[0].from_socket, mix_rgb.inputs[2])
-            else:
-                mix_rgb.inputs[2].default_value = principled.inputs['Base Color'].default_value
-
-            links.new(mix_rgb.outputs['Color'], principled.inputs['Base Color'])
-
-            mix_rgb.blend_type = 'OVERLAY'
-            mix_rgb.inputs[0].default_value = 0.3
-
-        def create_metal_texture(material):
-            nodes = material.node_tree.nodes
-            links = material.node_tree.links
-
-            # 保留原有的Principled BSDF节点
-            principled = nodes["Principled BSDF"]
-            
-            # 创建新节点
-            tex_coord = nodes.new(type='ShaderNodeTexCoord')
-            mapping = nodes.new(type='ShaderNodeMapping')
-            noise_texture = nodes.new(type='ShaderNodeTexNoise')
-            color_ramp = nodes.new(type='ShaderNodeValToRGB')
-
-            # 设置节点
-            mapping.inputs['Scale'].default_value = (20, 20, 20)
-            noise_texture.inputs['Scale'].default_value = 10
-            noise_texture.inputs['Detail'].default_value = 10
-            noise_texture.inputs['Roughness'].default_value = 0.3
-
-            # 设置颜色渐变
-            color_ramp.color_ramp.elements[0].position = 0.4
-            color_ramp.color_ramp.elements[0].color = (0.9, 0.9, 0.9, 1.0)
-            color_ramp.color_ramp.elements[1].position = 0.6
-            color_ramp.color_ramp.elements[1].color = (1.0, 1.0, 1.0, 1.0)
-
-            # 连接节点
-            links.new(tex_coord.outputs['Generated'], mapping.inputs['Vector'])
-            links.new(mapping.outputs['Vector'], noise_texture.inputs['Vector'])
-            links.new(noise_texture.outputs['Fac'], color_ramp.inputs['Fac'])
-            links.new(color_ramp.outputs['Color'], principled.inputs['Base Color'])
-
-        # Ellipse_Table_Top material
-        mat_table_top = bpy.data.materials.new(name="Ellipse_Table_Top_Material")
-        mat_table_top.use_nodes = True
-        nodes = mat_table_top.node_tree.nodes
-        principled = nodes["Principled BSDF"]
-        principled.inputs["Base Color"].default_value = [0.8, 0.6, 0.4, 1.0]
-        principled.inputs["Metallic"].default_value = 0.0
-        principled.inputs["Roughness"].default_value = 0.7
-        principled.inputs["IOR"].default_value = 1.5
-        principled.inputs["Alpha"].default_value = 1.0
-        principled.inputs["Normal"].default_value = [0.0, 0.0, 1.0]
-        principled.inputs["Specular IOR Level"].default_value = 0.5
-        principled.inputs["Specular Tint"].default_value = [1.0, 1.0, 1.0, 1.0]
-        principled.inputs["Anisotropic"].default_value = 0.2
-        principled.inputs["Anisotropic Rotation"].default_value = 0.0
-        principled.inputs["Transmission Weight"].default_value = 0.0
-        principled.inputs["Coat Weight"].default_value = 0.1
-        principled.inputs["Coat Roughness"].default_value = 0.1
-        principled.inputs["Coat IOR"].default_value = 1.5
-        principled.inputs["Coat Tint"].default_value = [1.0, 1.0, 1.0, 1.0]
-
-        create_wood_texture(mat_table_top)
-
-        bpy.data.objects["Ellipse_Table_Top"].data.materials.append(mat_table_top)
-
-        # Support_Column material
-        mat_support = bpy.data.materials.new(name="Support_Column_Material")
-        mat_support.use_nodes = True
-        nodes = mat_support.node_tree.nodes
-        principled = nodes["Principled BSDF"]
-        principled.inputs["Base Color"].default_value = [0.9, 0.9, 0.9, 1.0]
-        principled.inputs["Metallic"].default_value = 0.8
-        principled.inputs["Roughness"].default_value = 0.2
-        principled.inputs["IOR"].default_value = 2.5
-        principled.inputs["Alpha"].default_value = 1.0
-        principled.inputs["Normal"].default_value = [0.0, 0.0, 1.0]
-        principled.inputs["Specular IOR Level"].default_value = 0.5
-        principled.inputs["Specular Tint"].default_value = [1.0, 1.0, 1.0, 1.0]
-        principled.inputs["Anisotropic"].default_value = 0.5
-        principled.inputs["Anisotropic Rotation"].default_value = 0.0
-        principled.inputs["Transmission Weight"].default_value = 0.0
-        principled.inputs["Coat Weight"].default_value = 0.3
-        principled.inputs["Coat Roughness"].default_value = 0.1
-        principled.inputs["Coat IOR"].default_value = 1.5
-        principled.inputs["Coat Tint"].default_value = [1.0, 1.0, 1.0, 1.0]
-
-        create_metal_texture(mat_support)
-
-        bpy.data.objects["Support_Column"].data.materials.append(mat_support)
-
-        # Base material
-        mat_base = bpy.data.materials.new(name="Base_Material")
-        mat_base.use_nodes = True
-        nodes = mat_base.node_tree.nodes
-        principled = nodes["Principled BSDF"]
-        principled.inputs["Base Color"].default_value = [0.8, 0.8, 0.8, 1.0]
-        principled.inputs["Metallic"].default_value = 0.9
-        principled.inputs["Roughness"].default_value = 0.3
-        principled.inputs["IOR"].default_value = 2.5
-        principled.inputs["Alpha"].default_value = 1.0
-        principled.inputs["Normal"].default_value = [0.0, 0.0, 1.0]
-        principled.inputs["Specular IOR Level"].default_value = 0.6
-        principled.inputs["Specular Tint"].default_value = [1.0, 1.0, 1.0, 1.0]
-        principled.inputs["Anisotropic"].default_value = 0.4
-        principled.inputs["Anisotropic Rotation"].default_value = 0.0
-        principled.inputs["Transmission Weight"].default_value = 0.0
-        principled.inputs["Coat Weight"].default_value = 0.2
-        principled.inputs["Coat Roughness"].default_value = 0.15
-        principled.inputs["Coat IOR"].default_value = 1.5
-        principled.inputs["Coat Tint"].default_value = [1.0, 1.0, 1.0, 1.0]
-
-        create_metal_texture(mat_base)
-
-        bpy.data.objects["Base"].data.materials.append(mat_base)
+        只需提供Python代码，不需要其他解释。
         """
-
-        # 使用GPT生成应用材质的代码
-        material_code = generate_text_with_claude(code_prompt)
+        material_code = generate_text_with_claude(prompt)
 
         # 保存生成的材质代码到文件
         with open(os.path.join(log_dir, "material_application_code.py"), "w", encoding='utf-8') as f:
@@ -873,408 +657,6 @@ class MODEL_GENERATION_OT_generate(Operator):
         for screenshot in screenshots:
             logger.debug(f"Material application screenshot saved: {screenshot}")
 
-class MODEL_GENERATION_OT_apply_materials(Operator):
-    bl_idname = "model_generation.apply_materials"
-    bl_label = "Apply Materials"
-    bl_description = "Apply materials to the generated model"
-
-    def execute(self, context):
-        props = context.scene.model_generation_tool
-        user_input = props.input_text
-
-        with log_context(logger, user_input) as log_dir:
-            try:
-                # 获取场景信息
-                scene_info = get_scene_info()
-                formatted_scene_info = format_scene_info(scene_info)
-
-                # 获取存储在场景中的model_description
-                model_description = context.scene.get("model_description", {})
-
-                # 调用材质应用函数
-                self.apply_materials(context, user_input, user_input, model_description, log_dir, formatted_scene_info)
-
-                self.report({'INFO'}, f"Materials applied successfully. Logs saved in {log_dir}")
-            except Exception as e:
-                logger.error(f"An error occurred while applying materials: {str(e)}")
-                self.report({'ERROR'}, f"An error occurred while applying materials: {str(e)}")
-        
-        return {'FINISHED'}
-
-    def apply_materials(self, context, user_input, rewritten_input, model_description, log_dir, formatted_scene_info):
-        # 准备提示信息
-        prompt = f"""
-        Context:
-        你是一个专门负责为3D模型添加材质的AI助手。你的任务是分析现有的3D模型，并为每个部件推荐合适的材质。
-        我使用的blender版本是最新版的，你必须严格遵守以下规则：
-        1. 只能使用下面列出的Principled BSDF输入参数。
-        2. 不得使用任何未列出的节点或节点。
-        3. 违反这些规则将导致严重错误，可能使整个系统崩溃。
-        4. 必须严格遵守示例中的JSON格式，包括双大括号和缩进。
-
-        注意：
-        1. 不要使用 "Subsurface", "Sheen", "Emission" 等作为直接输入参数。这些是复合参数，需要通过其他允许的参数来实现效果。
-        2. 对于颜色和向量类型的输入，请始终使用列表格式，而不是单个浮点数。例如：
-        - 对于颜色输入（如Base Color, Specular Tint等），使用4个值的列表：[R, G, B, A]
-        - 对于向量输入（如Normal），使用3个值的列表：[X, Y, Z]
-        - 对于单一数值输入，直接使用浮点数
-
-        这是为了避免常见的"ValueError: bpy_struct: item.attr = val: sequence expected at dimension 1, not 'float'"错误。
-
-        原始用户输入：{user_input}
-        改写后的要求：{rewritten_input}
-        模型描述：{json.dumps(model_description, ensure_ascii=False, indent=2)}
-        场景中的对象信息：{formatted_scene_info}
-
-        Objective:
-        分析模型的各个部件，并为每个部件推荐合适的材质。你需要考虑模型的用途、外观和真实感。
-
-        Style:
-        - 精确：为每个部件提供具体的材质建议
-        - 详细：包括材质的名称、颜色、光泽度等节点
-        - 结构化：使用JSON格式组织信息，严格遵守示例中的格式
-        - 全面：考虑所有可能的材质节点和纹理细节
-        - 严格：只使用允许的节点，不得添加任何其他节点
-
-        Response:
-        请提供一个JSON对象，包含以下信息：
-        1. 每个部件的名称
-        2. 推荐的材质类型
-        3. 详细的材质节点（仅限于下面列出的Principled BSDF输入）
-        4. 纹理信息（如木纹、金属纹理、划痕等，但仅使用允许的节点来描述）
-
-        再此重申，只能使用下面列出的Principled BSDF输入节点。
-
-        Principled BSDF唯一允许使用的输入节点（禁止使用任何其他节点）:
-        - Base Color
-        - Metallic
-        - Roughness
-        - IOR
-        - Alpha
-        - Normal
-        - Weight
-        - Subsurface Weight
-        - Subsurface Radius
-        - Subsurface Scale
-        - Subsurface Anisotropy
-        - Specular IOR Level
-        - Specular Tint
-        - Anisotropic
-        - Anisotropic Rotation
-        - Tangent
-        - Transmission Weight
-        - Coat Weight
-        - Coat Roughness
-        - Coat IOR
-        - Coat Tint
-        - Coat Normal
-        - Sheen Weight
-        - Sheen Roughness
-        - Sheen Tint
-        - Emission Color
-        - Emission Strength
-
-        警告：使用任何未列出的参数将导致严重错误。确保你的响应中只包含这些允许的节点。
-        再此重申：只能使用下面列出的Principled BSDF节点。
-
-        Example:
-        {{
-            "桌面": {{
-                "material_type": "wood",
-                "base_color": [0.8, 0.6, 0.4, 1.0],
-                "metallic": 0.0,
-                "roughness": 0.7,
-                "ior": 1.5,
-                "alpha": 1.0,
-                "normal": (0, 0, 1),
-                "subsurface_weight": 0.1,
-                "subsurface_radius": [0.1, 0.05, 0.03],
-                "subsurface_scale": 0.1,
-                "subsurface_ior": 1.4,
-                "subsurface_anisotropy": 0.0,
-                "specular_ior_level": 0.5,
-                "specular_tint": [1.0, 1.0, 1.0, 1.0],
-                "anisotropic": 0.2,
-                "anisotropic_rotation": 0.0,
-                "transmission_weight": 0.0,
-                "coat_weight": 0.1,
-                "coat_roughness": 0.1,
-                "coat_ior": 1.5,
-                "coat_tint": [1.0, 1.0, 1.0, 1.0],
-                "sheen_weight": 0.05,
-                "sheen_roughness": 0.3,
-                "sheen_tint": [1.0, 1.0, 1.0, 1.0],
-                "emission_color": [0.0, 0.0, 0.0, 1.0],
-                "emission_strength": 0.0,
-                "wood_grain_texture": {{
-                    "scale": 2.0,
-                    "detail": 8,
-                    "distortion": 0.2,
-                    "color_ramp": [
-                        {{"position": 0.0, "color": [0.7, 0.5, 0.3, 1.0]}},
-                        {{"position": 1.0, "color": [0.9, 0.7, 0.5, 1.0]}}
-                    ]
-                }}
-            }},
-            "桌腿": {{
-                "material_type": "metal",
-                "base_color": [0.9, 0.9, 0.9, 1.0],
-                "metallic": 0.8,
-                "roughness": 0.2,
-                "ior": 2.5,
-                "alpha": 1.0,
-                "normal": (0, 0, 1),
-                "specular_ior_level": 0.5,
-                "specular_tint": [1.0, 1.0, 1.0, 1.0],
-                "anisotropic": 0.5,
-                "anisotropic_rotation": 0.0,
-                "coat_weight": 0.3,
-                "coat_roughness": 0.1,
-                "coat_ior": 1.5,
-                "coat_tint": [1.0, 1.0, 1.0, 1.0],
-                "emission_color": [0.0, 0.0, 0.0, 1.0],
-                "emission_strength": 0.0,
-                "metal_flake_texture": {{
-                    "scale": 500.0,
-                    "intensity": 0.2,
-                    "color_variation": 0.1
-                }},
-                "scratches_texture": {{
-                    "scale": 10.0,
-                    "depth": 0.05,
-                    "roughness_influence": 0.3
-                }}
-            }}
-        }}
-
-        只能使用上面列出的Principled BSDF节点。
-        请在生成之后再次比对，确保你达到了我说的要求，同时注意数据类型是否正确。
-        请直接返回JSON格式的响应，不需要其他解释或注释。确保为模型中的每个部件提供详细的材质信息，但严格限制在允许的参数范围内。再次强调，使用任何未列出的参数将导致严重错误。
-        """
-
-        # 使用Claude生成材质建议
-        response = generate_text_with_claude(prompt)
-        material_suggestions = json.loads(sanitize_reference(response))
-
-        # 保存材质建议到文件
-        with open(os.path.join(log_dir, "material_suggestions.json"), "w", encoding='utf-8') as f:
-            json.dump(material_suggestions, f, ensure_ascii=False, indent=2)
-
-        # 生成应用材质的Blender Python代码
-        code_prompt = f"""
-        Context:
-        你是一个专门用于生成Blender Python命令的AI助手，负责为3D模型添加材质。你需要根据给定的材质建议生成适当的Python代码。
-        我使用的blender为最新版本，旧版本的一些节点已被移除，请你确保没有使用任何旧版的节点（例如Specular已被移除）
-        生成时请
-
-        注意：
-        1. 不要使用 "Subsurface", "Sheen", "Emission" 等作为直接输入参数。这些是复合参数，需要通过其他允许的参数来实现效果。
-        2. 对于颜色和向量类型的输入，请始终使用列表格式，而不是单个浮点数。例如：
-        - 对于颜色输入（如Base Color, Specular Tint等），使用4个值的列表：[R, G, B, A]
-        - 对于向量输入（如Normal），使用3个值的列表：[X, Y, Z]
-        - 对于单一数值输入，直接使用浮点数
-
-        材质建议：{json.dumps(material_suggestions, ensure_ascii=False, indent=2)}
-        场景中的对象信息：{formatted_scene_info}
-
-        Objective:
-        生成Blender Python代码来为模型的各个部件添加材质。
-
-        Style:
-        - 精确：使用正确的Blender Python语法和函数
-        - 简洁：只包含必要的代码，不添加多余的注释或解释
-        - 结构化：按照逻辑顺序组织代码
-
-        Response:
-        请提供添加材质的Blender Python代码。代码应该：
-        1. 为每个部件创建新的材质
-        2. 设置材质的各项参数（如颜色、光泽度、粗糙度等）
-        3. 将材质应用到相应的对象上
-
-        Example:
-        import bpy
-
-        def create_wood_texture(material):
-            nodes = material.node_tree.nodes
-            links = material.node_tree.links
-
-            # 保留原有的Principled BSDF节点
-            principled = nodes["Principled BSDF"]
-            
-            # 创建新节点
-            tex_coord = nodes.new(type='ShaderNodeTexCoord')
-            mapping = nodes.new(type='ShaderNodeMapping')
-            noise_texture = nodes.new(type='ShaderNodeTexNoise')
-            color_ramp = nodes.new(type='ShaderNodeValToRGB')
-            mix_rgb = nodes.new(type='ShaderNodeMixRGB')
-
-            # 设置节点
-            mapping.inputs['Scale'].default_value = (10, 5, 5)
-            noise_texture.inputs['Scale'].default_value = 5
-            noise_texture.inputs['Detail'].default_value = 8
-            noise_texture.inputs['Roughness'].default_value = 0.6
-
-            # 设置颜色渐变
-            color_ramp.color_ramp.elements[0].position = 0.4
-            color_ramp.color_ramp.elements[0].color = (0.7, 0.5, 0.3, 1.0)
-            color_ramp.color_ramp.elements[1].position = 0.6
-            color_ramp.color_ramp.elements[1].color = (0.9, 0.7, 0.5, 1.0)
-
-            # 连接节点
-            links.new(tex_coord.outputs['Generated'], mapping.inputs['Vector'])
-            links.new(mapping.outputs['Vector'], noise_texture.inputs['Vector'])
-            links.new(noise_texture.outputs['Fac'], color_ramp.inputs['Fac'])
-            links.new(color_ramp.outputs['Color'], mix_rgb.inputs[1])
-            
-            # 安全地处理Base Color连接
-            if principled.inputs['Base Color'].links:
-                links.new(principled.inputs['Base Color'].links[0].from_socket, mix_rgb.inputs[2])
-            else:
-                mix_rgb.inputs[2].default_value = principled.inputs['Base Color'].default_value
-
-            links.new(mix_rgb.outputs['Color'], principled.inputs['Base Color'])
-
-            mix_rgb.blend_type = 'OVERLAY'
-            mix_rgb.inputs[0].default_value = 0.3
-
-        def create_metal_texture(material):
-            nodes = material.node_tree.nodes
-            links = material.node_tree.links
-
-            # 保留原有的Principled BSDF节点
-            principled = nodes["Principled BSDF"]
-            
-            # 创建新节点
-            tex_coord = nodes.new(type='ShaderNodeTexCoord')
-            mapping = nodes.new(type='ShaderNodeMapping')
-            noise_texture = nodes.new(type='ShaderNodeTexNoise')
-            color_ramp = nodes.new(type='ShaderNodeValToRGB')
-
-            # 设置节点
-            mapping.inputs['Scale'].default_value = (20, 20, 20)
-            noise_texture.inputs['Scale'].default_value = 10
-            noise_texture.inputs['Detail'].default_value = 10
-            noise_texture.inputs['Roughness'].default_value = 0.3
-
-            # 设置颜色渐变
-            color_ramp.color_ramp.elements[0].position = 0.4
-            color_ramp.color_ramp.elements[0].color = (0.9, 0.9, 0.9, 1.0)
-            color_ramp.color_ramp.elements[1].position = 0.6
-            color_ramp.color_ramp.elements[1].color = (1.0, 1.0, 1.0, 1.0)
-
-            # 连接节点
-            links.new(tex_coord.outputs['Generated'], mapping.inputs['Vector'])
-            links.new(mapping.outputs['Vector'], noise_texture.inputs['Vector'])
-            links.new(noise_texture.outputs['Fac'], color_ramp.inputs['Fac'])
-            links.new(color_ramp.outputs['Color'], principled.inputs['Base Color'])
-
-        # Ellipse_Table_Top material
-        mat_table_top = bpy.data.materials.new(name="Ellipse_Table_Top_Material")
-        mat_table_top.use_nodes = True
-        nodes = mat_table_top.node_tree.nodes
-        principled = nodes["Principled BSDF"]
-        principled.inputs["Base Color"].default_value = [0.8, 0.6, 0.4, 1.0]
-        principled.inputs["Metallic"].default_value = 0.0
-        principled.inputs["Roughness"].default_value = 0.7
-        principled.inputs["IOR"].default_value = 1.5
-        principled.inputs["Alpha"].default_value = 1.0
-        principled.inputs["Normal"].default_value = [0.0, 0.0, 1.0]
-        principled.inputs["Specular IOR Level"].default_value = 0.5
-        principled.inputs["Specular Tint"].default_value = [1.0, 1.0, 1.0, 1.0]
-        principled.inputs["Anisotropic"].default_value = 0.2
-        principled.inputs["Anisotropic Rotation"].default_value = 0.0
-        principled.inputs["Transmission Weight"].default_value = 0.0
-        principled.inputs["Coat Weight"].default_value = 0.1
-        principled.inputs["Coat Roughness"].default_value = 0.1
-        principled.inputs["Coat IOR"].default_value = 1.5
-        principled.inputs["Coat Tint"].default_value = [1.0, 1.0, 1.0, 1.0]
-
-        create_wood_texture(mat_table_top)
-
-        bpy.data.objects["Ellipse_Table_Top"].data.materials.append(mat_table_top)
-
-        # Support_Column material
-        mat_support = bpy.data.materials.new(name="Support_Column_Material")
-        mat_support.use_nodes = True
-        nodes = mat_support.node_tree.nodes
-        principled = nodes["Principled BSDF"]
-        principled.inputs["Base Color"].default_value = [0.9, 0.9, 0.9, 1.0]
-        principled.inputs["Metallic"].default_value = 0.8
-        principled.inputs["Roughness"].default_value = 0.2
-        principled.inputs["IOR"].default_value = 2.5
-        principled.inputs["Alpha"].default_value = 1.0
-        principled.inputs["Normal"].default_value = [0.0, 0.0, 1.0]
-        principled.inputs["Specular IOR Level"].default_value = 0.5
-        principled.inputs["Specular Tint"].default_value = [1.0, 1.0, 1.0, 1.0]
-        principled.inputs["Anisotropic"].default_value = 0.5
-        principled.inputs["Anisotropic Rotation"].default_value = 0.0
-        principled.inputs["Transmission Weight"].default_value = 0.0
-        principled.inputs["Coat Weight"].default_value = 0.3
-        principled.inputs["Coat Roughness"].default_value = 0.1
-        principled.inputs["Coat IOR"].default_value = 1.5
-        principled.inputs["Coat Tint"].default_value = [1.0, 1.0, 1.0, 1.0]
-
-        create_metal_texture(mat_support)
-
-        bpy.data.objects["Support_Column"].data.materials.append(mat_support)
-
-        # Base material
-        mat_base = bpy.data.materials.new(name="Base_Material")
-        mat_base.use_nodes = True
-        nodes = mat_base.node_tree.nodes
-        principled = nodes["Principled BSDF"]
-        principled.inputs["Base Color"].default_value = [0.8, 0.8, 0.8, 1.0]
-        principled.inputs["Metallic"].default_value = 0.9
-        principled.inputs["Roughness"].default_value = 0.3
-        principled.inputs["IOR"].default_value = 2.5
-        principled.inputs["Alpha"].default_value = 1.0
-        principled.inputs["Normal"].default_value = [0.0, 0.0, 1.0]
-        principled.inputs["Specular IOR Level"].default_value = 0.6
-        principled.inputs["Specular Tint"].default_value = [1.0, 1.0, 1.0, 1.0]
-        principled.inputs["Anisotropic"].default_value = 0.4
-        principled.inputs["Anisotropic Rotation"].default_value = 0.0
-        principled.inputs["Transmission Weight"].default_value = 0.0
-        principled.inputs["Coat Weight"].default_value = 0.2
-        principled.inputs["Coat Roughness"].default_value = 0.15
-        principled.inputs["Coat IOR"].default_value = 1.5
-        principled.inputs["Coat Tint"].default_value = [1.0, 1.0, 1.0, 1.0]
-
-        create_metal_texture(mat_base)
-
-        bpy.data.objects["Base"].data.materials.append(mat_base)
-
-        请直接返回Python代码，不需要其他解释或注释。
-        """
-
-        # 使用GPT生成应用材质的代码
-        material_code = generate_text_with_claude(code_prompt)
-
-        # 保存生成的材质代码到文件
-        with open(os.path.join(log_dir, "material_application_code.py"), "w", encoding='utf-8') as f:
-            f.write(material_code)
-
-        # 执行生成的Blender材质命令
-        try:
-            execute_blender_command(material_code)
-            logger.debug("Successfully applied materials.")
-        except Exception as e:
-            logger.error(f"Error applying materials: {str(e)}")
-            self.report({'ERROR'}, f"Error applying materials: {str(e)}")
-
-        # 更新视图
-        self.update_blender_view(context)
-
-        # 保存应用材质后的截图
-        screenshots = save_screenshots()
-        screenshot_dir = os.path.join(log_dir, "material_screenshots")
-        save_screenshots_to_path(screenshot_dir)
-        for screenshot in screenshots:
-            logger.debug(f"Material application screenshot saved: {screenshot}")
-
-    def update_blender_view(self, context):
-        # 确保更改立即可见
-        bpy.context.view_layer.update()
-        logger.debug("Blender view updated.")
 
 class MODEL_GENERATION_PT_panel(Panel):
     bl_label = "Model Generation"
@@ -1290,4 +672,4 @@ class MODEL_GENERATION_PT_panel(Panel):
         layout.prop(props, "input_text")
         layout.operator("model_generation.generate")
         # layout.operator("model_generation.optimize_once")
-        layout.operator("model_generation.apply_materials")
+        # layout.operator("model_generation.apply_materials")
