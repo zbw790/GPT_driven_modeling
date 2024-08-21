@@ -1,3 +1,5 @@
+# llama_index_model_modification.py
+
 import json
 import openai
 import bpy
@@ -142,10 +144,14 @@ class MODIFICATION_OT_query_with_screenshots(Operator):
             screenshots_path = r"D:\GPT_driven_modeling\resources\screenshots"
             screenshots = [os.path.join(screenshots_path, f) for f in os.listdir(screenshots_path) if f.lower().endswith(('.png', '.jpg', '.jpeg', '.webp', '.gif'))]
 
+            prompt = """
+            请分析下列图片并观察有什么问题
+            """
+
             if model_choice == 'GPT':
-                description = analyze_screenshots_with_gpt4(screenshots)
+                description = analyze_screenshots_with_gpt4(prompt, screenshots)
             elif model_choice == 'CLAUDE':
-                description = analyze_screenshots_with_claude(screenshots)
+                description = analyze_screenshots_with_claude(prompt, screenshots)
             else:
                 raise ValueError("Invalid model choice")
 
@@ -173,16 +179,21 @@ class MODIFICATION_OT_query_and_generate(Operator):
             screenshots_path = r"D:\GPT_driven_modeling\resources\screenshots"
             screenshots = [os.path.join(screenshots_path, f) for f in os.listdir(screenshots_path) if f.lower().endswith(('.png', '.jpg', '.jpeg', '.webp', '.gif'))]
 
+            prompt = """
+            请分析下列图片并观察有什么问题
+            """
+
             if model_choice == 'GPT':
-                description = analyze_screenshots_with_gpt4(screenshots)
+                description = analyze_screenshots_with_gpt4(prompt, screenshots)
             elif model_choice == 'CLAUDE':
-                description = analyze_screenshots_with_claude(screenshots)
+                description = analyze_screenshots_with_claude(prompt, screenshots)
             else:
                 raise ValueError("Invalid model choice")
 
             logger.info(f"{model_choice} Image Analysis: {description}")
 
             result = query_modification_documentation(context.scene.modification_query_engine, description)
+            logger.info(f"Modification Query Result: {result}")
             logger.info(f"Modification Query Result Length: {len(result)}")
 
             scene_info = get_scene_info()
