@@ -115,3 +115,6 @@ model_generation_logs/
 # Ignore logs
 history_logs/
 
+# Ignore logs
+success_logs/
+

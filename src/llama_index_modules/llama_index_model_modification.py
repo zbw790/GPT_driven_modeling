@@ -100,14 +100,15 @@ def configure_modification_query_engine(index):
 # 查询函数
 def query_modification_documentation(query_engine, query):
     response = query_engine.query(query)
+    results = []
     if response.source_nodes:
         # 获取最相关文档的文件路径
         file_path = response.source_nodes[0].node.metadata.get('file_path')
         if file_path and os.path.exists(file_path):
             # 直接读取并返回整个文件内容
             with open(file_path, 'r', encoding='utf-8') as f:
-                return f.read()
-    return "No relevant modification information found."
+                results.append(f.read())
+    return results if results else ["No relevant modification information found."]
 
 class ModificationProperties(PropertyGroup):
     input_text: StringProperty(name="Modification Query", default="")

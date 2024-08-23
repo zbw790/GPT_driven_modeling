@@ -109,76 +109,130 @@ leg4 = create_leg("leg4", (-0.7, -0.4, 0.375))
 # 更新场景
 bpy.context.view_layer.update()
 ```
-## 高级生成技巧：2D到3D
-
-除了使用基本的立方体并调整其尺寸外，还可以使用更高级的技巧来创建复杂的形状，如六边形桌面。这种方法首先创建一个2D形状，然后将其挤出成3D对象。以下是创建六边形桌面的步骤：
-
-1. 创建一个圆形
-2. 将圆形转换为六边形
-3. 挤出六边形以创建厚度
-
-### 示例代码：创建六边形桌面
+## 生成多边形的桌子
 
 ```python
 import bpy
 import bmesh
 import math
 
-def create_hexagonal_table_top(radius=1.0, thickness=0.03):
-    # 创建一个新的网格
-    mesh = bpy.data.meshes.new(name="HexagonalTableTop")
-    obj = bpy.data.objects.new("table_top", mesh)
-
-    # 将对象链接到场景
+def create_2d_pentagon(name, side_length, z_offset):
+    """
+    创建一个2D五边形
+    
+    参数:
+    name (str): 对象的名称
+    side_length (float): 五边形的边长
+    z_offset (float): 对象在z轴上的偏移量
+    
+    返回:
+    bpy.types.Object: 创建的2D五边形对象
+    """
+    mesh = bpy.data.meshes.new(name)
+    obj = bpy.data.objects.new(name, mesh)
     bpy.context.collection.objects.link(obj)
-
-    # 创建一个新的 BMesh
     bm = bmesh.new()
-
-    # 添加一个圆形
+    
+    # 创建五边形底面
     bmesh.ops.create_circle(
         bm,
         cap_ends=True,
         cap_tris=False,
-        segments=6,
-        radius=radius
+        segments=5,
+        radius=side_length/(2*math.sin(math.pi/5))
     )
-
-    # 挤出面以创建厚度
-    bmesh.ops.extrude_face_region(bm, geom=bm.faces)
-    bmesh.ops.translate(bm, vec=(0, 0, thickness), verts=bm.verts[-6:])
-
-    # 将 BMesh 数据更新到网格
+    
     bm.to_mesh(mesh)
     bm.free()
-
-    # 更新网格
-    mesh.update()
-
+    obj.location = (0, 0, z_offset)
     return obj
 
-# 使用函数创建六边形桌面
-hexagonal_table_top = create_hexagonal_table_top(radius=0.75, thickness=0.03)
+def extrude_2d_shape(obj, thickness):
+    """
+    将2D形状挤出为3D对象
+    
+    参数:
+    obj (bpy.types.Object): 要挤出的2D对象
+    thickness (float): 挤出的厚度
+    """
+    mesh = obj.data
+    bm = bmesh.new()
+    bm.from_mesh(mesh)
+    
+    bm.faces.ensure_lookup_table()
+    top_face = bm.faces[0]
+    
+    ret = bmesh.ops.extrude_face_region(bm, geom=[top_face])
+    extruded_geom = ret['geom']
+    
+    extruded_verts = [v for v in extruded_geom if isinstance(v, bmesh.types.BMVert)]
+    bmesh.ops.translate(bm, vec=(0, 0, thickness), verts=extruded_verts)
+    
+    bm.to_mesh(mesh)
+    bm.free()
+    mesh.update()
 
-# 将桌面移动到适当的位置
-hexagonal_table_top.location = (0, 0, 0.75)
+def create_cylinder(name, radius, height, z_offset):
+    """
+    创建一个圆柱体
+    
+    参数:
+    name (str): 对象的名称
+    radius (float): 圆柱体的半径
+    height (float): 圆柱体的高度
+    z_offset (float): 对象在z轴上的偏移量
+    
+    返回:
+    bpy.types.Object: 创建的圆柱体对象
+    """
+    bpy.ops.mesh.primitive_cylinder_add(
+        radius=radius,
+        depth=height,
+        location=(0, 0, z_offset + height/2)
+    )
+    obj = bpy.context.active_object
+    obj.name = name
+    return obj
+
+# 清空场景
+bpy.ops.object.select_all(action='SELECT')
+bpy.ops.object.delete()
+
+# 创建2D五边形（桌面）
+table_top_2d = create_2d_pentagon("table_top", 0.8, 0.72)
+
+# 将2D五边形挤出为3D对象
+extrude_2d_shape(table_top_2d, 0.03)
+
+# 创建中央支撑柱
+central_support = create_cylinder("central_support", 0.1, 0.72, 0)
+
+# 创建2D五边形（底座）
+base_2d = create_2d_pentagon("base", 0.5, 0)
+
+# 将底座挤出为3D对象
+extrude_2d_shape(base_2d, 0.02)
 
 # 更新场景
 bpy.context.view_layer.update()
 ```
 
-这个示例展示了如何创建一个六边形的桌面。你可以通过调整 `radius` 参数来改变桌面的大小，通过 `thickness` 参数来改变桌面的厚度。
+## 使用说明
 
-这种方法的优点是：
-1. 可以创建更复杂的形状，不限于简单的立方体。
-2. 提供了更多的控制，可以精确地定义形状的每个方面。
-3. 可以轻松地创建具有特定边数的多边形形状。
+1. 将此脚本复制到Blender的文本编辑器中。
+2. 运行脚本以创建一个五边形桌面、圆柱形支撑柱和五边形底座。
+3. 可以通过修改函数参数来调整桌面和底座的大小、厚度，以及支撑柱的尺寸。
 
-注意事项：
-- 这种方法需要更多的几何知识和编程技巧。
-- 对于简单的形状，使用基本的立方体可能更快、更简单。
-- 在使用这种方法时，确保正确处理了所有的几何细节，如面的法线方向等。
+## 注意事项
 
-注意该代码仅为示例使用，实际的物品名称可能有所变化，请根据物品名称进行适当的改动，实际的餐桌生成需要最大程度的参考用户提供的要求
+- 运行脚本前，请确保已保存当前场景，因为脚本会清空现有场景中的所有对象。
+- 这个脚本创建的是一个简单的桌子模型。根据需要，您可能需要添加更多细节或组件。
+- `extrude_2d_shape` 函数可以用于任何2D形状，不仅限于五边形。
+
+## 扩展思路
+
+- 可以修改 `create_2d_pentagon` 函数以创建其他多边形，如六边形或八边形。
+- 可以添加材质和纹理来增强模型的视觉效果。
+- 可以创建更复杂的桌子结构，如添加抽屉或装饰性元素。
 
 

@@ -2,15 +2,17 @@
 
 import bpy
 from bpy.types import Operator, Panel
+from bpy.props import StringProperty
 from abc import ABC, abstractmethod
 from src.llm_modules.gpt_module import analyze_screenshots_with_gpt4
 from src.llm_modules.claude_module import analyze_screenshots_with_claude
+from src.llm_modules.LLM_common_utils import get_screenshots, get_scene_info, format_scene_info
+from src.utils.logger_module import setup_logger, log_context
 from typing import List, Dict, Any, Tuple
 from enum import Enum
-from src.llm_modules.LLM_common_utils import get_screenshots
-from src.utils.logger_module import setup_logger, log_context
 import json
 import re
+import os
 
 # 创建专门的日志记录器
 logger = setup_logger('model_generation')
@@ -72,16 +74,18 @@ class GPTOverallEvaluator(BaseEvaluator):
     def get_prompt(self, context: Dict[str, Any]) -> str:
         return f"""
         Context:
-        你是一个专门用于评估3D模型整体质量的AI助手。你需要分析提供的多角度截图，评估模型的整体结构和设计。
+        你是一个专门用于评估3D模型整体质量的AI助手。你需要分析提供的多角度截图和场景信息，评估模型的整体结构和设计。
 
         用户原始输入: {context['user_input']}
         改写后的输入: {context['rewritten_input']}
         模型描述: {json.dumps(context['model_description'], ensure_ascii=False, indent=2)}
+        场景信息: {context['scene_info']}
 
         Objective:
         评估3D模型的整体质量，包括完整性、合理性和预期符合度，并提供详细的评估结果和改进建议。
-        一种常见的问题是，模型浮空，例如桌腿和桌面直接没有直接的连接，这种情况不符合要求
-        另一种常见的问题则是，生成的模型为平面而非3D立体的，该问题常出现在板材上。
+        以下的几种情况都应该直接判为不通过
+        一种常见的问题是，模型浮空，例如桌腿和桌面直接没有直接的连接，这种情况不符合要求，这种情况应该直接判为不通过
+        另一种常见的问题则是，生成的模型没有任何厚度，该问题常出现在板材上，且这种情况是完全不容允许的，必须补上对应的厚度。
 
         Style:
         - 分析性：仔细观察模型的各个方面
@@ -107,7 +111,7 @@ class GPTOverallEvaluator(BaseEvaluator):
         {{
             "analysis": "该3D模型整体结构完整，主要组成部分都已包含。模型的整体形状符合预期，展现了良好的设计意图。然而，某些部分之间的连接看起来不够自然，特别是在[具体位置]处。此外，[某个部分]的细节处理略显粗糙，影响了整体的精致度。",
             "status": "PASS",
-            "score": 9,
+            "score": 7.5,
             "suggestions": [
                 "改善[具体位置]的部件连接，使其更加自然流畅",
                 "增加[某个部分]的细节，提高整体精致度",
@@ -121,26 +125,28 @@ class GPTOverallEvaluator(BaseEvaluator):
         3. 模型的整体形状是否符合预期？
         4. 是否有明显的结构问题或不自然的部分？
         5. 模型是否符合用户的原始输入和改写后的要求？
+        6. 根据场景信息，模型的尺寸、位置和比例是否合适？
         """
 
     def analyze_screenshots(self, prompt: str, screenshots: List[str]) -> str:
-        # return analyze_screenshots_with_gpt4(prompt, screenshots)
         return analyze_screenshots_with_claude(prompt, screenshots)
-    
+
 class ClaudeOverallEvaluator(BaseEvaluator):
     def get_prompt(self, context: Dict[str, Any]) -> str:
         return f"""
         Context:
-        你是一个专门用于评估3D模型整体质量的AI助手。你需要分析提供的多角度截图，评估模型的整体结构和设计。
+        你是一个专门用于评估3D模型整体质量的AI助手。你需要分析提供的多角度截图和场景信息，评估模型的整体结构和设计。
 
         用户原始输入: {context['user_input']}
         改写后的输入: {context['rewritten_input']}
         模型描述: {json.dumps(context['model_description'], ensure_ascii=False, indent=2)}
+        场景信息: {context['scene_info']}
 
         Objective:
         使用Claude的独特视角评估3D模型的整体质量，包括完整性、合理性和预期符合度，并提供详细的评估结果和改进建议。
+        以下的几种情况都应该直接判为不通过
         一种常见的问题是，模型浮空，例如桌腿和桌面直接没有直接的连接，这种情况不符合要求
-        另一种常见的问题则是，生成的模型没有任何厚度，该问题常出现在板材上，例如桌板，椅板等，这种模型可以通过对比两张图轻易发现，且严重不符合要求。
+        另一种常见的问题则是，生成的模型没有任何厚度，该问题常出现在板材上，且这种情况是完全不容允许的，必须补上对应的厚度。
 
         Style:
         - 全面性：考虑模型的各个方面
@@ -180,6 +186,7 @@ class ClaudeOverallEvaluator(BaseEvaluator):
         3. 模型的整体形状是否符合预期？
         4. 是否有明显的结构问题或不自然的部分？
         5. 模型是否符合用户的原始输入和改写后的要求？
+        6. 根据场景信息，模型的尺寸、位置和比例是否合适？
         """
 
     def analyze_screenshots(self, prompt: str, screenshots: List[str]) -> str:
@@ -189,11 +196,12 @@ class SizeEvaluator(BaseEvaluator):
     def get_prompt(self, context: Dict[str, Any]) -> str:
         return f"""
         Context:
-        你是一个专门评估3D模型尺寸的AI助手。你需要分析提供的多角度截图，评估模型各部分的大小是否合适。
+        你是一个专门评估3D模型尺寸的AI助手。你需要分析提供的多角度截图和场景信息，评估模型各部分的大小是否合适。
 
         用户原始输入: {context['user_input']}
         改写后的输入: {context['rewritten_input']}
         模型描述: {json.dumps(context['model_description'], ensure_ascii=False, indent=2)}
+        场景信息: {context['scene_info']}
 
         Objective:
         评估3D模型的尺寸是否合理，包括整体大小和各部分的相对尺寸，并提供详细的评估结果和改进建议。
@@ -236,6 +244,7 @@ class SizeEvaluator(BaseEvaluator):
         3. 是否有任何部分的尺寸明显不合适？
         4. 尺寸是否影响了模型的功能或美观？
         5. 模型尺寸是否符合用户的原始输入和改写后的要求？
+        6. 根据场景信息，模型的尺寸是否与其他对象协调？
         """
 
     def analyze_screenshots(self, prompt: str, screenshots: List[str]) -> str:
@@ -245,11 +254,12 @@ class ProportionEvaluator(BaseEvaluator):
     def get_prompt(self, context: Dict[str, Any]) -> str:
         return f"""
         Context:
-        你是一个专门评估3D模型比例的AI助手。你需要分析提供的多角度截图，评估模型各部分之间的比例关系。
+        你是一个专门评估3D模型比例的AI助手。你需要分析提供的多角度截图和场景信息，评估模型各部分之间的比例关系。
 
         用户原始输入: {context['user_input']}
         改写后的输入: {context['rewritten_input']}
         模型描述: {json.dumps(context['model_description'], ensure_ascii=False, indent=2)}
+        场景信息: {context['scene_info']}
 
         Objective:
         评估3D模型的比例是否协调，包括各部分之间的大小关系，并提供详细的评估结果和改进建议。
@@ -292,6 +302,7 @@ class ProportionEvaluator(BaseEvaluator):
         3. 比例是否符合模型的预期用途？
         4. 与真实物体相比，有哪些比例需要调整？
         5. 模型比例是否符合用户的原始输入和改写后的要求？
+        6. 根据场景信息，模型的比例是否与其他对象协调？
         """
 
     def analyze_screenshots(self, prompt: str, screenshots: List[str]) -> str:
@@ -301,15 +312,17 @@ class StructureEvaluator(BaseEvaluator):
     def get_prompt(self, context: Dict[str, Any]) -> str:
         return f"""
         Context:
-        你是一个专门评估3D模型结构的AI助手。你需要分析提供的多角度截图，评估模型的整体结构和细节处理。
+        你是一个专门评估3D模型结构的AI助手。你需要分析提供的多角度截图和场景信息，评估模型的整体结构和细节处理。
 
         用户原始输入: {context['user_input']}
         改写后的输入: {context['rewritten_input']}
         模型描述: {json.dumps(context['model_description'], ensure_ascii=False, indent=2)}
+        场景信息: {context['scene_info']}
 
         Objective:
         评估3D模型的结构是否合理，包括整体布局、连接方式和细节处理，并提供详细的评估结果和改进建议。
         一种常见的问题是，生成的模型为平面而非3D立体的，该问题常出现在板材上。
+        又或者出现了明显的穿模，例如椅子的腿直接插出了椅子坐垫，很明显这种情况都是不容运允许的。
 
         Style:
         - 系统性：全面考虑模型的各个结构部分
@@ -350,6 +363,66 @@ class StructureEvaluator(BaseEvaluator):
         3. 结构设计是否符合模型的预期用途？
         4. 是否存在潜在的结构弱点或不稳定因素？
         5. 模型结构是否符合用户的原始输入和改写后的要求？
+        6. 根据场景信息，模型的结构是否与其他对象协调？
+        """
+
+    def analyze_screenshots(self, prompt: str, screenshots: List[str]) -> str:
+        return analyze_screenshots_with_claude(prompt, screenshots)
+    
+class UsabilityEvaluator(BaseEvaluator):
+    def get_prompt(self, context: Dict[str, Any]) -> str:
+        return f"""
+        Context:
+        你是一个专门评估3D模型实用性和功能性的AI助手。你需要分析提供的多角度截图和场景信息，根据常识判断该物品是否可用。
+
+        用户原始输入: {context['user_input']}
+        改写后的输入: {context['rewritten_input']}
+        模型描述: {json.dumps(context['model_description'], ensure_ascii=False, indent=2)}
+        场景信息: {context['scene_info']}
+
+        Objective:
+        评估3D模型的实用性和功能性，判断其是否符合常识和预期用途，并提供详细的评估结果和改进建议。
+
+        Style:
+        - 实用性：关注模型的实际使用价值
+        - 常识性：基于日常生活经验进行判断
+        - 功能性：评估模型是否能够满足其预期功能
+
+        Tone:
+        - 客观：基于事实和常识进行评判
+        - 实际：考虑实际使用场景
+        - 建设性：提供有助于提高实用性的建议
+
+        Audience:
+        3D模型设计师、产品开发人员和最终用户
+
+        Response:
+        请提供一个JSON对象，包含以下元素：
+        1. analysis: 对模型实用性和功能性的详细分析，包括优点和问题
+        2. status: 评估状态（"NOT_PASS", "PASS", 或 "GOOD"）
+        3. score: 实用性评分（0-10的浮点数，仅供参考，以5为分界线，5以下都属于不通过，7以上为Good）
+        4. suggestions: 提高实用性和功能性的建议列表
+
+        Example:
+        {{
+            "analysis": "该3D模型展现了良好的实用性设计。作为一张桌子，它的平面足够宽阔，能够支撑日常使用物品。桌腿结构稳固，提供了良好的支撑。然而，桌子边缘的设计可能略显锐利，可能存在安全隐患。此外，桌面高度似乎略高于标准，可能影响某些用户的舒适使用。",
+            "status": "PASS",
+            "score": 7.5,
+            "suggestions": [
+                "考虑将桌子边缘设计得更加圆润，以提高安全性",
+                "调整桌面高度至标准水平（约75厘米），以提高舒适度",
+                "在桌面添加防滑纹理或材质，增强实用性",
+                "考虑增加简单的收纳功能，如抽屉或隐藏式置物空间"
+            ]
+        }}
+
+        评估要点：
+        1. 模型的设计是否符合其预期用途？
+        2. 是否存在明显的安全隐患或使用障碍？
+        3. 模型的尺寸和结构是否适合实际使用？
+        4. 与类似物品相比，该模型是否具有竞争力？
+        5. 模型是否符合用户的原始输入和改写后的要求？
+        6. 根据场景信息，模型在实际环境中是否易于使用？
         """
 
     def analyze_screenshots(self, prompt: str, screenshots: List[str]) -> str:
@@ -363,9 +436,17 @@ class ModelEvaluator:
             SizeEvaluator(),
             ProportionEvaluator(),
             StructureEvaluator(),
+            UsabilityEvaluator(), 
         ]
 
     def evaluate(self, screenshots: List[str], context: Dict[str, Any]) -> Dict[str, EvaluationResult]:
+        # 获取场景信息
+        scene_info = get_scene_info()
+        formatted_scene_info = format_scene_info(scene_info)
+        
+        # 将场景信息添加到context中
+        context['scene_info'] = formatted_scene_info
+
         results = {}
         for evaluator in self.evaluators:
             result = evaluator.evaluate(screenshots, context)
@@ -409,8 +490,6 @@ class ModelEvaluator:
         _, final_status, _, _ = self.aggregate_results(results)
         return final_status in [EvaluationStatus.PASS, EvaluationStatus.GOOD]
 
-# 以下是用于Blender界面的操作符和面板类，可以根据需要保留或删除
-
 class OBJECT_OT_evaluate_model(Operator):
     bl_idname = "object.evaluate_model"
     bl_label = "Evaluate Model"
@@ -452,3 +531,14 @@ class Evaluator_PT_panel(Panel):
     def draw(self, context):
         layout = self.layout
         layout.operator("object.evaluate_model")
+
+def register():
+    bpy.utils.register_class(OBJECT_OT_evaluate_model)
+    bpy.utils.register_class(Evaluator_PT_panel)
+
+def unregister():
+    bpy.utils.unregister_class(OBJECT_OT_evaluate_model)
+    bpy.utils.unregister_class(Evaluator_PT_panel)
+
+if __name__ == "__main__":
+    register()

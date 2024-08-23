@@ -51,15 +51,6 @@ def log_context(logger, input_text):
         system_handler.close()
         debug_handler.close()
 
-def save_screenshot(log_dir, screenshot_path, process_type):
-    screenshot_dir = os.path.join(log_dir, process_type)
-    os.makedirs(screenshot_dir, exist_ok=True)
-
-    filename = os.path.basename(screenshot_path)
-    new_path = os.path.join(screenshot_dir, filename)
-
-    shutil.copy(screenshot_path, new_path)
-    return new_path
 
 # 设置根日志记录器，这将影响所有未明确配置的日志记录器
 logging.basicConfig(level=logging.DEBUG, format='## %(asctime)s - %(name)s - %(levelname)s\n\n%(message)s\n\n')

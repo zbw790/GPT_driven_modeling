@@ -173,11 +173,18 @@ def get_scene_info():
             "type": obj.type,
             "location": tuple(obj.location),
             "rotation": tuple(obj.rotation_euler),
-            "scale": tuple(obj.scale)
+            "scale": tuple(obj.scale),
+            "dimensions": tuple(obj.dimensions)
         }
+        
         if obj.type == 'MESH':
             obj_info["vertex_count"] = len(obj.data.vertices)
             obj_info["face_count"] = len(obj.data.polygons)
+            
+            # 获取材质信息
+            materials = [slot.material.name for slot in obj.material_slots if slot.material]
+            obj_info["materials"] = materials
+        
         scene_info.append(obj_info)
     return scene_info
 
@@ -189,9 +196,15 @@ def format_scene_info(scene_info):
         formatted_info += f"  位置: {obj['location']}\n"
         formatted_info += f"  旋转: {obj['rotation']}\n"
         formatted_info += f"  缩放: {obj['scale']}\n"
-        if 'vertex_count' in obj:
+        formatted_info += f"  尺寸:\n"
+        formatted_info += f"    长 (X): {obj['dimensions'][0]:.3f}\n"
+        formatted_info += f"    宽 (Y): {obj['dimensions'][1]:.3f}\n"
+        formatted_info += f"    高 (Z): {obj['dimensions'][2]:.3f}\n"
+        if obj['type'] == 'MESH':
             formatted_info += f"  顶点数: {obj['vertex_count']}\n"
             formatted_info += f"  面数: {obj['face_count']}\n"
+            if obj['materials']:
+                formatted_info += f"  材质: {', '.join(obj['materials'])}\n"
         formatted_info += "\n"
     return formatted_info
 
@@ -202,7 +215,7 @@ def execute_blender_command(command):
         
         dedented_command = textwrap.dedent(sanitized_command)
         
-        # 创建一个新的全局命名空间, 注意__builtins__的正确写法是 __builtins__
+        # 创建一个新的全局命名空间
         exec_globals = {
             '__name__': '__main__',
             '__builtins__': __builtins__,
@@ -224,18 +237,23 @@ def execute_blender_command(command):
         exec(dedented_command, exec_globals)
         
         logger.info("命令执行成功")
-    except IndentationError as ie:
-        logger.error(f"缩进错误: {str(ie)}")
-        logger.error(f"出错的代码行: {ie.text}")
-        logger.error(f"出错的行号: {ie.lineno}")
-    except SyntaxError as se:
-        logger.error(f"语法错误: {str(se)}")
-        logger.error(f"出错的代码行: {se.text}")
-        logger.error(f"出错的行号: {se.lineno}")
+        return None  # 如果执行成功，返回 None
     except Exception as e:
-        logger.error(f"命令执行失败: {str(e)}")
-        logger.error(f"错误类型: {type(e).__name__}")
-        logger.error(f"完整的错误信息: {traceback.format_exc()}")
+        error_message = f"命令执行失败: {str(e)}\n"
+        error_message += f"错误类型: {type(e).__name__}\n"
+        error_message += f"完整的错误信息:\n{traceback.format_exc()}"
+        logger.error(error_message)
+        raise  # 重新抛出异常，以保持与原有行为一致
+
+def execute_blender_command_with_error_handling(command):
+    try:
+        execute_blender_command(command)
+        return None
+    except Exception as e:
+        error_message = f"命令执行失败: {str(e)}\n"
+        error_message += f"错误类型: {type(e).__name__}\n"
+        error_message += f"完整的错误信息:\n{traceback.format_exc()}"
+        return error_message
 
 def add_history_to_prompt(context, prompt):
     conversation_manager = context.scene.conversation_manager

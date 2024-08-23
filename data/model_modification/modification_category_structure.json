@@ -1,22 +1,23 @@
 {
-    "categories": [
-      {
-        "name": "furniture",
-        "subcategories": [
-          {
-            "name": "table",
-            "problems": [
-              {"name": "精确修复3D模型组件分离及错位问题", "file": "components_structure_precision_fix.md"}
-            ]
-          },
-          {
-            "name": "chair",
-            "problems": [
-              {"name": "椅腿和椅面分离", "file": "chair_leg_separation.md"},
-              {"name": "靠背太小", "file": "back_rest_too_small.md"}
-            ]
-          }
-        ]
-      }
-    ]
-  }
+  "categories": [
+    {
+      "name": "furniture",
+      "subcategories": [
+        {
+          "name": "table",
+          "problems": [
+            {"name": "精确修复3D模型组件分离及错位问题", "file": "components_structure_precision_fix.md"},
+            {"name": "修复桌面板材无厚度问题", "file": "table_top_thickness_fix.md"}
+          ]
+        },
+        {
+          "name": "chair",
+          "problems": [
+            {"name": "椅腿和椅面分离", "file": "chair_leg_separation.md"},
+            {"name": "靠背太小", "file": "back_rest_too_small.md"}
+          ]
+        }
+      ]
+    }
+  ]
+}
