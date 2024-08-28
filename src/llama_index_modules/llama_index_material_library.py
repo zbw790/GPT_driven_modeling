@@ -181,7 +181,7 @@ class MATERIAL_OT_generate_material(Operator):
         分析场景中的每个对象，并确定它们可能需要的材质类型。考虑对象的名称、形状和可能的用途。
 
         Output:
-        请提供一个JSON对象，其中包含每个对象的名称作为键，以及建议的材质类型作为值：
+        请提供一个JSON对象，其中包含每个对象的名称作为键，以及建议的材质类型作为值,注意一些材质为blender场景自带的，例如摄像机Camera等，该类物品不需要添加材质：
         {{
             "Table_Top": "wood",
             "Table_Leg": "metal",

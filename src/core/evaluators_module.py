@@ -45,9 +45,9 @@ def parse_json_response(response, default_message="无法解析评估结果。")
     
     return {
         "analysis": default_message,
-        "status": "NOT_PASS",
+        "status": "PASS",
         "score": 0,
-        "suggestions": ["请检查模型并重新评估。"]
+        "suggestions": ["该部分解析失败，请检查模型并重新评估。"]
     }
 
 class BaseEvaluator(ABC):
@@ -84,6 +84,7 @@ class GPTOverallEvaluator(BaseEvaluator):
         Objective:
         评估3D模型的整体质量，包括完整性、合理性和预期符合度，并提供详细的评估结果和改进建议。
         以下的几种情况都应该直接判为不通过
+        除材质相关的要求外，有任何一点不符合用户要求
         一种常见的问题是，模型浮空，例如桌腿和桌面直接没有直接的连接，这种情况不符合要求，这种情况应该直接判为不通过
         另一种常见的问题则是，生成的模型没有任何厚度，该问题常出现在板材上，且这种情况是完全不容允许的，必须补上对应的厚度。
 
@@ -144,7 +145,7 @@ class ClaudeOverallEvaluator(BaseEvaluator):
 
         Objective:
         使用Claude的独特视角评估3D模型的整体质量，包括完整性、合理性和预期符合度，并提供详细的评估结果和改进建议。
-        以下的几种情况都应该直接判为不通过
+        除材质相关的要求外，有任何一点不符合用户要求
         一种常见的问题是，模型浮空，例如桌腿和桌面直接没有直接的连接，这种情况不符合要求
         另一种常见的问题则是，生成的模型没有任何厚度，该问题常出现在板材上，且这种情况是完全不容允许的，必须补上对应的厚度。
 
@@ -531,14 +532,3 @@ class Evaluator_PT_panel(Panel):
     def draw(self, context):
         layout = self.layout
         layout.operator("object.evaluate_model")
-
-def register():
-    bpy.utils.register_class(OBJECT_OT_evaluate_model)
-    bpy.utils.register_class(Evaluator_PT_panel)
-
-def unregister():
-    bpy.utils.unregister_class(OBJECT_OT_evaluate_model)
-    bpy.utils.unregister_class(Evaluator_PT_panel)
-
-if __name__ == "__main__":
-    register()

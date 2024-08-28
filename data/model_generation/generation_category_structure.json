@@ -4,6 +4,24 @@
         "name": "furniture",
         "subcategories": [
           {
+            "name": "window",
+            "types": [
+              {"name": "窗户", "file": "window.md"}
+            ]
+          },
+          {
+            "name": "picture_frame",
+            "types": [
+              {"name": "画框", "file": "picture_frame.md"}
+            ]
+          },
+          {
+            "name": "bookshelf",
+            "types": [
+              {"name": "书架", "file": "bookshelf.md"}
+            ]
+          },
+          {
             "name": "table",
             "types": [
               {"name": "书桌", "file": "desk.md"},

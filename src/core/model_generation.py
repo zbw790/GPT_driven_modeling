@@ -207,7 +207,9 @@ class MODEL_GENERATION_OT_generate(Operator):
         部件库文档：{component_docs}
 
         Objective:
+        生成时请尽可能参照相关生成文档的内容，因为他们提供了一个合理的生成方法，可以在此基础上进行改动
         生成适当的Blender Python命令来创建指定的3D模型。代码应该准确反映用户的需求，并遵循Blender API的最佳实践。同时，参考部件库文档中的指南来创建各个部件。
+        生成的模型应该只考虑外观，而不考虑可能的内部结构，例如一棵树的树冠以球体构成，则不需要考虑树冠内部的树枝，因为无法正常看到树枝。
 
         Style:
         - 精确：使用正确的Blender Python语法和函数
@@ -241,7 +243,7 @@ class MODEL_GENERATION_OT_generate(Operator):
         conversation_manager = context.scene.conversation_manager
         initialize_conversation(context)
         prompt_with_history = add_history_to_prompt(context, prompt)
-        response = generate_text_with_context(prompt_with_history)
+        response = generate_text_with_claude(prompt_with_history)
 
         # 更新对话历史
         conversation_manager.add_message("user", prompt)
@@ -274,7 +276,7 @@ class MODEL_GENERATION_OT_generate(Operator):
             """
             
             # 使用 GPT 生成修正后的代码
-            corrected_response = generate_text_with_context(error_prompt)
+            corrected_response = generate_text_with_claude(error_prompt)
             
             logger.info(f"GPT Generated Corrected Commands:\n{corrected_response}")
             
@@ -318,7 +320,7 @@ class MODEL_GENERATION_OT_generate(Operator):
         logger.debug("Blender view updated.")
     
     def evaluate_and_optimize_model(self, context, user_input, rewritten_input, model_description, log_dir):
-        max_iterations = 5  # 设置最大迭代次数
+        max_iterations = 8  # 设置最大迭代次数
         iteration = 0
         
         while iteration < max_iterations:
@@ -396,6 +398,7 @@ class MODEL_GENERATION_OT_generate(Operator):
 
         Objective:
         该模型生成任务只需要生成模型的草模即可，换句话说就是模型只要长得像就算达到目标，不需要去追求更细节的改变。
+        生成的模型应该只考虑外观，而不考虑可能的内部结构，例如一棵树的树冠以球体构成，则不需要考虑树冠内部的树枝，因为无法正常看到树枝。
         例如一个桌子的桌面浮在空中且并未与桌腿相连，建议提出需要链接这两部分。这种类型的建议是必要的，否则桌子将不像是桌子
         反之在桌腿之间增加横梁支撑结构，提高整体稳定性这种类型的建议并不是特别重要，因为增加横梁不会让一个桌子更像桌子。
         该模型将用在虚拟场景中替换对应的物品，因此现实世界中的真实性和合理性不那么重要。
@@ -426,8 +429,6 @@ class MODEL_GENERATION_OT_generate(Operator):
         {{
             "priority_suggestions": [
                 "建议1",
-                "建议2",
-                "建议3"
             ],
             "secondary_suggestions": [
                 "建议1",
@@ -442,82 +443,39 @@ class MODEL_GENERATION_OT_generate(Operator):
         return json.loads(response)
 
     def optimize_model(self, context, priority_suggestions, evaluation_context, screenshots, iteration_dir, iteration):
-        # 查询每个优先建议的相关文档
-        suggestion_docs = self.query_suggestion_docs(priority_suggestions)
+        all_optimization_responses = []
 
         # 获取场景信息
         scene_info = get_scene_info()
         formatted_scene_info = format_scene_info(scene_info)
         logger.info(f"场景内的模型信息: {formatted_scene_info}")
 
-        # 准备优化提示
-        prompt = f"""
-        Context:
-        你是一个专门负责优化3D模型的AI助手。你的任务是根据给定的信息和建议,生成Blender Python命令来优化现有的3D模型。
+        # 为每个建议生成单独的优化代码
+        for suggestion in priority_suggestions:
+            # 获取相关优化文档
+            modification_doc = query_modification_documentation(bpy.types.Scene.modification_query_engine, suggestion)
+            logger.info(f"相关优化文档: {modification_doc}")
 
-        原始用户输入：{evaluation_context['user_input']}
-        改写后的要求：{evaluation_context['rewritten_input']}
-        模型描述：{json.dumps(evaluation_context['model_description'], ensure_ascii=False, indent=2)}
-        优化建议：{json.dumps(priority_suggestions, ensure_ascii=False, indent=2)}
-        相关优化文档：{json.dumps(suggestion_docs, ensure_ascii=False, indent=2)}
-        以下是场景中所有存在的对象的详细信息：{formatted_scene_info}
+            optimization_response = self.generate_optimization_code_for_suggestion(context, suggestion, evaluation_context, formatted_scene_info, modification_doc)
+            all_optimization_responses.append(optimization_response)
+            logger.info(f"生成的优化代码 for '{suggestion}': {optimization_response}")
 
-        Objective:
-        生成Blender Python命令来优化现有的3D模型,同时保持模型的基本结构和特征。主要任务是优化模型,而不是创建全新的模型。只有在现有模型的某些部分完全不可用时,才考虑删除并重新生成。
+        # 综合所有响应，生成最终的优化代码
+        final_optimization_code = self.generate_final_optimization_code(context, all_optimization_responses, evaluation_context, formatted_scene_info)
 
-        Style:
-        - 精确：使用准确的Blender Python命令
-        - 简洁：只包含必要的代码,不添加多余的注释或解释
-        - 结构化：按照逻辑顺序组织代码
-
-        Tone:
-        - 专业：使用Blender API的专业术语和函数
-        - 直接：直接给出代码,不需要额外的解释
-        - 技术性：专注于技术实现,不需要解释代码的意图
-
-        Audience:
-        熟悉Blender Python API的3D建模工程师和开发人员
-
-        Response:
-        请提供优化3D模型的Blender Python代码。代码应该：
-        1. 使用bpy库来修改现有对象
-        2. 只修改需要优化的部分,保留其他部分不变
-        3. 确保优化后的模型符合原始描述和要求
-        4. 如果需要添加新组件,确保它们与现有组件协调
-        5. 除非绝对必要,不要删除现有模型并生成全新模型
-
-        请直接返回Python代码,不需要其他解释或注释。
-        """
-        logger.info(f"相关优化文档： {suggestion_docs}")
-
-        # 使用 GPT 生成优化命令
-        conversation_manager = context.scene.conversation_manager
-        initialize_conversation(context)
-        prompt_with_history = add_history_to_prompt(context, prompt)
-        
-        if iteration % 2 == 0:
-            response = analyze_screenshots_with_claude(prompt_with_history, screenshots)
-        else:
-            response = analyze_screenshots_with_gpt4(prompt_with_history, screenshots)
-
-        # 更新对话历史
-        conversation_manager.add_message("user", prompt)
-        conversation_manager.add_message("assistant", response)
-
-        logger.info(f"GPT Generated Optimization Commands:\n```python\n{response}\n```")
+        logger.info(f"最终生成的优化代码:\n{final_optimization_code}")
 
         # 保存生成的优化代码到文件
         with open(os.path.join(iteration_dir, "optimization_code.py"), "w", encoding='utf-8') as f:
-            f.write(response)
+            f.write(final_optimization_code)
 
         # 执行生成的Blender优化命令
-        error_message = execute_blender_command_with_error_handling(response)
+        error_message = execute_blender_command_with_error_handling(final_optimization_code)
         if error_message:
             logger.error(f"Error executing optimization commands: {error_message}")
             
             # 准备新的提示，包含错误信息
             error_prompt = f"""
-            之前的prompt:{prompt}
             在执行之前生成的Blender优化命令时发生了错误。以下是错误信息：
 
             {error_message}
@@ -525,13 +483,14 @@ class MODEL_GENERATION_OT_generate(Operator):
             请根据这个错误信息修改之前生成的代码。确保新生成的代码能够正确执行，并避免之前的错误。
 
             之前生成的代码：
-            {response}
+            {final_optimization_code}
 
             请提供修正后的Blender Python代码。
+            请直接返回Python代码，不需要其他解释或注释。
             """
             
-            # 使用 GPT 生成修正后的代码
-            corrected_response = generate_text_with_context(error_prompt)
+            # 使用 Claude 生成修正后的代码
+            corrected_response = generate_text_with_claude(error_prompt)
             
             logger.info(f"GPT Generated Corrected Optimization Commands:\n{corrected_response}")
             
@@ -560,14 +519,83 @@ class MODEL_GENERATION_OT_generate(Operator):
         for screenshot in screenshots:
             logger.debug(f"Iteration {iteration + 1} evaluation screenshot saved: {screenshot}")
 
-    def query_suggestion_docs(self, suggestions):
-        all_docs = []
+    def generate_optimization_code_for_suggestion(self, context, suggestion, evaluation_context, formatted_scene_info, modification_doc):
+        prompt = f"""
+        Context:
+        你是一个专门负责优化3D模型的AI助手。你的任务是根据给定的单个建议，生成Blender Python命令来优化现有的3D模型。
+        生成的模型应该只考虑外观，而不考虑可能的内部结构，例如一棵树的树冠以球体构成，则不需要考虑树冠内部的树枝，因为无法正常看到树枝。
 
-        for suggestion in suggestions:
-            results = query_modification_documentation(bpy.types.Scene.modification_query_engine, suggestion)
-            all_docs.extend(results)
+        原始用户输入：{evaluation_context['user_input']}
+        改写后的要求：{evaluation_context['rewritten_input']}
+        模型描述：{json.dumps(evaluation_context['model_description'], ensure_ascii=False, indent=2)}
+        场景信息：{formatted_scene_info}
+        优化建议：{suggestion}
+        相关优化指示文档：{modification_doc}
 
-        return all_docs
+        Objective:
+        生成Blender Python命令来实现这个特定的优化建议，同时保持模型的其他部分不变。
+
+        Style:
+        - 精确：使用准确的Blender Python命令
+        - 简洁：只包含必要的代码，不添加多余的注释或解释
+        - 专注：只针对给定的建议进行优化
+
+        Tone:
+        - 专业：使用Blender API的专业术语和函数
+        - 直接：直接给出代码，不需要额外的解释
+        - 技术性：专注于技术实现，不需要解释代码的意图
+
+        Response:
+        请提供实现这个特定优化建议的Blender Python代码。
+        请直接返回Python代码，不需要其他解释或注释。
+        """
+        
+        response = generate_text_with_claude(prompt)
+        return response
+
+    def generate_final_optimization_code(self, context, all_optimization_responses, evaluation_context, formatted_scene_info):
+        combined_responses = "\n\n".join(all_optimization_responses)
+        
+        prompt = f"""
+        Context:
+        你是一个专门负责优化3D模型的AI助手。你的任务是将多个优化步骤的代码合并成一个连贯的优化脚本。
+        生成的模型应该只考虑外观，而不考虑可能的内部结构，例如一棵树的树冠以球体构成，则不需要考虑树冠内部的树枝，因为无法正常看到树枝。
+
+        原始用户输入：{evaluation_context['user_input']}
+        改写后的要求：{evaluation_context['rewritten_input']}
+        模型描述：{json.dumps(evaluation_context['model_description'], ensure_ascii=False, indent=2)}
+        场景信息：{formatted_scene_info}
+
+        以下是各个优化步骤的代码：
+
+        {combined_responses}
+
+        Objective:
+        将这些代码片段合并成一个连贯的、高效的优化脚本。确保各个优化步骤之间不会相互冲突，并尽可能优化代码结构。
+
+        Style:
+        - 精确：使用准确的Blender Python命令
+        - 高效：避免重复操作，优化代码结构
+        - 连贯：确保各个优化步骤顺利衔接
+
+        Tone:
+        - 专业：使用Blender API的专业术语和函数
+        - 直接：直接给出代码，不需要额外的解释
+        - 技术性：专注于技术实现，不需要解释代码的意图
+
+        Response:
+        请提供合并后的Blender Python代码。代码应该：
+        1. 使用bpy库来修改现有对象
+        2. 只修改需要优化的部分，保留其他部分不变
+        3. 确保优化后的模型符合原始描述和要求
+        4. 如果需要添加新组件，确保它们与现有组件协调
+        5. 除非绝对必要，不要删除现有模型并生成全新模型
+
+        请直接返回Python代码，不需要其他解释或注释。
+        """
+        
+        response = generate_text_with_claude(prompt)
+        return response
     
     def apply_materials(self, context, user_input, rewritten_input, model_description, log_dir):
         try:
@@ -646,6 +674,7 @@ class MODEL_GENERATION_OT_generate(Operator):
         prompt = f"""
         Context:
         你是一个专门为3D模型生成材质的AI助手。根据提供的材质需求和相关文档，生成Blender Python代码来创建和应用材质。
+        注意，你应该且只应该生成材质，不应该修改任何场上的模型。
 
         注意：
         1. 不要使用 "Subsurface", "Sheen", "Emission", "Transmission" 等作为直接输入参数。这些是复合参数，需要通过其他允许的参数来实现效果。

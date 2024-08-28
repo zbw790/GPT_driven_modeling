@@ -26,7 +26,6 @@ import bmesh
 def create_surface(name, length=1.2, width=0.8, thickness=0.03, corner_radius=0.02):
     mesh = bpy.data.meshes.new(name)
     obj = bpy.data.objects.new(name, mesh)
-    bpy.context.collection.objects.link(obj)
     
     bm = bmesh.new()
     bmesh.ops.create_cube(bm, size=1)
@@ -57,11 +56,11 @@ surface = create_surface("table_top")
 ```python
 import bpy
 import bmesh
+from mathutils import Vector
 
 def create_polygon_surface(name, sides=6, radius=0.75, thickness=0.03):
     mesh = bpy.data.meshes.new(name)
     obj = bpy.data.objects.new(name, mesh)
-    bpy.context.collection.objects.link(obj)
     
     bm = bmesh.new()
     bmesh.ops.create_circle(
@@ -71,8 +70,19 @@ def create_polygon_surface(name, sides=6, radius=0.75, thickness=0.03):
         segments=sides,
         radius=radius
     )
-    bmesh.ops.extrude_face_region(bm, geom=bm.faces)
-    bmesh.ops.translate(bm, vec=(0, 0, thickness), verts=bm.verts[-sides:])
+    
+    # 确保查找表是最新的
+    bm.faces.ensure_lookup_table()
+    
+    # 获取顶面
+    top_face = bm.faces[0]
+    
+    # 挤出整个顶面
+    ret = bmesh.ops.extrude_face_region(bm, geom=[top_face])
+    extruded_verts = [v for v in ret["geom"] if isinstance(v, bmesh.types.BMVert)]
+    
+    # 移动挤出的顶点
+    bmesh.ops.translate(bm, vec=Vector((0, 0, thickness)), verts=extruded_verts)
     
     bm.to_mesh(mesh)
     bm.free()
