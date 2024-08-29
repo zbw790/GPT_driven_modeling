@@ -622,7 +622,7 @@ class MODEL_GENERATION_OT_generate(Operator):
     def analyze_scene_for_materials(self, user_input, rewritten_input, formatted_scene_info, model_description):
         prompt = f"""
         Context:
-        你是一个专门分析3D场景并确定所需材质的AI助手。根据提供的场景信息和模型描述，确定每个对象需要的材质类型。
+        你是一个专门分析3D场景并确定所需材质的AI助手。根据提供的场景信息和模型描述，确定需要的材质类型。
 
         用户原始输入：{user_input}
         改写后的要求：{rewritten_input}
@@ -630,15 +630,15 @@ class MODEL_GENERATION_OT_generate(Operator):
         模型描述：{json.dumps(model_description, ensure_ascii=False, indent=2)}
 
         Task:
-        分析场景中的每个对象，并确定它们可能需要的材质类型。考虑对象的名称、形状和可能的用途。
+        分析场景中的每个对象，并确定所需的材质类型。考虑对象的名称、形状和可能的用途。将相同材质类型的对象分组。
 
         Output:
-        请提供一个JSON对象，其中包含每个对象的名称作为键，以及建议的材质类型作为值,注意一些材质为blender场景自带的，例如摄像机Camera等，该类物品不需要添加材质：
+        请提供一个JSON对象，其中包含材质类型作为键，以及需要该材质的对象列表作为值。注意一些材质为blender场景自带的，例如摄像机Camera等，该类物品不需要添加材质：
         {{
-            "Table_Top": "wood",
-            "Table_Leg": "metal",
-            "Chair_Seat": "fabric",
-            "Lamp_Shade": "glass"
+            "wood": ["Table_Top", "Chair_Seat"],
+            "metal": ["Table_Leg", "Chair_Frame"],
+            "fabric": ["Chair_Cushion"],
+            "glass": ["Lamp_Shade"]
         }}
 
         只需提供JSON对象，不需要其他解释。
@@ -648,25 +648,11 @@ class MODEL_GENERATION_OT_generate(Operator):
 
     def query_material_docs(self, material_requirements):
         material_docs = {}
-        unique_docs = set()  # 用于存储唯一的文档
-
-        for obj_name, material_type in material_requirements.items():
+        for material_type in material_requirements.keys():
             query = f"材质类型：{material_type}"
             results = query_material_documentation(bpy.types.Scene.material_query_engine, query)
-            
-            # 过滤并只添加唯一的文档
-            unique_results = []
-            for result in results:
-                if result not in unique_docs:
-                    unique_docs.add(result)
-                    unique_results.append(result)
-            
-            material_docs[obj_name] = unique_results
-
-        # 将所有唯一的文档合并为一个列表
-        all_unique_docs = list(unique_docs)
-
-        return all_unique_docs
+            material_docs[material_type] = results
+        return material_docs
 
     def generate_and_apply_materials(self, context, user_input, rewritten_input, formatted_scene_info, model_description, material_requirements, material_docs, log_dir):
         logger.info(f"材质需求： {material_requirements}")
