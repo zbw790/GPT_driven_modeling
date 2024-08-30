@@ -142,7 +142,7 @@ def sanitize_reference(response):
 class MODEL_GENERATION_OT_generate(Operator):
     bl_idname = "model_generation.generate"
     bl_label = "Generate Model"
-    bl_description = "Generate a 3D model based on the description"
+    bl_description = "Generate a 3D scene based on the description"
 
     def execute(self, context):
         props = context.scene.model_generation_tool
@@ -155,35 +155,186 @@ class MODEL_GENERATION_OT_generate(Operator):
                 logger.info(f"Rewritten input: {rewritten_input}")
                 
                 logger.info("Parsing rewritten user input")
-                model_description = parse_user_input(user_input, rewritten_input)
-                logger.info("Model Description:")
-                logger.info(json.dumps(model_description, ensure_ascii=False, indent=2))
+                scene_description = self.parse_scene_input(user_input, rewritten_input)
+                logger.info("Scene Description:")
+                logger.info(json.dumps(scene_description, ensure_ascii=False, indent=2))
                 
-                # Save model description to file
-                with open(os.path.join(log_dir, "model_description.json"), "w", encoding='utf-8') as f:
-                    json.dump(model_description, f, ensure_ascii=False, indent=2)
+                # Save scene description to file
+                with open(os.path.join(log_dir, "scene_description.json"), "w", encoding='utf-8') as f:
+                    json.dump(scene_description, f, ensure_ascii=False, indent=2)
                 
-                # Generate 3D model using GPT
-                self.generate_3d_model(context, user_input, rewritten_input, model_description, log_dir)
+                # Generate 3D models for each object in the scene
+                self.generate_3d_scene(context, user_input, rewritten_input, scene_description, log_dir)
 
-                # 评估并优化模型
-                self.evaluate_and_optimize_model(context, user_input, rewritten_input, model_description, log_dir)
+                # 评估并优化场景
+                # self.evaluate_and_optimize_scene(context, user_input, rewritten_input, scene_description, log_dir)
 
                 # 添加新的材质应用步骤
-                self.apply_materials(context, user_input, rewritten_input, model_description, log_dir)
+                self.apply_materials(context, user_input, rewritten_input, scene_description, log_dir)
 
                 logger.debug(f"Log directory: {log_dir}")
                 # 保存当前场景的屏幕截图
-                screenshot_path = os.path.join(log_dir, "model_screenshot.png")
+                screenshot_path = os.path.join(log_dir, "scene_screenshot.png")
                 bpy.ops.screen.screenshot(filepath=screenshot_path)
                 logger.debug(f"Screenshot saved to {screenshot_path}")
                 
-                self.report({'INFO'}, f"Model generated and optimized for {model_description['object_type']}. Logs saved in {log_dir}")
+                self.report({'INFO'}, f"Scene generated and optimized. Logs saved in {log_dir}")
             except Exception as e:
                 logger.error(f"An error occurred: {str(e)}")
                 self.report({'ERROR'}, f"An error occurred: {str(e)}")
         
         return {'FINISHED'}
+
+    def parse_scene_input(self, user_input, rewritten_input):
+        prompt = f"""
+        Context:
+        你是一个专门用于解析和重构用户输入的AI助手。工作在一个3D建模系统中。你的主要任务是处理用户提供的场景描述，这些描述可能包含多个物品及其位置关系。
+
+        Objective:
+        将用户的原始描述和重写后的提示词转换为标准化的JSON格式，包含场景中的每个物品及其相对位置。
+
+        输入:
+        用户原始输入: {user_input}
+        解析后的提示词：{rewritten_input}
+
+        输出格式示例:
+        {{
+          "scene_name": "书房场景",
+          "objects": [
+            {{
+              "object_type": "书桌",
+              "position": "房间中央",
+              "components": [
+                {{
+                  "name": "桌面",
+                  "quantity": 1,
+                  "shape": "cuboid",
+                  "dimensions": {{
+                    "length": 120,
+                    "width": 60,
+                    "height": 5
+                  }}
+                }},
+                {{
+                  "name": "桌腿",
+                  "quantity": 4,
+                  "shape": "cylinder",
+                  "dimensions": {{
+                    "radius": 3,
+                    "height": 75
+                  }}
+                }}
+              ]
+            }},
+            {{
+              "object_type": "花瓶",
+              "position": "书桌右上角",
+              "components": [
+                {{
+                  "name": "瓶身",
+                  "quantity": 1,
+                  "shape": "cylinder",
+                  "dimensions": {{
+                    "radius": 10,
+                    "height": 30
+                  }}
+                }}
+              ]
+            }}
+          ]
+        }}
+
+        注意事项:
+        1. 识别场景中的所有物品，并为每个物品创建一个对象描述。
+        2. 包含每个物品的相对位置信息。
+        3. 对于每个物品，列出其核心组件，类似于之前的单一物品描述。
+        4. 如果某些信息缺失，请根据常识进行合理推断。
+        5. 确保位置描述足够清晰，以便后续正确放置物品。
+        """
+        
+        logger.info(f"Sending prompt to Claude: {prompt}")
+        response = generate_text_with_claude(prompt)
+        logger.info(f"Received response from Claude: {response}")
+        
+        response = sanitize_command(response)
+        response = sanitize_reference(response)
+        return json.loads(response)
+
+    def generate_3d_scene(self, context, user_input, rewritten_input, scene_description, log_dir):
+        generated_objects = []
+        for obj in scene_description['objects']:
+            object_code = self.generate_3d_model(context, user_input, rewritten_input, obj, log_dir)
+            if object_code:
+                generated_objects.append({"object": obj, "code": object_code})
+            # self.evaluate_and_optimize_model(context, user_input, rewritten_input, obj, log_dir)
+        
+        # 生成场景组合代码
+        scene_composition_code = self.generate_scene_composition_code(scene_description, generated_objects)
+        
+        # 执行场景组合代码
+        error_message = execute_blender_command_with_error_handling(scene_composition_code)
+        if error_message:
+            logger.error(f"Error composing scene: {error_message}")
+            
+            # 尝试修正错误
+            corrected_code = self.correct_scene_composition_code(scene_composition_code, error_message)
+            if corrected_code:
+                error_message = execute_blender_command_with_error_handling(corrected_code)
+                if error_message:
+                    logger.error(f"Error executing corrected scene composition code: {error_message}")
+                else:
+                    logger.debug("Successfully executed corrected scene composition code.")
+        else:
+            logger.debug("Successfully composed scene.")
+
+    def generate_scene_composition_code(self, scene_description, generated_objects):
+        prompt = f"""
+        Context:
+        你是一个专门用于生成Blender Python命令的AI助手，负责组合3D场景。你需要根据场景描述和已生成的物品代码来生成适当的Python代码，以放置和调整场景中的物品。
+
+        场景描述：{json.dumps(scene_description, ensure_ascii=False, indent=2)}
+        已生成的物品代码：
+        {json.dumps(generated_objects, ensure_ascii=False, indent=2)}
+
+        Objective:
+        生成Blender Python代码来组合场景中的物品。代码应该准确反映物品之间的相对位置关系，并使用已生成的物品代码。
+
+        Output:
+        请提供组合场景的Blender Python代码。代码应该：
+        1. 使用bpy库来移动和旋转对象
+        2. 根据场景描述中的位置信息放置每个物品
+        3. 如果需要，调整物品的大小以保持合适的比例
+        4. 创建一个新的集合来组织场景中的所有物品
+        5. 使用已生成的物品代码，而不是重新创建物品
+
+        请直接返回Python代码，不需要其他解释或注释。
+        """
+        
+        response = generate_text_with_claude(prompt)
+        return response
+
+    def correct_scene_composition_code(self, original_code, error_message):
+        prompt = f"""
+        Context:
+        在执行场景组合代码时发生了错误。请根据错误信息修改代码。
+
+        原始代码：
+        {original_code}
+
+        错误信息：
+        {error_message}
+
+        Objective:
+        修正场景组合代码，使其能够正确执行。
+
+        Output:
+        请提供修正后的Blender Python代码。确保新代码能够正确执行，并避免之前的错误。
+
+        请直接返回Python代码，不需要其他解释或注释。
+        """
+        
+        response = generate_text_with_claude(prompt)
+        return response
 
     def generate_3d_model(self, context, user_input, rewritten_input, model_description, log_dir):
         # 查询必要文件
@@ -289,10 +440,13 @@ class MODEL_GENERATION_OT_generate(Operator):
             if error_message:
                 logger.error(f"Error executing corrected Blender commands: {error_message}")
                 self.report({'ERROR'}, f"Error executing corrected Blender commands: {error_message}")
+                return None
             else:
                 logger.debug("Successfully executed corrected Blender commands.")
+                return corrected_response
         else:
             logger.debug("Successfully executed Blender commands.")
+            return response
 
         # 更新视图并等待一小段时间以确保视图已更新
         self.update_blender_view(context)
