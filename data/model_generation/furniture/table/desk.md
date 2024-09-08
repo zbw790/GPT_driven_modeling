@@ -98,7 +98,7 @@ import bmesh
 bpy.ops.object.select_all(action='SELECT')
 bpy.ops.object.delete()
 
-# 删除所有多余的集合
+# 删除所有集合（除了场景的主集合）
 for collection in bpy.data.collections:
     bpy.data.collections.remove(collection)
 

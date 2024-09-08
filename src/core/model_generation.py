@@ -141,7 +141,7 @@ def sanitize_reference(response):
 
 class MODEL_GENERATION_OT_generate(Operator):
     bl_idname = "model_generation.generate"
-    bl_label = "Generate Model"
+    bl_label = "Generate Scene"
     bl_description = "Generate a 3D scene based on the description"
 
     def execute(self, context):
@@ -164,12 +164,17 @@ class MODEL_GENERATION_OT_generate(Operator):
                     json.dump(scene_description, f, ensure_ascii=False, indent=2)
                 
                 # Generate 3D models for each object in the scene
-                self.generate_3d_scene(context, user_input, rewritten_input, scene_description, log_dir)
+                generated_models = []
+                for obj in scene_description['objects']:
+                    logger.info(f"Generating model for: {obj['object_type']}")
+                    model_code = self.generate_3d_model(context, obj, scene_description['scene_context'], log_dir)
+                    optimized_model = self.evaluate_and_optimize_model(context, obj, scene_description['scene_context'], model_code, user_input, rewritten_input, log_dir)
+                    generated_models.append(optimized_model)
 
-                # 评估并优化场景
-                # self.evaluate_and_optimize_scene(context, user_input, rewritten_input, scene_description, log_dir)
+                # Arrange objects in the scene
+                self.arrange_scene(context, scene_description, generated_models, log_dir)
 
-                # 添加新的材质应用步骤
+                # Apply materials to the entire scene
                 self.apply_materials(context, user_input, rewritten_input, scene_description, log_dir)
 
                 logger.debug(f"Log directory: {log_dir}")
@@ -191,7 +196,7 @@ class MODEL_GENERATION_OT_generate(Operator):
         你是一个专门用于解析和重构用户输入的AI助手。工作在一个3D建模系统中。你的主要任务是处理用户提供的场景描述，这些描述可能包含多个物品及其位置关系。
 
         Objective:
-        将用户的原始描述和重写后的提示词转换为标准化的JSON格式，包含场景中的每个物品及其相对位置。
+        将用户的原始描述和重写后的提示词转换为标准化的JSON格式，包含场景中的每个物品及其相对位置，以及整个场景的上下文信息。
 
         输入:
         用户原始输入: {user_input}
@@ -200,10 +205,12 @@ class MODEL_GENERATION_OT_generate(Operator):
         输出格式示例:
         {{
           "scene_name": "书房场景",
+          "scene_context": "这是一个安静的书房，光线柔和，氛围温馨。",
           "objects": [
             {{
               "object_type": "书桌",
               "position": "房间中央",
+              "description": "一张宽大的木质书桌，表面光滑",
               "components": [
                 {{
                   "name": "桌面",
@@ -229,6 +236,7 @@ class MODEL_GENERATION_OT_generate(Operator):
             {{
               "object_type": "花瓶",
               "position": "书桌右上角",
+              "description": "一个蓝白相间的陶瓷花瓶，里面插着几支鲜花",
               "components": [
                 {{
                   "name": "瓶身",
@@ -246,10 +254,11 @@ class MODEL_GENERATION_OT_generate(Operator):
 
         注意事项:
         1. 识别场景中的所有物品，并为每个物品创建一个对象描述。
-        2. 包含每个物品的相对位置信息。
+        2. 包含每个物品的相对位置信息和简短描述。
         3. 对于每个物品，列出其核心组件，类似于之前的单一物品描述。
         4. 如果某些信息缺失，请根据常识进行合理推断。
         5. 确保位置描述足够清晰，以便后续正确放置物品。
+        6. 添加一个scene_context字段，描述整个场景的氛围、光线等信息。
         """
         
         logger.info(f"Sending prompt to Claude: {prompt}")
@@ -260,100 +269,92 @@ class MODEL_GENERATION_OT_generate(Operator):
         response = sanitize_reference(response)
         return json.loads(response)
 
-    def generate_3d_scene(self, context, user_input, rewritten_input, scene_description, log_dir):
-        generated_objects = []
-        for obj in scene_description['objects']:
-            object_code = self.generate_3d_model(context, user_input, rewritten_input, obj, log_dir)
-            if object_code:
-                generated_objects.append({"object": obj, "code": object_code})
-            # self.evaluate_and_optimize_model(context, user_input, rewritten_input, obj, log_dir)
-        
-        # 生成场景组合代码
-        scene_composition_code = self.generate_scene_composition_code(scene_description, generated_objects)
-        
-        # 执行场景组合代码
-        error_message = execute_blender_command_with_error_handling(scene_composition_code)
-        if error_message:
-            logger.error(f"Error composing scene: {error_message}")
-            
-            # 尝试修正错误
-            corrected_code = self.correct_scene_composition_code(scene_composition_code, error_message)
-            if corrected_code:
-                error_message = execute_blender_command_with_error_handling(corrected_code)
-                if error_message:
-                    logger.error(f"Error executing corrected scene composition code: {error_message}")
-                else:
-                    logger.debug("Successfully executed corrected scene composition code.")
-        else:
-            logger.debug("Successfully composed scene.")
-
-    def generate_scene_composition_code(self, scene_description, generated_objects):
+    def arrange_scene(self, context, scene_description, generated_models, log_dir):
+        scene_info = get_scene_info()
+        formatted_scene_info = format_scene_info(scene_info)
         prompt = f"""
         Context:
-        你是一个专门用于生成Blender Python命令的AI助手，负责组合3D场景。你需要根据场景描述和已生成的物品代码来生成适当的Python代码，以放置和调整场景中的物品。
+        你是一个专门负责安排3D场景中物体位置的AI助手。你的任务是根据给定的场景描述和已生成的模型代码，生成Blender Python命令来正确放置场景中的所有物体。、
+
+        运行之前请先使用以下代码移除场内所有可能干扰的东西：
+
+        # 删除所有对象
+        bpy.ops.object.select_all(action='SELECT')
+        bpy.ops.object.delete()
+
+        # 删除所有集合（除了场景的主集合）
+        for collection in bpy.data.collections:
+            bpy.data.collections.remove(collection)
+
 
         场景描述：{json.dumps(scene_description, ensure_ascii=False, indent=2)}
-        已生成的物品代码：
-        {json.dumps(generated_objects, ensure_ascii=False, indent=2)}
 
-        Objective:
-        生成Blender Python代码来组合场景中的物品。代码应该准确反映物品之间的相对位置关系，并使用已生成的物品代码。
+        场景内已有的模型信息：{formatted_scene_info}
 
-        Output:
-        请提供组合场景的Blender Python代码。代码应该：
-        1. 使用bpy库来移动和旋转对象
-        2. 根据场景描述中的位置信息放置每个物品
-        3. 如果需要，调整物品的大小以保持合适的比例
-        4. 创建一个新的集合来组织场景中的所有物品
-        5. 使用已生成的物品代码，而不是重新创建物品
+        已生成的模型代码：
+        {json.dumps(generated_models, ensure_ascii=False, indent=2)}
 
-        请直接返回Python代码，不需要其他解释或注释。
-        """
-        
-        response = generate_text_with_claude(prompt)
-        return response
-
-    def correct_scene_composition_code(self, original_code, error_message):
-        prompt = f"""
-        Context:
-        在执行场景组合代码时发生了错误。请根据错误信息修改代码。
-
-        原始代码：
-        {original_code}
-
-        错误信息：
-        {error_message}
-
-        Objective:
-        修正场景组合代码，使其能够正确执行。
+        Task:
+        请根据已生成好的模型代码重新生成所有必要的模型
+        根据场景描述中每个物体的位置信息，生成Blender Python代码来移动和旋转这些物体，使它们在场景中的位置符合描述。
 
         Output:
-        请提供修正后的Blender Python代码。确保新代码能够正确执行，并避免之前的错误。
+        请提供可以直接在Blender中执行的Python代码。代码应该：
+        1. 找到场景中的每个物体（它们已经被创建，名称与object_type相同）
+        2. 根据位置描述移动和旋转每个物体
+        3. 确保物体之间不会相互穿透或重叠
+        4. 如果需要，调整物体的大小以适应场景
 
-        请直接返回Python代码，不需要其他解释或注释。
+        只需提供Python代码，不需要其他解释。
         """
         
-        response = generate_text_with_claude(prompt)
-        return response
+        arrangement_code = generate_text_with_claude(prompt)
 
-    def generate_3d_model(self, context, user_input, rewritten_input, model_description, log_dir):
+        # 保存生成的场景安排代码到文件
+        with open(os.path.join(log_dir, "scene_arrangement_code.py"), "w", encoding='utf-8') as f:
+            f.write(arrangement_code)
+
+        # 执行生成的Blender场景安排命令
+        try:
+            execute_blender_command(arrangement_code)
+            logger.debug("Successfully arranged scene objects.")
+        except Exception as e:
+            logger.error(f"Error arranging scene objects: {str(e)}")
+            self.report({'ERROR'}, f"Error arranging scene objects: {str(e)}")
+
+        # 更新视图
+        self.update_blender_view(context)
+
+        # 保存场景安排后的截图
+        screenshots = save_screenshots()
+        screenshot_dir = os.path.join(log_dir, "scene_arrangement_screenshots")
+        save_screenshots_to_path(screenshot_dir)
+        for screenshot in screenshots:
+            logger.debug(f"Scene arrangement screenshot saved: {screenshot}")
+
+
+    def generate_3d_model(self, context, obj, scene_context, log_dir):
+        # 为每个模型创建单独的目录
+        model_dir = os.path.join(log_dir, f"model_{obj['object_type']}")
+        os.makedirs(model_dir, exist_ok=True)
+
         # 查询必要文件
         logger.info("Querying generation documentation")
-        generation_docs = query_generation_documentation(bpy.types.Scene.generation_query_engine, rewritten_input)
+        generation_docs = query_generation_documentation(bpy.types.Scene.generation_query_engine, obj['object_type'])
         logger.info(f"Generation documentation: {generation_docs}")
 
         # 查询部件库
-        component_docs = self.query_component_library(model_description)
+        component_docs = self.query_component_library(obj)
         logger.info(f"Component library documentation: {component_docs}")
+
 
         # 准备提示信息
         prompt = f"""
         Context:
         你是一个专门用于生成Blender Python命令的AI助手，负责创建3D模型。你需要根据用户的描述和相关文档生成适当的Python代码。
 
-        用户原始输入的要求：{user_input}
-        改写后的要求：{rewritten_input}
-        模型描述（JSON格式）：{json.dumps(model_description, ensure_ascii=False, indent=2)}
+        物体描述：{json.dumps(obj, ensure_ascii=False, indent=2)}
+        场景上下文：{scene_context}
         相关生成文档：{generation_docs}
         部件库文档：{component_docs}
 
@@ -403,11 +404,12 @@ class MODEL_GENERATION_OT_generate(Operator):
         logger.info(f"GPT Generated Commands for 3D Model:\n```python\n{response}\n```")
 
         # 保存生成的代码到文件
-        with open(os.path.join(log_dir, "generated_blender_code.py"), "w", encoding='utf-8') as f:
+        with open(os.path.join(model_dir, f"{obj['object_type']}_generation_code.py"), "w", encoding='utf-8') as f:
             f.write(response)
 
         # 执行生成的Blender命令
         error_message = execute_blender_command_with_error_handling(response)
+        corrected_response = None
         if error_message:
             logger.error(f"Error executing Blender commands: {error_message}")
             
@@ -426,13 +428,13 @@ class MODEL_GENERATION_OT_generate(Operator):
             请提供修正后的Blender Python代码。
             """
             
-            # 使用 GPT 生成修正后的代码
+             # 使用 GPT 生成修正后的代码
             corrected_response = generate_text_with_claude(error_prompt)
             
             logger.info(f"GPT Generated Corrected Commands:\n{corrected_response}")
             
             # 保存修正后的代码到文件
-            with open(os.path.join(log_dir, "corrected_blender_code.py"), "w", encoding='utf-8') as f:
+            with open(os.path.join(model_dir, f"{obj['object_type']}_corrected_generation_code.py"), "w", encoding='utf-8') as f:
                 f.write(corrected_response)
             
             # 尝试执行修正后的代码
@@ -440,28 +442,30 @@ class MODEL_GENERATION_OT_generate(Operator):
             if error_message:
                 logger.error(f"Error executing corrected Blender commands: {error_message}")
                 self.report({'ERROR'}, f"Error executing corrected Blender commands: {error_message}")
-                return None
             else:
                 logger.debug("Successfully executed corrected Blender commands.")
-                return corrected_response
         else:
             logger.debug("Successfully executed Blender commands.")
-            return response
 
         # 更新视图并等待一小段时间以确保视图已更新
         self.update_blender_view(context)
         bpy.ops.wm.redraw_timer(type='DRAW_WIN_SWAP', iterations=1)
 
-        # 更新resources内的截图
+        # 保存生成模型的截图
         screenshots = save_screenshots()
-        screenshot_dir = os.path.join(log_dir, "generation_screenshots")
+        screenshot_dir = os.path.join(model_dir, "generation_screenshots")
         save_screenshots_to_path(screenshot_dir)
         for screenshot in screenshots:
-            logger.debug(f"Generation screenshot saved: {screenshot}")
+            logger.debug(f"Generation screenshot saved for {obj['object_type']}: {screenshot}")
+        
+        if corrected_response is not None:
+            return corrected_response
+        else:
+            return response
 
-    def query_component_library(self, model_description):
+    def query_component_library(self, obj):
         component_docs = []
-        for component in model_description.get('components', []):
+        for component in obj.get('components', []):
             component_name = component.get('name', '')
             if component_name:
                 results = query_component_documentation(bpy.types.Scene.component_query_engine, component_name)
@@ -473,13 +477,18 @@ class MODEL_GENERATION_OT_generate(Operator):
         bpy.context.view_layer.update()
         logger.debug("Blender view updated.")
     
-    def evaluate_and_optimize_model(self, context, user_input, rewritten_input, model_description, log_dir):
-        max_iterations = 8  # 设置最大迭代次数
+    def evaluate_and_optimize_model(self, context, obj, scene_context, model_code, user_input, rewritten_input, log_dir):
+        max_iterations = 1  # 设置最大迭代次数
         iteration = 0
-        
+        optimized_model_code = None
+
+        # 为每个模型创建单独的优化目录
+        optimization_dir = os.path.join(log_dir, f"optimization_{obj['object_type']}")
+        os.makedirs(optimization_dir, exist_ok=True)
+
         while iteration < max_iterations:
             # 为每次迭代创建一个新的子目录
-            iteration_dir = os.path.join(log_dir, f"iteration_{iteration + 1}")
+            iteration_dir = os.path.join(optimization_dir, f"iteration_{iteration + 1}")
             os.makedirs(iteration_dir, exist_ok=True)
 
             screenshots = get_screenshots()
@@ -487,9 +496,11 @@ class MODEL_GENERATION_OT_generate(Operator):
             evaluator = ModelEvaluator()
             
             evaluation_context = {
-                "user_input": user_input,
-                "rewritten_input": rewritten_input,
-                "model_description": model_description
+                "model_code": model_code,
+                "obj": obj,
+                "scene_context": scene_context,
+                "user_input": None,
+                "rewritten_input": None
             }
             
             results = evaluator.evaluate(screenshots, evaluation_context)
@@ -506,7 +517,7 @@ class MODEL_GENERATION_OT_generate(Operator):
             logger.info(f"Priority Suggestions: {priority_suggestions}")
 
             # 保存评估结果到文件
-            with open(os.path.join(iteration_dir, "evaluation_results.json"), "w", encoding='utf-8') as f:
+            with open(os.path.join(iteration_dir, f"{obj['object_type']}_evaluation_results.json"), "w", encoding='utf-8') as f:
                 json.dump({
                     "iteration": iteration + 1,
                     "status": final_status.name,
@@ -521,7 +532,7 @@ class MODEL_GENERATION_OT_generate(Operator):
                 break
 
             # 否则，继续优化模型
-            self.optimize_model(context, priority_suggestions, evaluation_context, screenshots, iteration_dir, iteration)
+            optimized_model_code = self.optimize_model(context, priority_suggestions, evaluation_context, screenshots, iteration_dir, iteration)
             iteration += 1
 
         if final_status == EvaluationStatus.PASS:
@@ -533,10 +544,12 @@ class MODEL_GENERATION_OT_generate(Operator):
 
         # 保存最终模型的截图
         final_screenshots = save_screenshots()
-        final_screenshot_dir = os.path.join(log_dir, "final_model")
+        final_screenshot_dir = os.path.join(optimization_dir, "final_model_screenshots")
         save_screenshots_to_path(final_screenshot_dir)
         for screenshot in final_screenshots:
-            logger.debug(f"Final model screenshot saved: {screenshot}")
+            logger.debug(f"Final model screenshot saved for {obj['object_type']}: {screenshot}")
+
+        return optimized_model_code
 
     def filter_and_consolidate_suggestions(self, suggestions, evaluation_context):
         screenshots = get_screenshots()
@@ -545,9 +558,8 @@ class MODEL_GENERATION_OT_generate(Operator):
         Context:
         你是一个专门负责整合用于优化3D模型的建议的AI助手，你根据图片和需要分析所有的建议，并从中选出需要保留的建议留下。
 
-        原始用户输入：{evaluation_context['user_input']}
-        改写后的要求：{evaluation_context['rewritten_input']}
-        模型描述：{json.dumps(evaluation_context['model_description'], ensure_ascii=False, indent=2)}
+        模型生成时的代码：{evaluation_context['model_code']}
+        模型描述：{json.dumps(evaluation_context['obj'], ensure_ascii=False, indent=2)}
         优化建议：{suggestions}
 
         Objective:
@@ -625,6 +637,7 @@ class MODEL_GENERATION_OT_generate(Operator):
 
         # 执行生成的Blender优化命令
         error_message = execute_blender_command_with_error_handling(final_optimization_code)
+        corrected_response = None
         if error_message:
             logger.error(f"Error executing optimization commands: {error_message}")
             
@@ -673,15 +686,19 @@ class MODEL_GENERATION_OT_generate(Operator):
         for screenshot in screenshots:
             logger.debug(f"Iteration {iteration + 1} evaluation screenshot saved: {screenshot}")
 
+        if corrected_response is not None:
+            return corrected_response
+        else:
+            return final_optimization_code
+
     def generate_optimization_code_for_suggestion(self, context, suggestion, evaluation_context, formatted_scene_info, modification_doc):
         prompt = f"""
         Context:
         你是一个专门负责优化3D模型的AI助手。你的任务是根据给定的单个建议，生成Blender Python命令来优化现有的3D模型。
         生成的模型应该只考虑外观，而不考虑可能的内部结构，例如一棵树的树冠以球体构成，则不需要考虑树冠内部的树枝，因为无法正常看到树枝。
 
-        原始用户输入：{evaluation_context['user_input']}
-        改写后的要求：{evaluation_context['rewritten_input']}
-        模型描述：{json.dumps(evaluation_context['model_description'], ensure_ascii=False, indent=2)}
+        模型生成时的代码：{evaluation_context['model_code']}
+        模型描述：{json.dumps(evaluation_context['obj'], ensure_ascii=False, indent=2)}
         场景信息：{formatted_scene_info}
         优化建议：{suggestion}
         相关优化指示文档：{modification_doc}
@@ -715,9 +732,8 @@ class MODEL_GENERATION_OT_generate(Operator):
         你是一个专门负责优化3D模型的AI助手。你的任务是将多个优化步骤的代码合并成一个连贯的优化脚本。
         生成的模型应该只考虑外观，而不考虑可能的内部结构，例如一棵树的树冠以球体构成，则不需要考虑树冠内部的树枝，因为无法正常看到树枝。
 
-        原始用户输入：{evaluation_context['user_input']}
-        改写后的要求：{evaluation_context['rewritten_input']}
-        模型描述：{json.dumps(evaluation_context['model_description'], ensure_ascii=False, indent=2)}
+        模型生成时的代码：{evaluation_context['model_code']}
+        模型描述：{json.dumps(evaluation_context['obj'], ensure_ascii=False, indent=2)}
         场景信息：{formatted_scene_info}
 
         以下是各个优化步骤的代码：
@@ -751,14 +767,14 @@ class MODEL_GENERATION_OT_generate(Operator):
         response = generate_text_with_claude(prompt)
         return response
     
-    def apply_materials(self, context, user_input, rewritten_input, model_description, log_dir):
+    def apply_materials(self, context, user_input, rewritten_input, scene_description, log_dir):
         try:
             # 获取场景信息
             scene_info = get_scene_info()
             formatted_scene_info = format_scene_info(scene_info)
 
             # 步骤1：分析场景信息并确定所需的材质
-            material_requirements = self.analyze_scene_for_materials(user_input, rewritten_input, formatted_scene_info, model_description)
+            material_requirements = self.analyze_scene_for_materials(user_input, rewritten_input, formatted_scene_info, scene_description)
             logger.info(f"材质需求： {material_requirements}")
 
             # 步骤2：查询相关的材质文档
@@ -766,14 +782,14 @@ class MODEL_GENERATION_OT_generate(Operator):
             logger.info(f"材质文档： {material_docs}")
 
             # 步骤3：生成并应用材质
-            self.generate_and_apply_materials(context, user_input, rewritten_input, formatted_scene_info, model_description, material_requirements, material_docs, log_dir)
+            self.generate_and_apply_materials(context, user_input, rewritten_input, formatted_scene_info, scene_description, material_requirements, material_docs, log_dir)
 
             self.report({'INFO'}, f"Materials applied successfully. Logs saved in {log_dir}")
         except Exception as e:
             logger.error(f"An error occurred while applying materials: {str(e)}")
             self.report({'ERROR'}, f"An error occurred while applying materials: {str(e)}")
 
-    def analyze_scene_for_materials(self, user_input, rewritten_input, formatted_scene_info, model_description):
+    def analyze_scene_for_materials(self, user_input, rewritten_input, formatted_scene_info, scene_description):
         prompt = f"""
         Context:
         你是一个专门分析3D场景并确定所需材质的AI助手。根据提供的场景信息和模型描述，确定需要的材质类型。
@@ -781,7 +797,7 @@ class MODEL_GENERATION_OT_generate(Operator):
         用户原始输入：{user_input}
         改写后的要求：{rewritten_input}
         场景信息：{formatted_scene_info}
-        模型描述：{json.dumps(model_description, ensure_ascii=False, indent=2)}
+        模型描述：{json.dumps(scene_description, ensure_ascii=False, indent=2)}
 
         Task:
         分析场景中的每个对象，并确定所需的材质类型。考虑对象的名称、形状和可能的用途。将相同材质类型的对象分组。
@@ -808,7 +824,7 @@ class MODEL_GENERATION_OT_generate(Operator):
             material_docs[material_type] = results
         return material_docs
 
-    def generate_and_apply_materials(self, context, user_input, rewritten_input, formatted_scene_info, model_description, material_requirements, material_docs, log_dir):
+    def generate_and_apply_materials(self, context, user_input, rewritten_input, formatted_scene_info, scene_description, material_requirements, material_docs, log_dir):
         logger.info(f"材质需求： {material_requirements}")
         logger.info(f"材质文档： {material_docs}")
         prompt = f"""
@@ -826,7 +842,7 @@ class MODEL_GENERATION_OT_generate(Operator):
         场景内的部件名称等信息：{formatted_scene_info}
         用户原始输入：{user_input}
         改写后的要求：{rewritten_input}
-        模型描述：{json.dumps(model_description, ensure_ascii=False, indent=2)}
+        模型描述：{json.dumps(scene_description, ensure_ascii=False, indent=2)}
         材质需求：{json.dumps(material_requirements, ensure_ascii=False, indent=2)}
         材质文档：{json.dumps(material_docs, ensure_ascii=False, indent=2)}
 

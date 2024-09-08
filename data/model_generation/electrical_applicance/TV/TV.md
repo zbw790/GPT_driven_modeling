@@ -5,6 +5,9 @@ import math
 bpy.ops.object.select_all(action='SELECT')
 bpy.ops.object.delete()
 
+# 删除所有集合（除了场景的主集合）
+for collection in bpy.data.collections:
+    bpy.data.collections.remove(collection)
 # 创建电视机集合
 tv_collection = bpy.data.collections.new("TV")
 bpy.context.scene.collection.children.link(tv_collection)

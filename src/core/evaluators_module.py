@@ -448,6 +448,10 @@ class ModelEvaluator:
         # 将场景信息添加到context中
         context['scene_info'] = formatted_scene_info
 
+        # 如果context中包含'obj'键而不是'model_description'键，进行转换
+        if 'obj' in context and 'model_description' not in context:
+            context['model_description'] = context['obj']
+
         results = {}
         for evaluator in self.evaluators:
             result = evaluator.evaluate(screenshots, context)
