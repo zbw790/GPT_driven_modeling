@@ -308,7 +308,7 @@ class MODEL_GENERATION_OT_generate(Operator):
         只需提供Python代码，不需要其他解释。
         """
         
-        arrangement_code = generate_text_with_claude(prompt)
+        arrangement_code = generate_text_with_context(prompt)
 
         # 保存生成的场景安排代码到文件
         with open(os.path.join(log_dir, "scene_arrangement_code.py"), "w", encoding='utf-8') as f:
@@ -395,7 +395,7 @@ class MODEL_GENERATION_OT_generate(Operator):
         conversation_manager = context.scene.conversation_manager
         initialize_conversation(context)
         prompt_with_history = add_history_to_prompt(context, prompt)
-        response = generate_text_with_claude(prompt_with_history)
+        response = generate_text_with_context(prompt_with_history)
 
         # 更新对话历史
         conversation_manager.add_message("user", prompt)
@@ -429,7 +429,7 @@ class MODEL_GENERATION_OT_generate(Operator):
             """
             
              # 使用 GPT 生成修正后的代码
-            corrected_response = generate_text_with_claude(error_prompt)
+            corrected_response = generate_text_with_context(error_prompt)
             
             logger.info(f"GPT Generated Corrected Commands:\n{corrected_response}")
             
@@ -478,7 +478,7 @@ class MODEL_GENERATION_OT_generate(Operator):
         logger.debug("Blender view updated.")
     
     def evaluate_and_optimize_model(self, context, obj, scene_context, model_code, user_input, rewritten_input, log_dir):
-        max_iterations = 1  # 设置最大迭代次数
+        max_iterations = 2  # 设置最大迭代次数
         iteration = 0
         optimized_model_code = None
 
@@ -657,7 +657,7 @@ class MODEL_GENERATION_OT_generate(Operator):
             """
             
             # 使用 Claude 生成修正后的代码
-            corrected_response = generate_text_with_claude(error_prompt)
+            corrected_response = generate_text_with_context(error_prompt)
             
             logger.info(f"GPT Generated Corrected Optimization Commands:\n{corrected_response}")
             
@@ -721,7 +721,7 @@ class MODEL_GENERATION_OT_generate(Operator):
         请直接返回Python代码，不需要其他解释或注释。
         """
         
-        response = generate_text_with_claude(prompt)
+        response = generate_text_with_context(prompt)
         return response
 
     def generate_final_optimization_code(self, context, all_optimization_responses, evaluation_context, formatted_scene_info):
@@ -764,7 +764,7 @@ class MODEL_GENERATION_OT_generate(Operator):
         请直接返回Python代码，不需要其他解释或注释。
         """
         
-        response = generate_text_with_claude(prompt)
+        response = generate_text_with_context(prompt)
         return response
     
     def apply_materials(self, context, user_input, rewritten_input, scene_description, log_dir):
@@ -813,7 +813,7 @@ class MODEL_GENERATION_OT_generate(Operator):
 
         只需提供JSON对象，不需要其他解释。
         """
-        response = generate_text_with_claude(prompt)
+        response = generate_text_with_context(prompt)
         return json.loads(response)
 
     def query_material_docs(self, material_requirements):
@@ -833,7 +833,7 @@ class MODEL_GENERATION_OT_generate(Operator):
         注意，你应该且只应该生成材质，不应该修改任何场上的模型。
 
         注意：
-        1. 不要使用 "Subsurface", "Sheen", "Emission", "Transmission" 等作为直接输入参数。这些是复合参数，需要通过其他允许的参数来实现效果。
+        1. 不要使用 "Subsurface", "Sheen", "Emission", "Transmission", "Specular"等作为直接输入参数。这些是复合参数，需要通过其他允许的参数来实现效果。
         2. 对于颜色和向量类型的输入，请始终使用列表格式，而不是单个浮点数。例如：
         - 对于颜色输入（如Base Color, Specular Tint等），使用4个值的列表：[R, G, B, A]
         - 对于向量输入（如Normal），使用3个值的列表：[X, Y, Z]
@@ -887,7 +887,7 @@ class MODEL_GENERATION_OT_generate(Operator):
 
         只需提供Python代码，不需要其他解释。
         """
-        material_code = generate_text_with_claude(prompt)
+        material_code = generate_text_with_context(prompt)
 
         # 保存生成的材质代码到文件
         with open(os.path.join(log_dir, "material_application_code.py"), "w", encoding='utf-8') as f:
