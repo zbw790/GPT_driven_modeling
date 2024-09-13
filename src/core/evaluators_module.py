@@ -6,7 +6,11 @@ from bpy.props import StringProperty
 from abc import ABC, abstractmethod
 from src.llm_modules.gpt_module import analyze_screenshots_with_gpt4
 from src.llm_modules.claude_module import analyze_screenshots_with_claude
-from src.llm_modules.LLM_common_utils import get_screenshots, get_scene_info, format_scene_info
+from src.llm_modules.LLM_common_utils import (
+    get_screenshots,
+    get_scene_info,
+    format_scene_info,
+)
 from src.utils.logger_module import setup_logger, log_context
 from typing import List, Dict, Any, Tuple
 from enum import Enum
@@ -15,15 +19,23 @@ import re
 import os
 
 # 创建专门的日志记录器
-logger = setup_logger('model_generation')
+logger = setup_logger("model_generation")
+
 
 class EvaluationStatus(Enum):
     NOT_PASS = 0
     PASS = 1
     GOOD = 2
 
+
 class EvaluationResult:
-    def __init__(self, analysis: str, status: EvaluationStatus, score: float, suggestions: List[str]):
+    def __init__(
+        self,
+        analysis: str,
+        status: EvaluationStatus,
+        score: float,
+        suggestions: List[str],
+    ):
         self.analysis = analysis
         self.status = status
         self.score = score
@@ -32,23 +44,25 @@ class EvaluationResult:
     def __str__(self):
         return f"Analysis: {self.analysis}\nStatus: {self.status.name}, Score: {self.score}\nSuggestions: {', '.join(self.suggestions)}"
 
+
 def parse_json_response(response, default_message="无法解析评估结果。"):
     try:
         return json.loads(response)
     except json.JSONDecodeError:
-        json_match = re.search(r'\{[\s\S]*\}', response)
+        json_match = re.search(r"\{[\s\S]*\}", response)
         if json_match:
             try:
                 return json.loads(json_match.group(0))
             except json.JSONDecodeError:
                 pass
-    
+
     return {
         "analysis": default_message,
         "status": "PASS",
         "score": 0,
-        "suggestions": ["该部分解析失败，请检查模型并重新评估。"]
+        "suggestions": ["该部分解析失败，请检查模型并重新评估。"],
     }
+
 
 class BaseEvaluator(ABC):
     @abstractmethod
@@ -59,16 +73,19 @@ class BaseEvaluator(ABC):
     def analyze_screenshots(self, prompt: str, screenshots: List[str]) -> str:
         pass
 
-    def evaluate(self, screenshots: List[str], context: Dict[str, Any]) -> EvaluationResult:
+    def evaluate(
+        self, screenshots: List[str], context: Dict[str, Any]
+    ) -> EvaluationResult:
         prompt = self.get_prompt(context)
         response = self.analyze_screenshots(prompt, screenshots)
         result = parse_json_response(response)
         return EvaluationResult(
-            result['analysis'],
-            EvaluationStatus[result['status']],
-            result['score'],
-            result['suggestions']
+            result["analysis"],
+            EvaluationStatus[result["status"]],
+            result["score"],
+            result["suggestions"],
         )
+
 
 class GPTOverallEvaluator(BaseEvaluator):
     def get_prompt(self, context: Dict[str, Any]) -> str:
@@ -132,6 +149,7 @@ class GPTOverallEvaluator(BaseEvaluator):
     def analyze_screenshots(self, prompt: str, screenshots: List[str]) -> str:
         return analyze_screenshots_with_claude(prompt, screenshots)
 
+
 class ClaudeOverallEvaluator(BaseEvaluator):
     def get_prompt(self, context: Dict[str, Any]) -> str:
         return f"""
@@ -193,6 +211,7 @@ class ClaudeOverallEvaluator(BaseEvaluator):
     def analyze_screenshots(self, prompt: str, screenshots: List[str]) -> str:
         return analyze_screenshots_with_claude(prompt, screenshots)
 
+
 class SizeEvaluator(BaseEvaluator):
     def get_prompt(self, context: Dict[str, Any]) -> str:
         return f"""
@@ -251,6 +270,7 @@ class SizeEvaluator(BaseEvaluator):
     def analyze_screenshots(self, prompt: str, screenshots: List[str]) -> str:
         return analyze_screenshots_with_claude(prompt, screenshots)
 
+
 class ProportionEvaluator(BaseEvaluator):
     def get_prompt(self, context: Dict[str, Any]) -> str:
         return f"""
@@ -308,6 +328,7 @@ class ProportionEvaluator(BaseEvaluator):
 
     def analyze_screenshots(self, prompt: str, screenshots: List[str]) -> str:
         return analyze_screenshots_with_claude(prompt, screenshots)
+
 
 class StructureEvaluator(BaseEvaluator):
     def get_prompt(self, context: Dict[str, Any]) -> str:
@@ -369,7 +390,8 @@ class StructureEvaluator(BaseEvaluator):
 
     def analyze_screenshots(self, prompt: str, screenshots: List[str]) -> str:
         return analyze_screenshots_with_claude(prompt, screenshots)
-    
+
+
 class UsabilityEvaluator(BaseEvaluator):
     def get_prompt(self, context: Dict[str, Any]) -> str:
         return f"""
@@ -429,6 +451,7 @@ class UsabilityEvaluator(BaseEvaluator):
     def analyze_screenshots(self, prompt: str, screenshots: List[str]) -> str:
         return analyze_screenshots_with_claude(prompt, screenshots)
 
+
 class ModelEvaluator:
     def __init__(self):
         self.evaluators: List[BaseEvaluator] = [
@@ -437,26 +460,28 @@ class ModelEvaluator:
             SizeEvaluator(),
             ProportionEvaluator(),
             StructureEvaluator(),
-            UsabilityEvaluator(), 
+            UsabilityEvaluator(),
         ]
 
-    def evaluate(self, screenshots: List[str], context: Dict[str, Any]) -> Dict[str, EvaluationResult]:
+    def evaluate(
+        self, screenshots: List[str], context: Dict[str, Any]
+    ) -> Dict[str, EvaluationResult]:
         # 获取场景信息
         scene_info = get_scene_info()
         formatted_scene_info = format_scene_info(scene_info)
-        
+
         # 将场景信息添加到context中
-        context['scene_info'] = formatted_scene_info
+        context["scene_info"] = formatted_scene_info
 
         # 如果context中包含'obj'键而不是'model_description'键，进行转换
-        if 'obj' in context and 'model_description' not in context:
-            context['model_description'] = context['obj']
+        if "obj" in context and "model_description" not in context:
+            context["model_description"] = context["obj"]
 
         results = {}
         for evaluator in self.evaluators:
             result = evaluator.evaluate(screenshots, context)
             results[evaluator.__class__.__name__] = result
-            
+
             # 使用 logger 记录每个评估器的结果
             logger.info(f"\n--- {evaluator.__class__.__name__} Results ---")
             logger.info(f"Analysis: {result.analysis}")
@@ -469,31 +494,34 @@ class ModelEvaluator:
 
         return results
 
-    def aggregate_results(self, results: Dict[str, EvaluationResult]) -> Tuple[str, EvaluationStatus, float, List[str]]:
+    def aggregate_results(
+        self, results: Dict[str, EvaluationResult]
+    ) -> Tuple[str, EvaluationStatus, float, List[str]]:
         statuses = [result.status for result in results.values()]
         average_score = sum(result.score for result in results.values()) / len(results)
-        
+
         all_suggestions = []
         all_analyses = []
         for result in results.values():
             all_suggestions.extend(result.suggestions)
             all_analyses.append(result.analysis)
-        
+
         unique_suggestions = list(set(all_suggestions))
         combined_analysis = " ".join(all_analyses)
-        
+
         if EvaluationStatus.NOT_PASS in statuses:
             final_status = EvaluationStatus.NOT_PASS
         elif all(status == EvaluationStatus.GOOD for status in statuses):
             final_status = EvaluationStatus.GOOD
         else:
             final_status = EvaluationStatus.PASS
-        
+
         return combined_analysis, final_status, average_score, unique_suggestions
 
     def is_model_satisfactory(self, results: Dict[str, EvaluationResult]) -> bool:
         _, final_status, _, _ = self.aggregate_results(results)
         return final_status in [EvaluationStatus.PASS, EvaluationStatus.GOOD]
+
 
 class OBJECT_OT_evaluate_model(Operator):
     bl_idname = "object.evaluate_model"
@@ -503,17 +531,22 @@ class OBJECT_OT_evaluate_model(Operator):
     def execute(self, context):
         screenshots = get_screenshots()
         evaluator = ModelEvaluator()
-        
+
         # 这里需要提供评估所需的上下文信息
         evaluation_context = {
             "user_input": "用户的原始输入",  # 这里需要从某处获取用户输入
             "rewritten_input": "重写后的输入",  # 这里需要从某处获取重写后的输入
-            "model_description": {}  # 这里需要从某处获取模型描述
+            "model_description": {},  # 这里需要从某处获取模型描述
         }
-        
+
         results = evaluator.evaluate(screenshots, evaluation_context)
-        
-        combined_analysis, final_status, average_score, suggestions = evaluator.aggregate_results(results)
+
+        (
+            combined_analysis,
+            final_status,
+            average_score,
+            suggestions,
+        ) = evaluator.aggregate_results(results)
 
         print(f"Combined Analysis: {combined_analysis}")
         print(f"Final Status: {final_status.name}")
@@ -522,16 +555,20 @@ class OBJECT_OT_evaluate_model(Operator):
         for suggestion in suggestions:
             print(f"- {suggestion}")
 
-        self.report({'INFO'}, f"Evaluation complete. Status: {final_status.name}, Score: {average_score:.2f}")
+        self.report(
+            {"INFO"},
+            f"Evaluation complete. Status: {final_status.name}, Score: {average_score:.2f}",
+        )
 
-        return {'FINISHED'}
+        return {"FINISHED"}
+
 
 class Evaluator_PT_panel(Panel):
     bl_label = "Model Evaluator"
     bl_idname = "EVALUATOR_PT_panel"
-    bl_space_type = 'VIEW_3D'
-    bl_region_type = 'UI'
-    bl_category = 'Tool'
+    bl_space_type = "VIEW_3D"
+    bl_region_type = "UI"
+    bl_category = "Tool"
 
     def draw(self, context):
         layout = self.layout

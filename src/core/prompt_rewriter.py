@@ -3,7 +3,7 @@
 from src.llm_modules.claude_module import generate_text_with_claude
 from src.utils.logger_module import setup_logger
 
-logger = setup_logger('prompt_rewriter')
+logger = setup_logger("prompt_rewriter")
 
 REWRITE_SYSTEM_PROMPT = """
 Context:
@@ -45,11 +45,12 @@ Response:
 桌子的整体色调应该是深褐色或绿色，以反映松树的自然色彩。桌面可能有纹理设计，模仿松树的树皮或年轮。（注：具体的尺寸和材料未指定，这些细节可能需要进一步确认）
 """
 
+
 def rewrite_prompt(original_prompt):
     prompt = f"原始提示词：\n{original_prompt}\n\n你的角色与对应的要求：{REWRITE_SYSTEM_PROMPT}"
-    
+
     logger.info(f"Sending prompt to Claude for rewriting: {prompt}")
     rewritten_prompt = generate_text_with_claude(prompt)
     logger.info(f"Received rewritten prompt from Claude: {rewritten_prompt}")
-    
+
     return rewritten_prompt.strip()

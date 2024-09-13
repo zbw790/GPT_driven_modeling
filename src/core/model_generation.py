@@ -7,27 +7,52 @@ import os
 from typing import List, Dict, Any
 from bpy.types import Operator, Panel, PropertyGroup
 from bpy.props import StringProperty, PointerProperty
-from src.llm_modules.claude_module import generate_text_with_claude, analyze_screenshots_with_claude
-from src.llm_modules.LLM_common_utils import sanitize_command, initialize_conversation, execute_blender_command, add_history_to_prompt, get_screenshots, get_scene_info, format_scene_info, execute_blender_command_with_error_handling
+from src.llm_modules.claude_module import (
+    generate_text_with_claude,
+    analyze_screenshots_with_claude,
+)
+from src.llm_modules.LLM_common_utils import (
+    sanitize_command,
+    initialize_conversation,
+    execute_blender_command,
+    add_history_to_prompt,
+    get_screenshots,
+    get_scene_info,
+    format_scene_info,
+    execute_blender_command_with_error_handling,
+)
 from src.utils.logger_module import setup_logger, log_context
 from src.core.prompt_rewriter import rewrite_prompt
-from src.llm_modules.gpt_module import generate_text_with_context, analyze_screenshots_with_gpt4
-from src.llama_index_modules.llama_index_model_generation import query_generation_documentation
-from src.llama_index_modules.llama_index_model_modification import query_modification_documentation
-from src.llama_index_modules.llama_index_component_library import query_component_documentation
+from src.llm_modules.gpt_module import (
+    generate_text_with_context,
+    analyze_screenshots_with_gpt4,
+)
+from src.llama_index_modules.llama_index_model_generation import (
+    query_generation_documentation,
+)
+from src.llama_index_modules.llama_index_model_modification import (
+    query_modification_documentation,
+)
+from src.llama_index_modules.llama_index_component_library import (
+    query_component_documentation,
+)
 from src.core.evaluators_module import ModelEvaluator, EvaluationStatus
 from src.utils.model_viewer_module import save_screenshots, save_screenshots_to_path
-from src.llama_index_modules.llama_index_material_library import query_material_documentation
+from src.llama_index_modules.llama_index_material_library import (
+    query_material_documentation,
+)
 
 # 创建专门的日志记录器
-logger = setup_logger('model_generation')
+logger = setup_logger("model_generation")
+
 
 class ModelGenerationProperties(PropertyGroup):
     input_text: StringProperty(
         name="Model Description",
         description="Describe the model you want to generate",
-        default=""
+        default="",
     )
+
 
 def parse_user_input(user_input, rewritten_input):
     prompt = f"""
@@ -115,20 +140,21 @@ def parse_user_input(user_input, rewritten_input):
     6. 省略纯装饰性元素、内部支撑结构或不影响整体形态的次要部件。
     7. 形状描述不仅限于示例中给出的类型，可根据需要使用其他适当的形状描述（如"cone"表示圆锥体等）。
     """
-    
+
     logger.info(f"Sending prompt to Claude: {prompt}")
     response = generate_text_with_claude(prompt)
     logger.info(f"Received response from Claude: {response}")
-    
+
     response = sanitize_command(response)
     response = sanitize_reference(response)
     return json.loads(response)
+
 
 def sanitize_reference(response):
     """
     从Claude的响应中提取JSON数据，去除注释和其他非JSON内容。
     """
-    json_match = re.search(r'\{[\s\S]*\}', response)
+    json_match = re.search(r"\{[\s\S]*\}", response)
     if json_match:
         json_str = json_match.group(0)
         try:
@@ -138,6 +164,7 @@ def sanitize_reference(response):
             return json_str
     else:
         return ""
+
 
 class MODEL_GENERATION_OT_generate(Operator):
     bl_idname = "model_generation.generate"
@@ -153,42 +180,62 @@ class MODEL_GENERATION_OT_generate(Operator):
                 logger.info("Rewriting user input")
                 rewritten_input = rewrite_prompt(user_input)
                 logger.info(f"Rewritten input: {rewritten_input}")
-                
+
                 logger.info("Parsing rewritten user input")
                 scene_description = self.parse_scene_input(user_input, rewritten_input)
                 logger.info("Scene Description:")
                 logger.info(json.dumps(scene_description, ensure_ascii=False, indent=2))
-                
+
                 # Save scene description to file
-                with open(os.path.join(log_dir, "scene_description.json"), "w", encoding='utf-8') as f:
+                with open(
+                    os.path.join(log_dir, "scene_description.json"),
+                    "w",
+                    encoding="utf-8",
+                ) as f:
                     json.dump(scene_description, f, ensure_ascii=False, indent=2)
-                
+
                 # Generate 3D models for each object in the scene
                 generated_models = []
-                for obj in scene_description['objects']:
+                for obj in scene_description["objects"]:
                     logger.info(f"Generating model for: {obj['object_type']}")
-                    model_code = self.generate_3d_model(context, obj, scene_description['scene_context'], log_dir)
-                    optimized_model = self.evaluate_and_optimize_model(context, obj, scene_description['scene_context'], model_code, user_input, rewritten_input, log_dir)
+                    model_code = self.generate_3d_model(
+                        context, obj, scene_description["scene_context"], log_dir
+                    )
+                    optimized_model = self.evaluate_and_optimize_model(
+                        context,
+                        obj,
+                        scene_description["scene_context"],
+                        model_code,
+                        user_input,
+                        rewritten_input,
+                        log_dir,
+                    )
                     generated_models.append(optimized_model)
 
                 # Arrange objects in the scene
-                self.arrange_scene(context, scene_description, generated_models, log_dir)
+                self.arrange_scene(
+                    context, scene_description, generated_models, log_dir
+                )
 
                 # Apply materials to the entire scene
-                self.apply_materials(context, user_input, rewritten_input, scene_description, log_dir)
+                self.apply_materials(
+                    context, user_input, rewritten_input, scene_description, log_dir
+                )
 
                 logger.debug(f"Log directory: {log_dir}")
                 # 保存当前场景的屏幕截图
                 screenshot_path = os.path.join(log_dir, "scene_screenshot.png")
                 bpy.ops.screen.screenshot(filepath=screenshot_path)
                 logger.debug(f"Screenshot saved to {screenshot_path}")
-                
-                self.report({'INFO'}, f"Scene generated and optimized. Logs saved in {log_dir}")
+
+                self.report(
+                    {"INFO"}, f"Scene generated and optimized. Logs saved in {log_dir}"
+                )
             except Exception as e:
                 logger.error(f"An error occurred: {str(e)}")
-                self.report({'ERROR'}, f"An error occurred: {str(e)}")
-        
-        return {'FINISHED'}
+                self.report({"ERROR"}, f"An error occurred: {str(e)}")
+
+        return {"FINISHED"}
 
     def parse_scene_input(self, user_input, rewritten_input):
         prompt = f"""
@@ -260,11 +307,11 @@ class MODEL_GENERATION_OT_generate(Operator):
         5. 确保位置描述足够清晰，以便后续正确放置物品。
         6. 添加一个scene_context字段，描述整个场景的氛围、光线等信息。
         """
-        
+
         logger.info(f"Sending prompt to Claude: {prompt}")
         response = generate_text_with_claude(prompt)
         logger.info(f"Received response from Claude: {response}")
-        
+
         response = sanitize_command(response)
         response = sanitize_reference(response)
         return json.loads(response)
@@ -307,11 +354,13 @@ class MODEL_GENERATION_OT_generate(Operator):
 
         只需提供Python代码，不需要其他解释。
         """
-        
+
         arrangement_code = generate_text_with_context(prompt)
 
         # 保存生成的场景安排代码到文件
-        with open(os.path.join(log_dir, "scene_arrangement_code.py"), "w", encoding='utf-8') as f:
+        with open(
+            os.path.join(log_dir, "scene_arrangement_code.py"), "w", encoding="utf-8"
+        ) as f:
             f.write(arrangement_code)
 
         # 执行生成的Blender场景安排命令
@@ -320,7 +369,7 @@ class MODEL_GENERATION_OT_generate(Operator):
             logger.debug("Successfully arranged scene objects.")
         except Exception as e:
             logger.error(f"Error arranging scene objects: {str(e)}")
-            self.report({'ERROR'}, f"Error arranging scene objects: {str(e)}")
+            self.report({"ERROR"}, f"Error arranging scene objects: {str(e)}")
 
         # 更新视图
         self.update_blender_view(context)
@@ -332,7 +381,6 @@ class MODEL_GENERATION_OT_generate(Operator):
         for screenshot in screenshots:
             logger.debug(f"Scene arrangement screenshot saved: {screenshot}")
 
-
     def generate_3d_model(self, context, obj, scene_context, log_dir):
         # 为每个模型创建单独的目录
         model_dir = os.path.join(log_dir, f"model_{obj['object_type']}")
@@ -340,13 +388,14 @@ class MODEL_GENERATION_OT_generate(Operator):
 
         # 查询必要文件
         logger.info("Querying generation documentation")
-        generation_docs = query_generation_documentation(bpy.types.Scene.generation_query_engine, obj['object_type'])
+        generation_docs = query_generation_documentation(
+            bpy.types.Scene.generation_query_engine, obj["object_type"]
+        )
         logger.info(f"Generation documentation: {generation_docs}")
 
         # 查询部件库
         component_docs = self.query_component_library(obj)
         logger.info(f"Component library documentation: {component_docs}")
-
 
         # 准备提示信息
         prompt = f"""
@@ -389,7 +438,7 @@ class MODEL_GENERATION_OT_generate(Operator):
         9. 参考部件库文档中的指南来创建各个部件
 
         请直接返回Python代码，不需要其他解释或注释。
-        """ 
+        """
 
         # 使用 GPT 生成响应
         conversation_manager = context.scene.conversation_manager
@@ -404,7 +453,11 @@ class MODEL_GENERATION_OT_generate(Operator):
         logger.info(f"GPT Generated Commands for 3D Model:\n```python\n{response}\n```")
 
         # 保存生成的代码到文件
-        with open(os.path.join(model_dir, f"{obj['object_type']}_generation_code.py"), "w", encoding='utf-8') as f:
+        with open(
+            os.path.join(model_dir, f"{obj['object_type']}_generation_code.py"),
+            "w",
+            encoding="utf-8",
+        ) as f:
             f.write(response)
 
         # 执行生成的Blender命令
@@ -412,7 +465,7 @@ class MODEL_GENERATION_OT_generate(Operator):
         corrected_response = None
         if error_message:
             logger.error(f"Error executing Blender commands: {error_message}")
-            
+
             # 准备新的提示，包含错误信息
             error_prompt = f"""
             之前的prompt:{prompt}
@@ -427,21 +480,34 @@ class MODEL_GENERATION_OT_generate(Operator):
 
             请提供修正后的Blender Python代码。
             """
-            
-             # 使用 GPT 生成修正后的代码
+
+            # 使用 GPT 生成修正后的代码
             corrected_response = generate_text_with_context(error_prompt)
-            
+
             logger.info(f"GPT Generated Corrected Commands:\n{corrected_response}")
-            
+
             # 保存修正后的代码到文件
-            with open(os.path.join(model_dir, f"{obj['object_type']}_corrected_generation_code.py"), "w", encoding='utf-8') as f:
+            with open(
+                os.path.join(
+                    model_dir, f"{obj['object_type']}_corrected_generation_code.py"
+                ),
+                "w",
+                encoding="utf-8",
+            ) as f:
                 f.write(corrected_response)
-            
+
             # 尝试执行修正后的代码
-            error_message = execute_blender_command_with_error_handling(corrected_response)
+            error_message = execute_blender_command_with_error_handling(
+                corrected_response
+            )
             if error_message:
-                logger.error(f"Error executing corrected Blender commands: {error_message}")
-                self.report({'ERROR'}, f"Error executing corrected Blender commands: {error_message}")
+                logger.error(
+                    f"Error executing corrected Blender commands: {error_message}"
+                )
+                self.report(
+                    {"ERROR"},
+                    f"Error executing corrected Blender commands: {error_message}",
+                )
             else:
                 logger.debug("Successfully executed corrected Blender commands.")
         else:
@@ -449,15 +515,17 @@ class MODEL_GENERATION_OT_generate(Operator):
 
         # 更新视图并等待一小段时间以确保视图已更新
         self.update_blender_view(context)
-        bpy.ops.wm.redraw_timer(type='DRAW_WIN_SWAP', iterations=1)
+        bpy.ops.wm.redraw_timer(type="DRAW_WIN_SWAP", iterations=1)
 
         # 保存生成模型的截图
         screenshots = save_screenshots()
         screenshot_dir = os.path.join(model_dir, "generation_screenshots")
         save_screenshots_to_path(screenshot_dir)
         for screenshot in screenshots:
-            logger.debug(f"Generation screenshot saved for {obj['object_type']}: {screenshot}")
-        
+            logger.debug(
+                f"Generation screenshot saved for {obj['object_type']}: {screenshot}"
+            )
+
         if corrected_response is not None:
             return corrected_response
         else:
@@ -465,10 +533,12 @@ class MODEL_GENERATION_OT_generate(Operator):
 
     def query_component_library(self, obj):
         component_docs = []
-        for component in obj.get('components', []):
-            component_name = component.get('name', '')
+        for component in obj.get("components", []):
+            component_name = component.get("name", "")
             if component_name:
-                results = query_component_documentation(bpy.types.Scene.component_query_engine, component_name)
+                results = query_component_documentation(
+                    bpy.types.Scene.component_query_engine, component_name
+                )
                 component_docs.extend(results)
         return "\n\n".join(component_docs)
 
@@ -476,8 +546,17 @@ class MODEL_GENERATION_OT_generate(Operator):
         # 确保更改立即可见
         bpy.context.view_layer.update()
         logger.debug("Blender view updated.")
-    
-    def evaluate_and_optimize_model(self, context, obj, scene_context, model_code, user_input, rewritten_input, log_dir):
+
+    def evaluate_and_optimize_model(
+        self,
+        context,
+        obj,
+        scene_context,
+        model_code,
+        user_input,
+        rewritten_input,
+        log_dir,
+    ):
         max_iterations = 2  # 设置最大迭代次数
         iteration = 0
         optimized_model_code = None
@@ -494,60 +573,99 @@ class MODEL_GENERATION_OT_generate(Operator):
             screenshots = get_screenshots()
 
             evaluator = ModelEvaluator()
-            
+
             evaluation_context = {
                 "model_code": model_code,
                 "obj": obj,
                 "scene_context": scene_context,
                 "user_input": None,
-                "rewritten_input": None
+                "rewritten_input": None,
             }
-            
-            results = evaluator.evaluate(screenshots, evaluation_context)
-            combined_analysis, final_status, average_score, suggestions = evaluator.aggregate_results(results)
-            # 整合并剔除不必要的建议
-            filtered_suggestions = self.filter_and_consolidate_suggestions(suggestions, evaluation_context)
-            # 提取优先建议
-            priority_suggestions = filtered_suggestions.get('priority_suggestions', [])
 
-            logger.info(f"Iteration {iteration + 1}: Status: {final_status.name}, Score: {average_score:.2f}")
+            results = evaluator.evaluate(screenshots, evaluation_context)
+            (
+                combined_analysis,
+                final_status,
+                average_score,
+                suggestions,
+            ) = evaluator.aggregate_results(results)
+            # 整合并剔除不必要的建议
+            filtered_suggestions = self.filter_and_consolidate_suggestions(
+                suggestions, evaluation_context
+            )
+            # 提取优先建议
+            priority_suggestions = filtered_suggestions.get("priority_suggestions", [])
+
+            logger.info(
+                f"Iteration {iteration + 1}: Status: {final_status.name}, Score: {average_score:.2f}"
+            )
             logger.info(f"Combined Analysis: {combined_analysis}")
             logger.info("Suggestions:")
             logger.info(f"- {suggestions}")
             logger.info(f"Priority Suggestions: {priority_suggestions}")
 
             # 保存评估结果到文件
-            with open(os.path.join(iteration_dir, f"{obj['object_type']}_evaluation_results.json"), "w", encoding='utf-8') as f:
-                json.dump({
-                    "iteration": iteration + 1,
-                    "status": final_status.name,
-                    "score": average_score,
-                    "analysis": combined_analysis,
-                    "suggestions": suggestions,
-                    "priority_suggestions": priority_suggestions
-                }, f, ensure_ascii=False, indent=2)
+            with open(
+                os.path.join(
+                    iteration_dir, f"{obj['object_type']}_evaluation_results.json"
+                ),
+                "w",
+                encoding="utf-8",
+            ) as f:
+                json.dump(
+                    {
+                        "iteration": iteration + 1,
+                        "status": final_status.name,
+                        "score": average_score,
+                        "analysis": combined_analysis,
+                        "suggestions": suggestions,
+                        "priority_suggestions": priority_suggestions,
+                    },
+                    f,
+                    ensure_ascii=False,
+                    indent=2,
+                )
 
             # 如果模型满意或达到最大迭代次数，退出循环
             if final_status == EvaluationStatus.PASS or iteration == max_iterations - 1:
                 break
 
             # 否则，继续优化模型
-            optimized_model_code = self.optimize_model(context, priority_suggestions, evaluation_context, screenshots, iteration_dir, iteration)
+            optimized_model_code = self.optimize_model(
+                context,
+                priority_suggestions,
+                evaluation_context,
+                screenshots,
+                iteration_dir,
+                iteration,
+            )
             iteration += 1
 
         if final_status == EvaluationStatus.PASS:
-            logger.info(f"Model optimization completed successfully after {iteration + 1} iterations.")
-            self.report({'INFO'}, f"Model optimized successfully after {iteration + 1} iterations.")
+            logger.info(
+                f"Model optimization completed successfully after {iteration + 1} iterations."
+            )
+            self.report(
+                {"INFO"},
+                f"Model optimized successfully after {iteration + 1} iterations.",
+            )
         else:
-            logger.warning(f"Model optimization did not reach satisfactory results after {max_iterations} iterations.")
-            self.report({'WARNING'}, f"Model optimization completed with suboptimal results after {max_iterations} iterations.")
+            logger.warning(
+                f"Model optimization did not reach satisfactory results after {max_iterations} iterations."
+            )
+            self.report(
+                {"WARNING"},
+                f"Model optimization completed with suboptimal results after {max_iterations} iterations.",
+            )
 
         # 保存最终模型的截图
         final_screenshots = save_screenshots()
         final_screenshot_dir = os.path.join(optimization_dir, "final_model_screenshots")
         save_screenshots_to_path(final_screenshot_dir)
         for screenshot in final_screenshots:
-            logger.debug(f"Final model screenshot saved for {obj['object_type']}: {screenshot}")
+            logger.debug(
+                f"Final model screenshot saved for {obj['object_type']}: {screenshot}"
+            )
 
         return optimized_model_code
 
@@ -608,7 +726,15 @@ class MODEL_GENERATION_OT_generate(Operator):
         response = sanitize_reference(response)
         return json.loads(response)
 
-    def optimize_model(self, context, priority_suggestions, evaluation_context, screenshots, iteration_dir, iteration):
+    def optimize_model(
+        self,
+        context,
+        priority_suggestions,
+        evaluation_context,
+        screenshots,
+        iteration_dir,
+        iteration,
+    ):
         all_optimization_responses = []
 
         # 获取场景信息
@@ -619,28 +745,45 @@ class MODEL_GENERATION_OT_generate(Operator):
         # 为每个建议生成单独的优化代码
         for suggestion in priority_suggestions:
             # 获取相关优化文档
-            modification_doc = query_modification_documentation(bpy.types.Scene.modification_query_engine, suggestion)
+            modification_doc = query_modification_documentation(
+                bpy.types.Scene.modification_query_engine, suggestion
+            )
             logger.info(f"相关优化文档: {modification_doc}")
 
-            optimization_response = self.generate_optimization_code_for_suggestion(context, suggestion, evaluation_context, formatted_scene_info, modification_doc)
+            optimization_response = self.generate_optimization_code_for_suggestion(
+                context,
+                suggestion,
+                evaluation_context,
+                formatted_scene_info,
+                modification_doc,
+            )
             all_optimization_responses.append(optimization_response)
             logger.info(f"生成的优化代码 for '{suggestion}': {optimization_response}")
 
         # 综合所有响应，生成最终的优化代码
-        final_optimization_code = self.generate_final_optimization_code(context, all_optimization_responses, evaluation_context, formatted_scene_info)
+        final_optimization_code = self.generate_final_optimization_code(
+            context,
+            all_optimization_responses,
+            evaluation_context,
+            formatted_scene_info,
+        )
 
         logger.info(f"最终生成的优化代码:\n{final_optimization_code}")
 
         # 保存生成的优化代码到文件
-        with open(os.path.join(iteration_dir, "optimization_code.py"), "w", encoding='utf-8') as f:
+        with open(
+            os.path.join(iteration_dir, "optimization_code.py"), "w", encoding="utf-8"
+        ) as f:
             f.write(final_optimization_code)
 
         # 执行生成的Blender优化命令
-        error_message = execute_blender_command_with_error_handling(final_optimization_code)
+        error_message = execute_blender_command_with_error_handling(
+            final_optimization_code
+        )
         corrected_response = None
         if error_message:
             logger.error(f"Error executing optimization commands: {error_message}")
-            
+
             # 准备新的提示，包含错误信息
             error_prompt = f"""
             在执行之前生成的Blender优化命令时发生了错误。以下是错误信息：
@@ -655,21 +798,34 @@ class MODEL_GENERATION_OT_generate(Operator):
             请提供修正后的Blender Python代码。
             请直接返回Python代码，不需要其他解释或注释。
             """
-            
+
             # 使用 Claude 生成修正后的代码
             corrected_response = generate_text_with_context(error_prompt)
-            
-            logger.info(f"GPT Generated Corrected Optimization Commands:\n{corrected_response}")
-            
+
+            logger.info(
+                f"GPT Generated Corrected Optimization Commands:\n{corrected_response}"
+            )
+
             # 保存修正后的代码到文件
-            with open(os.path.join(iteration_dir, "corrected_optimization_code.py"), "w", encoding='utf-8') as f:
+            with open(
+                os.path.join(iteration_dir, "corrected_optimization_code.py"),
+                "w",
+                encoding="utf-8",
+            ) as f:
                 f.write(corrected_response)
-            
+
             # 尝试执行修正后的代码
-            error_message = execute_blender_command_with_error_handling(corrected_response)
+            error_message = execute_blender_command_with_error_handling(
+                corrected_response
+            )
             if error_message:
-                logger.error(f"Error executing corrected optimization commands: {error_message}")
-                self.report({'ERROR'}, f"Error executing corrected optimization commands: {error_message}")
+                logger.error(
+                    f"Error executing corrected optimization commands: {error_message}"
+                )
+                self.report(
+                    {"ERROR"},
+                    f"Error executing corrected optimization commands: {error_message}",
+                )
             else:
                 logger.debug("Successfully executed corrected optimization commands.")
         else:
@@ -677,21 +833,30 @@ class MODEL_GENERATION_OT_generate(Operator):
 
         # 更新视图并等待一小段时间以确保视图已更新
         self.update_blender_view(context)
-        bpy.ops.wm.redraw_timer(type='DRAW_WIN_SWAP', iterations=1)
+        bpy.ops.wm.redraw_timer(type="DRAW_WIN_SWAP", iterations=1)
 
         # 保存当前迭代的截图
         screenshots = save_screenshots()
         screenshot_dir = os.path.join(iteration_dir, "evaluation_screenshots")
         save_screenshots_to_path(screenshot_dir)
         for screenshot in screenshots:
-            logger.debug(f"Iteration {iteration + 1} evaluation screenshot saved: {screenshot}")
+            logger.debug(
+                f"Iteration {iteration + 1} evaluation screenshot saved: {screenshot}"
+            )
 
         if corrected_response is not None:
             return corrected_response
         else:
             return final_optimization_code
 
-    def generate_optimization_code_for_suggestion(self, context, suggestion, evaluation_context, formatted_scene_info, modification_doc):
+    def generate_optimization_code_for_suggestion(
+        self,
+        context,
+        suggestion,
+        evaluation_context,
+        formatted_scene_info,
+        modification_doc,
+    ):
         prompt = f"""
         Context:
         你是一个专门负责优化3D模型的AI助手。你的任务是根据给定的单个建议，生成Blender Python命令来优化现有的3D模型。
@@ -720,13 +885,19 @@ class MODEL_GENERATION_OT_generate(Operator):
         请提供实现这个特定优化建议的Blender Python代码。
         请直接返回Python代码，不需要其他解释或注释。
         """
-        
+
         response = generate_text_with_context(prompt)
         return response
 
-    def generate_final_optimization_code(self, context, all_optimization_responses, evaluation_context, formatted_scene_info):
+    def generate_final_optimization_code(
+        self,
+        context,
+        all_optimization_responses,
+        evaluation_context,
+        formatted_scene_info,
+    ):
         combined_responses = "\n\n".join(all_optimization_responses)
-        
+
         prompt = f"""
         Context:
         你是一个专门负责优化3D模型的AI助手。你的任务是将多个优化步骤的代码合并成一个连贯的优化脚本。
@@ -763,18 +934,22 @@ class MODEL_GENERATION_OT_generate(Operator):
 
         请直接返回Python代码，不需要其他解释或注释。
         """
-        
+
         response = generate_text_with_context(prompt)
         return response
-    
-    def apply_materials(self, context, user_input, rewritten_input, scene_description, log_dir):
+
+    def apply_materials(
+        self, context, user_input, rewritten_input, scene_description, log_dir
+    ):
         try:
             # 获取场景信息
             scene_info = get_scene_info()
             formatted_scene_info = format_scene_info(scene_info)
 
             # 步骤1：分析场景信息并确定所需的材质
-            material_requirements = self.analyze_scene_for_materials(user_input, rewritten_input, formatted_scene_info, scene_description)
+            material_requirements = self.analyze_scene_for_materials(
+                user_input, rewritten_input, formatted_scene_info, scene_description
+            )
             logger.info(f"材质需求： {material_requirements}")
 
             # 步骤2：查询相关的材质文档
@@ -782,14 +957,29 @@ class MODEL_GENERATION_OT_generate(Operator):
             logger.info(f"材质文档： {material_docs}")
 
             # 步骤3：生成并应用材质
-            self.generate_and_apply_materials(context, user_input, rewritten_input, formatted_scene_info, scene_description, material_requirements, material_docs, log_dir)
+            self.generate_and_apply_materials(
+                context,
+                user_input,
+                rewritten_input,
+                formatted_scene_info,
+                scene_description,
+                material_requirements,
+                material_docs,
+                log_dir,
+            )
 
-            self.report({'INFO'}, f"Materials applied successfully. Logs saved in {log_dir}")
+            self.report(
+                {"INFO"}, f"Materials applied successfully. Logs saved in {log_dir}"
+            )
         except Exception as e:
             logger.error(f"An error occurred while applying materials: {str(e)}")
-            self.report({'ERROR'}, f"An error occurred while applying materials: {str(e)}")
+            self.report(
+                {"ERROR"}, f"An error occurred while applying materials: {str(e)}"
+            )
 
-    def analyze_scene_for_materials(self, user_input, rewritten_input, formatted_scene_info, scene_description):
+    def analyze_scene_for_materials(
+        self, user_input, rewritten_input, formatted_scene_info, scene_description
+    ):
         prompt = f"""
         Context:
         你是一个专门分析3D场景并确定所需材质的AI助手。根据提供的场景信息和模型描述，确定需要的材质类型。
@@ -820,11 +1010,23 @@ class MODEL_GENERATION_OT_generate(Operator):
         material_docs = {}
         for material_type in material_requirements.keys():
             query = f"材质类型：{material_type}"
-            results = query_material_documentation(bpy.types.Scene.material_query_engine, query)
+            results = query_material_documentation(
+                bpy.types.Scene.material_query_engine, query
+            )
             material_docs[material_type] = results
         return material_docs
 
-    def generate_and_apply_materials(self, context, user_input, rewritten_input, formatted_scene_info, scene_description, material_requirements, material_docs, log_dir):
+    def generate_and_apply_materials(
+        self,
+        context,
+        user_input,
+        rewritten_input,
+        formatted_scene_info,
+        scene_description,
+        material_requirements,
+        material_docs,
+        log_dir,
+    ):
         logger.info(f"材质需求： {material_requirements}")
         logger.info(f"材质文档： {material_docs}")
         prompt = f"""
@@ -890,7 +1092,9 @@ class MODEL_GENERATION_OT_generate(Operator):
         material_code = generate_text_with_context(prompt)
 
         # 保存生成的材质代码到文件
-        with open(os.path.join(log_dir, "material_application_code.py"), "w", encoding='utf-8') as f:
+        with open(
+            os.path.join(log_dir, "material_application_code.py"), "w", encoding="utf-8"
+        ) as f:
             f.write(material_code)
 
         # 执行生成的Blender材质命令
@@ -899,7 +1103,7 @@ class MODEL_GENERATION_OT_generate(Operator):
             logger.debug("Successfully applied materials.")
         except Exception as e:
             logger.error(f"Error applying materials: {str(e)}")
-            self.report({'ERROR'}, f"Error applying materials: {str(e)}")
+            self.report({"ERROR"}, f"Error applying materials: {str(e)}")
 
         # 更新视图
         self.update_blender_view(context)
@@ -915,9 +1119,9 @@ class MODEL_GENERATION_OT_generate(Operator):
 class MODEL_GENERATION_PT_panel(Panel):
     bl_label = "Model Generation"
     bl_idname = "MODEL_GENERATION_PT_panel"
-    bl_space_type = 'VIEW_3D'
-    bl_region_type = 'UI'
-    bl_category = 'Tool'
+    bl_space_type = "VIEW_3D"
+    bl_region_type = "UI"
+    bl_category = "Tool"
 
     def draw(self, context):
         layout = self.layout

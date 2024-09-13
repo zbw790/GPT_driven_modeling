@@ -20,12 +20,18 @@ from llama_index.core.postprocessor import SimilarityPostprocessor
 from llama_index.embeddings.openai import OpenAIEmbedding
 from dotenv import load_dotenv
 from llama_index.core.response_synthesizers import get_response_synthesizer
-from src.llm_modules.LLM_common_utils import execute_blender_command, initialize_conversation, add_history_to_prompt
+from src.llm_modules.LLM_common_utils import (
+    execute_blender_command,
+    initialize_conversation,
+    add_history_to_prompt,
+)
 from src.llm_modules.gpt_module import generate_text_with_context
 from src.llm_modules.claude_module import generate_text_with_claude
 
 # 设置日志记录
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
 logger = logging.getLogger(__name__)
 
 # 加载环境变量
@@ -33,42 +39,56 @@ load_dotenv(dotenv_path="D:/Tencent_Supernova/api/.env")
 api_key = os.getenv("OPENAI_API_KEY")
 openai.api_key = api_key
 
+
 def preprocess_markdown(content):
     # 提取描述部分（假设描述部分在文件的开头，到第一个 ## 标题之前）
-    return re.split(r'\n##', content)[0]
+    return re.split(r"\n##", content)[0]
+
 
 def load_generation_data(directory_path):
     documents = []
-    category_structure_path = os.path.join(directory_path, 'model_generation', 'generation_category_structure.json')
-    
+    category_structure_path = os.path.join(
+        directory_path, "model_generation", "generation_category_structure.json"
+    )
+
     # 加载类别结构
-    with open(category_structure_path, 'r', encoding='utf-8') as f:
+    with open(category_structure_path, "r", encoding="utf-8") as f:
         category_structure = json.load(f)
-    
+
     # 遍历类别结构并加载对应的 Markdown 文件
-    for category in category_structure['categories']:
-        for subcategory in category['subcategories']:
-            for item_type in subcategory['types']:
-                file_path = os.path.join(directory_path, 'model_generation', category['name'], subcategory['name'], item_type['file'])
+    for category in category_structure["categories"]:
+        for subcategory in category["subcategories"]:
+            for item_type in subcategory["types"]:
+                file_path = os.path.join(
+                    directory_path,
+                    "model_generation",
+                    category["name"],
+                    subcategory["name"],
+                    item_type["file"],
+                )
                 if os.path.exists(file_path):
-                    with open(file_path, 'r', encoding='utf-8') as f:
+                    with open(file_path, "r", encoding="utf-8") as f:
                         content = f.read()
                         # 使用预处理函数提取描述部分
                         description = preprocess_markdown(content)
-                        doc = Document(text=description, metadata={
-                            "category": category['name'],
-                            "subcategory": subcategory['name'],
-                            "item_type": item_type['name'],
-                            "file_name": item_type['file'],
-                            "file_path": os.path.abspath(file_path)
-                        })
+                        doc = Document(
+                            text=description,
+                            metadata={
+                                "category": category["name"],
+                                "subcategory": subcategory["name"],
+                                "item_type": item_type["name"],
+                                "file_name": item_type["file"],
+                                "file_path": os.path.abspath(file_path),
+                            },
+                        )
                         documents.append(doc)
                     logger.info(f"Loaded file: {file_path}")
                 else:
                     logger.warning(f"File not found - {file_path}")
-    
+
     logger.info(f"Total documents loaded: {len(documents)}")
     return documents, category_structure
+
 
 # 创建向量存储索引
 def create_generation_index(documents):
@@ -76,20 +96,22 @@ def create_generation_index(documents):
     if os.path.exists(db_path):
         shutil.rmtree(db_path)
         logger.info("Existing generation database deleted.")
-    
+
     db = chromadb.PersistentClient(path=db_path)
     chroma_collection = db.get_or_create_collection("generation_index")
     vector_store = ChromaVectorStore(chroma_collection=chroma_collection)
     storage_context = StorageContext.from_defaults(vector_store=vector_store)
     embed_model = OpenAIEmbedding(model="text-embedding-ada-002", api_key=api_key)
-    return VectorStoreIndex.from_documents(documents, storage_context=storage_context, embed_model=embed_model)
+    return VectorStoreIndex.from_documents(
+        documents, storage_context=storage_context, embed_model=embed_model
+    )
+
 
 # 配置查询引擎
 def configure_generation_query_engine(index):
     retriever = VectorIndexRetriever(index=index, similarity_top_k=1)
     response_synthesizer = get_response_synthesizer(
-        response_mode="tree_summarize",
-        use_async=True
+        response_mode="tree_summarize", use_async=True
     )
     return RetrieverQueryEngine(
         retriever=retriever,
@@ -97,26 +119,29 @@ def configure_generation_query_engine(index):
         node_postprocessors=[SimilarityPostprocessor(similarity_cutoff=0.6)],
     )
 
+
 # 查询函数
 def query_generation_documentation(query_engine, query):
     response = query_engine.query(query)
     if response.source_nodes:
-        file_path = response.source_nodes[0].node.metadata.get('file_path')
+        file_path = response.source_nodes[0].node.metadata.get("file_path")
         if file_path and os.path.exists(file_path):
-            with open(file_path, 'r', encoding='utf-8') as f:
+            with open(file_path, "r", encoding="utf-8") as f:
                 return f.read()
     return "No relevant generation information found."
+
 
 class GenerationProperties(PropertyGroup):
     input_text: StringProperty(name="Generation Query", default="")
     model_choice: EnumProperty(
         name="Model",
         items=[
-            ('GPT', "GPT-4", "Use GPT-4 model"),
-            ('CLAUDE', "Claude-3.5", "Use Claude-3.5 model"),
+            ("GPT", "GPT-4", "Use GPT-4 model"),
+            ("CLAUDE", "Claude-3.5", "Use Claude-3.5 model"),
         ],
-        default='GPT'
+        default="GPT",
     )
+
 
 class GENERATION_OT_query(Operator):
     bl_idname = "generation.query"
@@ -125,10 +150,13 @@ class GENERATION_OT_query(Operator):
     def execute(self, context):
         props = context.scene.generation_tool
         query = props.input_text
-        result = query_generation_documentation(context.scene.generation_query_engine, query)
+        result = query_generation_documentation(
+            context.scene.generation_query_engine, query
+        )
         print("Generation Query Result:", result)
         logger.info(f"Generation Query Result Length: {len(result)}")
-        return {'FINISHED'}
+        return {"FINISHED"}
+
 
 class GENERATION_OT_generate_model(Operator):
     bl_idname = "generation.generate_model"
@@ -139,9 +167,11 @@ class GENERATION_OT_generate_model(Operator):
             props = context.scene.generation_tool
             query = props.input_text
             model_choice = props.model_choice
-            
+
             # 使用LlamaDB查询相关文档
-            result = query_generation_documentation(context.scene.generation_query_engine, query)
+            result = query_generation_documentation(
+                context.scene.generation_query_engine, query
+            )
             logger.info(f"Generation DB Query Result {result}")
             logger.info(f"Generation DB Query Result Length: {len(result)}")
 
@@ -153,9 +183,9 @@ class GENERATION_OT_generate_model(Operator):
             initialize_conversation(context)
             prompt_with_history = add_history_to_prompt(context, prompt)
 
-            if model_choice == 'GPT':
+            if model_choice == "GPT":
                 response = generate_text_with_context(prompt_with_history)
-            elif model_choice == 'CLAUDE':
+            elif model_choice == "CLAUDE":
                 response = generate_text_with_claude(prompt_with_history)
             else:
                 raise ValueError("Invalid model choice")
@@ -173,14 +203,15 @@ class GENERATION_OT_generate_model(Operator):
             logger.error(f"Error in GENERATION_OT_generate_model.execute: {e}")
             print(f"Error: {str(e)}")
 
-        return {'FINISHED'}
+        return {"FINISHED"}
+
 
 class GENERATION_PT_panel(Panel):
     bl_label = "Llama Index Model Generation"
     bl_idname = "GENERATION_PT_panel"
-    bl_space_type = 'VIEW_3D'
-    bl_region_type = 'UI'
-    bl_category = 'Tool'
+    bl_space_type = "VIEW_3D"
+    bl_region_type = "UI"
+    bl_category = "Tool"
 
     def draw(self, context):
         layout = self.layout
@@ -190,6 +221,7 @@ class GENERATION_PT_panel(Panel):
         layout.prop(props, "model_choice")
         layout.operator("generation.query")
         layout.operator("generation.generate_model")
+
 
 def initialize_generation_db():
     db_path = "./database/chroma_db_generation"

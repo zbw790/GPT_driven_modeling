@@ -16,7 +16,13 @@ from llama_index.core.postprocessor import SimilarityPostprocessor
 from llama_index.embeddings.openai import OpenAIEmbedding
 from llama_index.core.response_synthesizers import get_response_synthesizer
 from dotenv import load_dotenv
-from src.llm_modules.LLM_common_utils import execute_blender_command, initialize_conversation, add_history_to_prompt, get_scene_info, format_scene_info
+from src.llm_modules.LLM_common_utils import (
+    execute_blender_command,
+    initialize_conversation,
+    add_history_to_prompt,
+    get_scene_info,
+    format_scene_info,
+)
 from src.llm_modules.gpt_module import generate_text_with_context
 from src.llm_modules.claude_module import generate_text_with_claude
 from bpy.types import Operator, Panel, PropertyGroup
@@ -26,7 +32,9 @@ from src.utils.logger_module import setup_logger, log_context
 
 
 # 设置日志记录
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
 logger = logging.getLogger(__name__)
 
 # 加载环境变量
@@ -34,54 +42,64 @@ load_dotenv(dotenv_path="D:/Tencent_Supernova/api/.env")
 api_key = os.getenv("OPENAI_API_KEY")
 openai.api_key = api_key
 
+
 def preprocess_markdown(content):
-    return re.split(r'\n##', content)[0]
+    return re.split(r"\n##", content)[0]
+
 
 def load_material_data(directory_path):
     documents = []
-    material_library_path = os.path.join(directory_path, 'material_library')
-    structure_file_path = os.path.join(material_library_path, 'material_library_structure.json')
-    
-    with open(structure_file_path, 'r', encoding='utf-8') as f:
+    material_library_path = os.path.join(directory_path, "material_library")
+    structure_file_path = os.path.join(
+        material_library_path, "material_library_structure.json"
+    )
+
+    with open(structure_file_path, "r", encoding="utf-8") as f:
         structure = json.load(f)
-    
-    for material in structure['materials']:
-        file_path = os.path.join(material_library_path, material['file'])
+
+    for material in structure["materials"]:
+        file_path = os.path.join(material_library_path, material["file"])
         if os.path.exists(file_path):
-            with open(file_path, 'r', encoding='utf-8') as f:
+            with open(file_path, "r", encoding="utf-8") as f:
                 content = f.read()
                 description = preprocess_markdown(content)
-                doc = Document(text=description, metadata={
-                    "material": material['name'],
-                    "file_name": material['file'],
-                    "file_path": os.path.abspath(file_path)
-                })
+                doc = Document(
+                    text=description,
+                    metadata={
+                        "material": material["name"],
+                        "file_name": material["file"],
+                        "file_path": os.path.abspath(file_path),
+                    },
+                )
                 documents.append(doc)
             logger.info(f"Loaded material file: {file_path}")
         else:
             logger.warning(f"Material file not found - {file_path}")
-    
+
     logger.info(f"Total material documents loaded: {len(documents)}")
     return documents, structure
+
 
 def create_material_index(documents):
     db_path = "./database/chroma_db_materials"
     if os.path.exists(db_path):
         shutil.rmtree(db_path)
         logger.info("Existing material database deleted.")
-    
+
     db = chromadb.PersistentClient(path=db_path)
     chroma_collection = db.get_or_create_collection("material_index")
     vector_store = ChromaVectorStore(chroma_collection=chroma_collection)
     storage_context = StorageContext.from_defaults(vector_store=vector_store)
     embed_model = OpenAIEmbedding(model="text-embedding-ada-002", api_key=api_key)
-    return VectorStoreIndex.from_documents(documents, storage_context=storage_context, embed_model=embed_model)
+    return VectorStoreIndex.from_documents(
+        documents, storage_context=storage_context, embed_model=embed_model
+    )
+
 
 def configure_material_query_engine(index):
     retriever = VectorIndexRetriever(index=index, similarity_top_k=3)
     response_synthesizer = get_response_synthesizer(
-        response_mode="tree_summarize",
-        use_async=True
+        response_mode="tree_summarize", use_async=True
     )
     return RetrieverQueryEngine(
         retriever=retriever,
@@ -89,21 +107,23 @@ def configure_material_query_engine(index):
         node_postprocessors=[SimilarityPostprocessor(similarity_cutoff=0.65)],
     )
 
+
 def query_material_documentation(query_engine, query):
     response = query_engine.query(query)
     results = []
     for node in response.source_nodes:
-        file_path = node.node.metadata.get('file_path')
+        file_path = node.node.metadata.get("file_path")
         if file_path and os.path.exists(file_path):
-            with open(file_path, 'r', encoding='utf-8') as f:
+            with open(file_path, "r", encoding="utf-8") as f:
                 results.append(f.read())
     return results if results else ["No relevant material information found."]
+
 
 def sanitize_reference(response):
     """
     从Claude的响应中提取JSON数据，去除注释和其他非JSON内容。
     """
-    json_match = re.search(r'\{[\s\S]*\}', response)
+    json_match = re.search(r"\{[\s\S]*\}", response)
     if json_match:
         json_str = json_match.group(0)
         try:
@@ -114,16 +134,18 @@ def sanitize_reference(response):
     else:
         return ""
 
+
 class MaterialProperties(PropertyGroup):
     input_text: StringProperty(name="Material Query", default="")
     model_choice: EnumProperty(
         name="Model",
         items=[
-            ('GPT', "GPT-4", "Use GPT-4 model"),
-            ('CLAUDE', "Claude-3.5", "Use Claude-3.5 model"),
+            ("GPT", "GPT-4", "Use GPT-4 model"),
+            ("CLAUDE", "Claude-3.5", "Use Claude-3.5 model"),
         ],
-        default='GPT'
+        default="GPT",
     )
+
 
 class MATERIAL_OT_query(Operator):
     bl_idname = "material.query"
@@ -132,12 +154,15 @@ class MATERIAL_OT_query(Operator):
     def execute(self, context):
         props = context.scene.material_tool
         query = props.input_text
-        results = query_material_documentation(context.scene.material_query_engine, query)
+        results = query_material_documentation(
+            context.scene.material_query_engine, query
+        )
         for i, result in enumerate(results):
             print(f"Material Query Result {i+1}:", result)
             logger.info(f"Material Query Result {i+1} Length: {len(result)}")
-        return {'FINISHED'}
-    
+        return {"FINISHED"}
+
+
 class MATERIAL_OT_generate_material(Operator):
     bl_idname = "material.apply_materials"
     bl_label = "Apply Materials"
@@ -154,20 +179,28 @@ class MATERIAL_OT_generate_material(Operator):
                 formatted_scene_info = format_scene_info(scene_info)
 
                 # 步骤1：分析场景信息并确定所需的材质
-                material_requirements = self.analyze_scene_for_materials(formatted_scene_info)
+                material_requirements = self.analyze_scene_for_materials(
+                    formatted_scene_info
+                )
 
                 # 步骤2：查询相关的材质文档
                 material_docs = self.query_material_docs(material_requirements)
 
                 # 步骤3：生成并应用材质
-                self.generate_and_apply_materials(context, material_requirements, material_docs, log_dir)
+                self.generate_and_apply_materials(
+                    context, material_requirements, material_docs, log_dir
+                )
 
-                self.report({'INFO'}, f"Materials applied successfully. Logs saved in {log_dir}")
+                self.report(
+                    {"INFO"}, f"Materials applied successfully. Logs saved in {log_dir}"
+                )
             except Exception as e:
                 logger.error(f"An error occurred while applying materials: {str(e)}")
-                self.report({'ERROR'}, f"An error occurred while applying materials: {str(e)}")
-        
-        return {'FINISHED'}
+                self.report(
+                    {"ERROR"}, f"An error occurred while applying materials: {str(e)}"
+                )
+
+        return {"FINISHED"}
 
     def analyze_scene_for_materials(self, scene_info):
         prompt = f"""
@@ -200,15 +233,17 @@ class MATERIAL_OT_generate_material(Operator):
 
         for obj_name, material_type in material_requirements.items():
             query = f"材质类型：{material_type}"
-            results = query_material_documentation(bpy.types.Scene.material_query_engine, query)
-            
+            results = query_material_documentation(
+                bpy.types.Scene.material_query_engine, query
+            )
+
             # 过滤并只添加唯一的文档
             unique_results = []
             for result in results:
                 if result not in unique_docs:
                     unique_docs.add(result)
                     unique_results.append(result)
-            
+
             material_docs[obj_name] = unique_results
 
         # 将所有唯一的文档合并为一个列表
@@ -216,7 +251,9 @@ class MATERIAL_OT_generate_material(Operator):
 
         return all_unique_docs
 
-    def generate_and_apply_materials(self, context, material_requirements, material_docs, log_dir):
+    def generate_and_apply_materials(
+        self, context, material_requirements, material_docs, log_dir
+    ):
         logger.info(f"材质需求： {material_requirements}")
         logger.info(f"材质文档： {material_docs}")
         prompt = f"""
@@ -280,7 +317,9 @@ class MATERIAL_OT_generate_material(Operator):
         material_code = generate_text_with_claude(prompt)
 
         # 保存生成的材质代码到文件
-        with open(os.path.join(log_dir, "material_application_code.py"), "w", encoding='utf-8') as f:
+        with open(
+            os.path.join(log_dir, "material_application_code.py"), "w", encoding="utf-8"
+        ) as f:
             f.write(material_code)
 
         # 执行生成的Blender材质命令
@@ -289,7 +328,7 @@ class MATERIAL_OT_generate_material(Operator):
             logger.debug("Successfully applied materials.")
         except Exception as e:
             logger.error(f"Error applying materials: {str(e)}")
-            self.report({'ERROR'}, f"Error applying materials: {str(e)}")
+            self.report({"ERROR"}, f"Error applying materials: {str(e)}")
 
         # 更新视图
         self.update_blender_view(context)
@@ -310,9 +349,9 @@ class MATERIAL_OT_generate_material(Operator):
 class MATERIAL_PT_panel(Panel):
     bl_label = "Llama Index Material Library"
     bl_idname = "MATERIAL_PT_panel"
-    bl_space_type = 'VIEW_3D'
-    bl_region_type = 'UI'
-    bl_category = 'Tool'
+    bl_space_type = "VIEW_3D"
+    bl_region_type = "UI"
+    bl_category = "Tool"
 
     def draw(self, context):
         layout = self.layout
@@ -322,6 +361,7 @@ class MATERIAL_PT_panel(Panel):
         layout.prop(props, "model_choice")
         layout.operator("material.query")
         layout.operator("material.apply_materials")
+
 
 def initialize_material_db():
     db_path = "./database/chroma_db_materials"

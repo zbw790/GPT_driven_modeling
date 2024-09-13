@@ -12,60 +12,114 @@ if project_path not in sys.path:
     sys.path.append(project_path)
 
 from src.llm_modules.gpt_module import (
-    OBJECT_OT_send_to_gpt, GPT_PT_panel, OBJECT_OT_send_screenshots_to_gpt, OBJECT_OT_analyze_screenshots
+    OBJECT_OT_send_to_gpt,
+    GPT_PT_panel,
+    OBJECT_OT_send_screenshots_to_gpt,
+    OBJECT_OT_analyze_screenshots,
 )
 from src.utils.model_viewer_module import (
-    ApplyScale, ModelViewerPanel, SaveScreenshotOperator, update_model_dimensions
+    ApplyScale,
+    ModelViewerPanel,
+    SaveScreenshotOperator,
+    update_model_dimensions,
 )
 from src.blender_operations_modules.rotation_module import (
-    RotateObjectCW_X_Degree, RotateObjectCW_Y_Degree, RotateObjectCW_Z_Degree, RotateObjectCW_X, RotateObjectCW_Y, RotateObjectCW_Z, RotatePanel, MirrorObject_X, MirrorObject_Y, MirrorObject_Z
+    RotateObjectCW_X_Degree,
+    RotateObjectCW_Y_Degree,
+    RotateObjectCW_Z_Degree,
+    RotateObjectCW_X,
+    RotateObjectCW_Y,
+    RotateObjectCW_Z,
+    RotatePanel,
+    MirrorObject_X,
+    MirrorObject_Y,
+    MirrorObject_Z,
 )
 from src.blender_operations_modules.location_module import (
-    ResetObjectLocation, LocationPanel
+    ResetObjectLocation,
+    LocationPanel,
 )
 from src.blender_operations_modules.boolean_operations_module import (
-    BooleanUnionOperator, BooleanDifferenceOperator, BooleanIntersectOperator, BooleanPanel
+    BooleanUnionOperator,
+    BooleanDifferenceOperator,
+    BooleanIntersectOperator,
+    BooleanPanel,
 )
 from src.blender_operations_modules.geometry_module import (
-    GeometryProperties, MoveGeometryWithoutAffectingOrigin, ResetGeometryToOrigin, GeometryPanel
+    GeometryProperties,
+    MoveGeometryWithoutAffectingOrigin,
+    ResetGeometryToOrigin,
+    GeometryPanel,
 )
 from src.blender_operations_modules.subdivision_decimate_module import (
-    SubdivisionDecimateProperties, ApplySubdivisionSurface, ApplyDecimate, SubdivisionDecimatePanel
+    SubdivisionDecimateProperties,
+    ApplySubdivisionSurface,
+    ApplyDecimate,
+    SubdivisionDecimatePanel,
 )
 from src.blender_operations_modules.align_module import (
-    AlignProperties, SetAlignPointOperator, AlignObjectsOperator, AlignPanel
+    AlignProperties,
+    SetAlignPointOperator,
+    AlignObjectsOperator,
+    AlignPanel,
 )
 from src.llm_modules.claude_module import (
-    OBJECT_OT_send_to_claude, OBJECT_OT_send_screenshots_to_claude, CLAUDE_PT_panel, OBJECT_OT_analyze_screenshots_claude
+    OBJECT_OT_send_to_claude,
+    OBJECT_OT_send_screenshots_to_claude,
+    CLAUDE_PT_panel,
+    OBJECT_OT_analyze_screenshots_claude,
 )
 from src.llm_modules.conversation_manager import (
-    Message, ConversationManager, CONVERSATION_OT_print_all, CONVERSATION_OT_print_latest, CONVERSATION_PT_panel
+    Message,
+    ConversationManager,
+    CONVERSATION_OT_print_all,
+    CONVERSATION_OT_print_latest,
+    CONVERSATION_PT_panel,
 )
 from src.llama_index_modules.llama_index_model_modification import (
-    ModificationProperties, MODIFICATION_OT_query, MODIFICATION_OT_query_with_screenshots, MODIFICATION_PT_panel, initialize_modification_db, MODIFICATION_OT_query_and_generate
+    ModificationProperties,
+    MODIFICATION_OT_query,
+    MODIFICATION_OT_query_with_screenshots,
+    MODIFICATION_PT_panel,
+    initialize_modification_db,
+    MODIFICATION_OT_query_and_generate,
 )
 from src.llama_index_modules.llama_index_model_generation import (
-    GenerationProperties, GENERATION_OT_query, GENERATION_OT_generate_model, GENERATION_PT_panel, initialize_generation_db
+    GenerationProperties,
+    GENERATION_OT_query,
+    GENERATION_OT_generate_model,
+    GENERATION_PT_panel,
+    initialize_generation_db,
 )
 from src.blender_operations_modules.bevel_corners_module import (
-    BevelEdgesOperator, OBJECT_PT_bevel_panel,BevelProperties
+    BevelEdgesOperator,
+    OBJECT_PT_bevel_panel,
+    BevelProperties,
 )
 from src.core.model_generation import (
-    ModelGenerationProperties, MODEL_GENERATION_OT_generate, MODEL_GENERATION_PT_panel, 
+    ModelGenerationProperties,
+    MODEL_GENERATION_OT_generate,
+    MODEL_GENERATION_PT_panel,
 )
 from src.llm_modules.LLM_common_utils import LLMToolProperties
 from src.llama_index_modules.llama_index_component_library import (
-    ComponentProperties, COMPONENT_OT_query, COMPONENT_OT_generate_component, COMPONENT_PT_panel, initialize_component_db
+    ComponentProperties,
+    COMPONENT_OT_query,
+    COMPONENT_OT_generate_component,
+    COMPONENT_PT_panel,
+    initialize_component_db,
 )
-from src.core.evaluators_module import (
-    OBJECT_OT_evaluate_model, Evaluator_PT_panel
-)
+from src.core.evaluators_module import OBJECT_OT_evaluate_model, Evaluator_PT_panel
 from src.llama_index_modules.llama_index_material_library import (
-    MaterialProperties, MATERIAL_OT_query, MATERIAL_OT_generate_material, MATERIAL_PT_panel, initialize_material_db
+    MaterialProperties,
+    MATERIAL_OT_query,
+    MATERIAL_OT_generate_material,
+    MATERIAL_PT_panel,
+    initialize_material_db,
 )
 
 # 设置日志记录
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 classes = (
@@ -138,8 +192,9 @@ classes = (
     OBJECT_PT_bevel_panel,
     BevelProperties,
     OBJECT_OT_evaluate_model,
-    Evaluator_PT_panel
+    Evaluator_PT_panel,
 )
+
 
 def register():
     try:
@@ -151,44 +206,46 @@ def register():
             default=100.0,
             min=0.01,
             max=10000.0,
-            update=update_model_dimensions
+            update=update_model_dimensions,
         )
         bpy.types.Scene.model_dimensions = StringProperty(
-            name="Model Dimensions",
-            default="0.00 x 0.00 x 0.00"
+            name="Model Dimensions", default="0.00 x 0.00 x 0.00"
         )
         bpy.types.Scene.rotation_degree = FloatProperty(
-            name="Rotation Degree",
-            description="Degree of rotation",
-            default=0.0
+            name="Rotation Degree", description="Degree of rotation", default=0.0
         )
         bpy.types.Scene.geometry_props = PointerProperty(type=GeometryProperties)
-        bpy.types.Scene.subdivision_decimate_props = PointerProperty(type=SubdivisionDecimateProperties)
+        bpy.types.Scene.subdivision_decimate_props = PointerProperty(
+            type=SubdivisionDecimateProperties
+        )
         bpy.types.Scene.align_props = PointerProperty(type=AlignProperties)
         bpy.types.Scene.align_point_set = IntProperty(default=1)
         bpy.types.Scene.modification_tool = PointerProperty(type=ModificationProperties)
         bpy.types.Scene.generation_tool = PointerProperty(type=GenerationProperties)
         bpy.types.Scene.bevel_properties = PointerProperty(type=BevelProperties)
-        bpy.types.Scene.model_generation_tool = PointerProperty(type=ModelGenerationProperties)
+        bpy.types.Scene.model_generation_tool = PointerProperty(
+            type=ModelGenerationProperties
+        )
         bpy.types.Scene.llm_tool = PointerProperty(type=LLMToolProperties)
         bpy.types.Scene.component_tool = PointerProperty(type=ComponentProperties)
         bpy.types.Scene.material_tool = PointerProperty(type=MaterialProperties)
-        
+
         initialize_modification_db()
         initialize_generation_db()
         initialize_component_db()
         initialize_material_db()
-        
+
         logger.info("Registered all classes successfully.")
     except Exception as e:
         logger.error(f"Error registering classes: {e}")
+
 
 def unregister():
     try:
         for cls in reversed(classes):
             if hasattr(bpy.types, cls.__name__):
                 bpy.utils.unregister_class(cls)
-        
+
         # 检查属性是否存在before删除
         if hasattr(bpy.types.Scene, "conversation_manager"):
             del bpy.types.Scene.conversation_manager
@@ -220,10 +277,11 @@ def unregister():
             del bpy.types.Scene.component_tool
         if hasattr(bpy.types.Scene, "material_tool"):
             del bpy.types.Scene.material_tool
-        
+
         logger.info("Unregistered all classes successfully.")
     except Exception as e:
         logger.error(f"Error unregistering classes: {e}")
+
 
 if __name__ == "__main__":
     try:

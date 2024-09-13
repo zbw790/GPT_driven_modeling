@@ -1,6 +1,7 @@
 import bpy
 from bpy.types import Operator, Panel
 
+
 class BooleanUnionOperator(Operator):
     bl_idname = "object.boolean_union"
     bl_label = "布尔联合"
@@ -12,20 +13,21 @@ class BooleanUnionOperator(Operator):
         """
         objects = context.selected_objects
         if len(objects) < 2:
-            self.report({'WARNING'}, "请至少选择两个对象进行布尔联合操作")
-            return {'CANCELLED'}
+            self.report({"WARNING"}, "请至少选择两个对象进行布尔联合操作")
+            return {"CANCELLED"}
 
         base_obj = objects[0]
         bpy.context.view_layer.objects.active = base_obj
 
         for obj in objects[1:]:
-            mod = base_obj.modifiers.new(name="Boolean", type='BOOLEAN')
-            mod.operation = 'UNION'
+            mod = base_obj.modifiers.new(name="Boolean", type="BOOLEAN")
+            mod.operation = "UNION"
             mod.object = obj
             bpy.ops.object.modifier_apply(modifier=mod.name)
             bpy.data.objects.remove(obj)
 
-        return {'FINISHED'}
+        return {"FINISHED"}
+
 
 class BooleanDifferenceOperator(Operator):
     bl_idname = "object.boolean_difference"
@@ -38,19 +40,20 @@ class BooleanDifferenceOperator(Operator):
         """
         objects = context.selected_objects
         if len(objects) != 2:
-            self.report({'WARNING'}, "请确保选中两个对象进行布尔差集操作")
-            return {'CANCELLED'}
+            self.report({"WARNING"}, "请确保选中两个对象进行布尔差集操作")
+            return {"CANCELLED"}
 
         base_obj = bpy.context.view_layer.objects.active
         cutter_obj = [obj for obj in objects if obj != base_obj][0]
 
-        mod = base_obj.modifiers.new(name="Boolean", type='BOOLEAN')
-        mod.operation = 'DIFFERENCE'
+        mod = base_obj.modifiers.new(name="Boolean", type="BOOLEAN")
+        mod.operation = "DIFFERENCE"
         mod.object = cutter_obj
         bpy.ops.object.modifier_apply(modifier=mod.name)
         bpy.data.objects.remove(cutter_obj)
 
-        return {'FINISHED'}
+        return {"FINISHED"}
+
 
 class BooleanIntersectOperator(Operator):
     bl_idname = "object.boolean_intersect"
@@ -63,27 +66,28 @@ class BooleanIntersectOperator(Operator):
         """
         objects = context.selected_objects
         if len(objects) < 2:
-            self.report({'WARNING'}, "请至少选择两个对象进行布尔交集操作")
-            return {'CANCELLED'}
+            self.report({"WARNING"}, "请至少选择两个对象进行布尔交集操作")
+            return {"CANCELLED"}
 
         base_obj = objects[0]
         bpy.context.view_layer.objects.active = base_obj
 
         for obj in objects[1:]:
-            mod = base_obj.modifiers.new(name="Boolean", type='BOOLEAN')
-            mod.operation = 'INTERSECT'
+            mod = base_obj.modifiers.new(name="Boolean", type="BOOLEAN")
+            mod.operation = "INTERSECT"
             mod.object = obj
             bpy.ops.object.modifier_apply(modifier=mod.name)
             bpy.data.objects.remove(obj)
 
-        return {'FINISHED'}
+        return {"FINISHED"}
+
 
 class BooleanPanel(Panel):
     bl_label = "布尔运算"
     bl_idname = "OBJECT_PT_boolean_operations"
-    bl_space_type = 'VIEW_3D'
-    bl_region_type = 'UI'
-    bl_category = 'Tool'
+    bl_space_type = "VIEW_3D"
+    bl_region_type = "UI"
+    bl_category = "Tool"
 
     def draw(self, context):
         layout = self.layout
