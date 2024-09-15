@@ -76,7 +76,7 @@ from llm_driven_modelling.llm.conversation_manager import (
     CONVERSATION_OT_print_latest,
     CONVERSATION_PT_panel,
 )
-from llm_driven_modelling.llama_index.llama_index_model_modification import (
+from llm_driven_modelling.llama_index_library.llama_index_model_modification import (
     ModificationProperties,
     MODIFICATION_OT_query,
     MODIFICATION_OT_query_with_screenshots,
@@ -84,7 +84,7 @@ from llm_driven_modelling.llama_index.llama_index_model_modification import (
     initialize_modification_db,
     MODIFICATION_OT_query_and_generate,
 )
-from llm_driven_modelling.llama_index.llama_index_model_generation import (
+from llm_driven_modelling.llama_index_library.llama_index_model_generation import (
     GenerationProperties,
     GENERATION_OT_query,
     GENERATION_OT_generate_model,
@@ -102,7 +102,7 @@ from llm_driven_modelling.core.model_generation import (
     MODEL_GENERATION_PT_panel,
 )
 from llm_driven_modelling.llm.LLM_common_utils import LLMToolProperties
-from llm_driven_modelling.llama_index.llama_index_component_library import (
+from llm_driven_modelling.llama_index_library.llama_index_component_library import (
     ComponentProperties,
     COMPONENT_OT_query,
     COMPONENT_OT_generate_component,
@@ -110,7 +110,7 @@ from llm_driven_modelling.llama_index.llama_index_component_library import (
     initialize_component_db,
 )
 from llm_driven_modelling.core.evaluators_module import OBJECT_OT_evaluate_model, Evaluator_PT_panel
-from llm_driven_modelling.llama_index.llama_index_material_library import (
+from llm_driven_modelling.llama_index_library.llama_index_material_library import (
     MaterialProperties,
     MATERIAL_OT_query,
     MATERIAL_OT_generate_material,

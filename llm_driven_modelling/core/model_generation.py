@@ -27,18 +27,18 @@ from llm_driven_modelling.llm.gpt_module import (
     generate_text_with_context,
     analyze_screenshots_with_gpt4,
 )
-from llm_driven_modelling.llama_index.llama_index_model_generation import (
+from llm_driven_modelling.llama_index_library.llama_index_model_generation import (
     query_generation_documentation,
 )
-from llm_driven_modelling.llama_index.llama_index_model_modification import (
+from llm_driven_modelling.llama_index_library.llama_index_model_modification import (
     query_modification_documentation,
 )
-from llm_driven_modelling.llama_index.llama_index_component_library import (
+from llm_driven_modelling.llama_index_library.llama_index_component_library import (
     query_component_documentation,
 )
 from llm_driven_modelling.core.evaluators_module import ModelEvaluator, EvaluationStatus
 from llm_driven_modelling.utils.model_viewer_module import save_screenshots, save_screenshots_to_path
-from llm_driven_modelling.llama_index.llama_index_material_library import (
+from llm_driven_modelling.llama_index_library.llama_index_material_library import (
     query_material_documentation,
 )
 
