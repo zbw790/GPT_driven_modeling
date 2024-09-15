@@ -7,11 +7,11 @@ import os
 from typing import List, Dict, Any
 from bpy.types import Operator, Panel, PropertyGroup
 from bpy.props import StringProperty, PointerProperty
-from src.llm_modules.claude_module import (
+from llm_driven_modelling.llm.claude_module import (
     generate_text_with_claude,
     analyze_screenshots_with_claude,
 )
-from src.llm_modules.LLM_common_utils import (
+from llm_driven_modelling.llm.LLM_common_utils import (
     sanitize_command,
     initialize_conversation,
     execute_blender_command,
@@ -21,24 +21,24 @@ from src.llm_modules.LLM_common_utils import (
     format_scene_info,
     execute_blender_command_with_error_handling,
 )
-from src.utils.logger_module import setup_logger, log_context
-from src.core.prompt_rewriter import rewrite_prompt
-from src.llm_modules.gpt_module import (
+from llm_driven_modelling.utils.logger_module import setup_logger, log_context
+from llm_driven_modelling.core.prompt_rewriter import rewrite_prompt
+from llm_driven_modelling.llm.gpt_module import (
     generate_text_with_context,
     analyze_screenshots_with_gpt4,
 )
-from src.llama_index_modules.llama_index_model_generation import (
+from llm_driven_modelling.llama_index.llama_index_model_generation import (
     query_generation_documentation,
 )
-from src.llama_index_modules.llama_index_model_modification import (
+from llm_driven_modelling.llama_index.llama_index_model_modification import (
     query_modification_documentation,
 )
-from src.llama_index_modules.llama_index_component_library import (
+from llm_driven_modelling.llama_index.llama_index_component_library import (
     query_component_documentation,
 )
-from src.core.evaluators_module import ModelEvaluator, EvaluationStatus
-from src.utils.model_viewer_module import save_screenshots, save_screenshots_to_path
-from src.llama_index_modules.llama_index_material_library import (
+from llm_driven_modelling.core.evaluators_module import ModelEvaluator, EvaluationStatus
+from llm_driven_modelling.utils.model_viewer_module import save_screenshots, save_screenshots_to_path
+from llm_driven_modelling.llama_index.llama_index_material_library import (
     query_material_documentation,
 )
 

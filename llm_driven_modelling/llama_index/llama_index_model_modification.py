@@ -20,18 +20,18 @@ from llama_index.core.postprocessor import SimilarityPostprocessor
 from llama_index.embeddings.openai import OpenAIEmbedding
 from dotenv import load_dotenv
 from llama_index.core.response_synthesizers import get_response_synthesizer
-from src.llm_modules.LLM_common_utils import (
+from llm_driven_modelling.llm.LLM_common_utils import (
     execute_blender_command,
     initialize_conversation,
     add_history_to_prompt,
     get_scene_info,
     format_scene_info,
 )
-from src.llm_modules.gpt_module import (
+from llm_driven_modelling.llm.gpt_module import (
     generate_text_with_context,
     analyze_screenshots_with_gpt4,
 )
-from src.llm_modules.claude_module import (
+from llm_driven_modelling.llm.claude_module import (
     generate_text_with_claude,
     analyze_screenshots_with_claude,
 )

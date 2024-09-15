@@ -16,19 +16,19 @@ from llama_index.core.postprocessor import SimilarityPostprocessor
 from llama_index.embeddings.openai import OpenAIEmbedding
 from llama_index.core.response_synthesizers import get_response_synthesizer
 from dotenv import load_dotenv
-from src.llm_modules.LLM_common_utils import (
+from llm_driven_modelling.llm.LLM_common_utils import (
     execute_blender_command,
     initialize_conversation,
     add_history_to_prompt,
     get_scene_info,
     format_scene_info,
 )
-from src.llm_modules.gpt_module import generate_text_with_context
-from src.llm_modules.claude_module import generate_text_with_claude
+from llm_driven_modelling.llm.gpt_module import generate_text_with_context
+from llm_driven_modelling.llm.claude_module import generate_text_with_claude
 from bpy.types import Operator, Panel, PropertyGroup
 from bpy.props import StringProperty, PointerProperty, EnumProperty
-from src.utils.model_viewer_module import save_screenshots, save_screenshots_to_path
-from src.utils.logger_module import setup_logger, log_context
+from llm_driven_modelling.utils.model_viewer_module import save_screenshots, save_screenshots_to_path
+from llm_driven_modelling.utils.logger_module import setup_logger, log_context
 
 
 # 设置日志记录

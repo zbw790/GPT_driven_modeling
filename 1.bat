@@ -1,7 +1,7 @@
 @echo off
 SET BLENDER_PATH=D:\Blender\4.1\blender.exe
-SET SCRIPT_PATH=D:\GPT_driven_modeling\src\main.py
-SET UPDATE_SCRIPT_PATH=D:\GPT_driven_modeling\src\llama_index_modules\update_database.py
+SET SCRIPT_PATH=D:\GPT_driven_modeling\llm_driven_modelling\main.py
+SET UPDATE_SCRIPT_PATH=D:\GPT_driven_modeling\llm_driven_modelling\llama_index\update_database.py
 
 REM 设置 PYTHONPATH 环境变量
 SET PYTHONPATH=D:\GPT_driven_modeling

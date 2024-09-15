@@ -11,19 +11,19 @@ project_path = os.path.abspath(os.path.dirname(__file__))
 if project_path not in sys.path:
     sys.path.append(project_path)
 
-from src.llm_modules.gpt_module import (
+from llm_driven_modelling.llm.gpt_module import (
     OBJECT_OT_send_to_gpt,
     GPT_PT_panel,
     OBJECT_OT_send_screenshots_to_gpt,
     OBJECT_OT_analyze_screenshots,
 )
-from src.utils.model_viewer_module import (
+from llm_driven_modelling.utils.model_viewer_module import (
     ApplyScale,
     ModelViewerPanel,
     SaveScreenshotOperator,
     update_model_dimensions,
 )
-from src.blender_operations_modules.rotation_module import (
+from llm_driven_modelling.blender_operations.rotation_module import (
     RotateObjectCW_X_Degree,
     RotateObjectCW_Y_Degree,
     RotateObjectCW_Z_Degree,
@@ -35,48 +35,48 @@ from src.blender_operations_modules.rotation_module import (
     MirrorObject_Y,
     MirrorObject_Z,
 )
-from src.blender_operations_modules.location_module import (
+from llm_driven_modelling.blender_operations.location_module import (
     ResetObjectLocation,
     LocationPanel,
 )
-from src.blender_operations_modules.boolean_operations_module import (
+from llm_driven_modelling.blender_operations.boolean_operations_module import (
     BooleanUnionOperator,
     BooleanDifferenceOperator,
     BooleanIntersectOperator,
     BooleanPanel,
 )
-from src.blender_operations_modules.geometry_module import (
+from llm_driven_modelling.blender_operations.geometry_module import (
     GeometryProperties,
     MoveGeometryWithoutAffectingOrigin,
     ResetGeometryToOrigin,
     GeometryPanel,
 )
-from src.blender_operations_modules.subdivision_decimate_module import (
+from llm_driven_modelling.blender_operations.subdivision_decimate_module import (
     SubdivisionDecimateProperties,
     ApplySubdivisionSurface,
     ApplyDecimate,
     SubdivisionDecimatePanel,
 )
-from src.blender_operations_modules.align_module import (
+from llm_driven_modelling.blender_operations.align_module import (
     AlignProperties,
     SetAlignPointOperator,
     AlignObjectsOperator,
     AlignPanel,
 )
-from src.llm_modules.claude_module import (
+from llm_driven_modelling.llm.claude_module import (
     OBJECT_OT_send_to_claude,
     OBJECT_OT_send_screenshots_to_claude,
     CLAUDE_PT_panel,
     OBJECT_OT_analyze_screenshots_claude,
 )
-from src.llm_modules.conversation_manager import (
+from llm_driven_modelling.llm.conversation_manager import (
     Message,
     ConversationManager,
     CONVERSATION_OT_print_all,
     CONVERSATION_OT_print_latest,
     CONVERSATION_PT_panel,
 )
-from src.llama_index_modules.llama_index_model_modification import (
+from llm_driven_modelling.llama_index.llama_index_model_modification import (
     ModificationProperties,
     MODIFICATION_OT_query,
     MODIFICATION_OT_query_with_screenshots,
@@ -84,33 +84,33 @@ from src.llama_index_modules.llama_index_model_modification import (
     initialize_modification_db,
     MODIFICATION_OT_query_and_generate,
 )
-from src.llama_index_modules.llama_index_model_generation import (
+from llm_driven_modelling.llama_index.llama_index_model_generation import (
     GenerationProperties,
     GENERATION_OT_query,
     GENERATION_OT_generate_model,
     GENERATION_PT_panel,
     initialize_generation_db,
 )
-from src.blender_operations_modules.bevel_corners_module import (
+from llm_driven_modelling.blender_operations.bevel_corners_module import (
     BevelEdgesOperator,
     OBJECT_PT_bevel_panel,
     BevelProperties,
 )
-from src.core.model_generation import (
+from llm_driven_modelling.core.model_generation import (
     ModelGenerationProperties,
     MODEL_GENERATION_OT_generate,
     MODEL_GENERATION_PT_panel,
 )
-from src.llm_modules.LLM_common_utils import LLMToolProperties
-from src.llama_index_modules.llama_index_component_library import (
+from llm_driven_modelling.llm.LLM_common_utils import LLMToolProperties
+from llm_driven_modelling.llama_index.llama_index_component_library import (
     ComponentProperties,
     COMPONENT_OT_query,
     COMPONENT_OT_generate_component,
     COMPONENT_PT_panel,
     initialize_component_db,
 )
-from src.core.evaluators_module import OBJECT_OT_evaluate_model, Evaluator_PT_panel
-from src.llama_index_modules.llama_index_material_library import (
+from llm_driven_modelling.core.evaluators_module import OBJECT_OT_evaluate_model, Evaluator_PT_panel
+from llm_driven_modelling.llama_index.llama_index_material_library import (
     MaterialProperties,
     MATERIAL_OT_query,
     MATERIAL_OT_generate_material,

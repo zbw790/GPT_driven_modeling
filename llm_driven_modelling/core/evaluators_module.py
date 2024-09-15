@@ -4,14 +4,14 @@ import bpy
 from bpy.types import Operator, Panel
 from bpy.props import StringProperty
 from abc import ABC, abstractmethod
-from src.llm_modules.gpt_module import analyze_screenshots_with_gpt4
-from src.llm_modules.claude_module import analyze_screenshots_with_claude
-from src.llm_modules.LLM_common_utils import (
+from llm_driven_modelling.llm.gpt_module import analyze_screenshots_with_gpt4
+from llm_driven_modelling.llm.claude_module import analyze_screenshots_with_claude
+from llm_driven_modelling.llm.LLM_common_utils import (
     get_screenshots,
     get_scene_info,
     format_scene_info,
 )
-from src.utils.logger_module import setup_logger, log_context
+from llm_driven_modelling.utils.logger_module import setup_logger, log_context
 from typing import List, Dict, Any, Tuple
 from enum import Enum
 import json
