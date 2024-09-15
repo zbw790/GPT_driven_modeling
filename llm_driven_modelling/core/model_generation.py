@@ -53,103 +53,6 @@ class ModelGenerationProperties(PropertyGroup):
         default="",
     )
 
-
-def parse_user_input(user_input, rewritten_input):
-    prompt = f"""
-    Context:
-    你是一个专门用于解析和重构用户输入的AI助手。工作在一个3D建模系统中。你的主要任务是处理用户提供的各种物品描述，这些描述可能涉及家具、建筑结构、日常用品，甚至是抽象概念的具象化。
-    你的任务是将用户的描述转化为结构化的JSON数据，以便后续的建模功能使用。
-
-    Objective:
-    将用户的原始描述和重写后的提示词转换为标准化的JSON格式，包含物品类型和核心组件的详细信息。
-
-    Style:
-    - 分析性：仔细识别物品的核心组件和关键特征
-    - 结构化：将信息组织成规定的JSON格式
-    - 精确：提供准确的数量和尺寸信息
-    - 简洁：只包含定义物品基本形态和功能的必要信息
-
-    Tone:
-    - 专业：使用准确的术语描述形状和尺寸
-    - 客观：基于给定信息进行合理推断，不添加主观臆测
-    - 直接：直接提供所需的JSON数据，不包含额外解释
-
-    Audience:
-    - 主要面向后续的3D建模系统或算法
-    - 可能包括需要处理这些数据的开发人员或设计师
-
-    Response:
-    请提供一个JSON对象，包含以下元素：
-    1. object_type: 物品类型
-    2. components: 核心组件列表，每个组件包含：
-      - name: 部件名称
-      - quantity: 数量
-      - shape: 形状描述，以下是一些列子，但不仅限于此，其他例如圆锥体等的许多形状未列出，请根据情况自行判断并添加对应的专有名词描述：
-         - "cuboid": 对于长方体，包含长宽高
-         - "cylinder": 对于圆柱体，包含半径和高度
-         - "sphere": 对于球体，包含半径
-         - "custom": 对于异形，包含简洁的形状描述
-      - dimensions: 根据形状提供的尺寸信息
-
-    输入:
-    用户原始输入: {user_input}
-    解析后的提示词：{rewritten_input}
-
-    输出格式示例:
-    {{
-      "object_type": "书桌",
-      "components": [
-        {{
-          "name": "桌面",
-          "quantity": 1,
-          "shape": "cuboid",
-          "dimensions": {{
-            "length": 120,
-            "width": 60,
-            "height": 5
-          }}
-        }},
-        {{
-          "name": "桌腿",
-          "quantity": 4,
-          "shape": "cylinder",
-          "dimensions": {{
-            "radius": 3,
-            "height": 75
-          }}
-        }},
-        {{
-          "name": "抽屉",
-          "quantity": 2,
-          "shape": "cuboid",
-          "dimensions": {{
-            "length": 40,
-            "width": 50,
-            "height": 15
-          }}
-        }}
-      ]
-    }}
-
-    注意事项:
-    1. 只识别并列出定义物品基本结构和核心功能的必要部件。
-    2. 如果某些信息缺失，请根据常识进行合理推断。
-    3. 简化结构，避免列出不必要的装饰性或次要部件。
-    4. 对于简单物品（如桌子、椅子），通常只需要主体和支撑部分。
-    5. 对于功能性物品（如书桌、衣柜），包含核心功能部件（如抽屉、柜门）。
-    6. 省略纯装饰性元素、内部支撑结构或不影响整体形态的次要部件。
-    7. 形状描述不仅限于示例中给出的类型，可根据需要使用其他适当的形状描述（如"cone"表示圆锥体等）。
-    """
-
-    logger.info(f"Sending prompt to Claude: {prompt}")
-    response = generate_text_with_claude(prompt)
-    logger.info(f"Received response from Claude: {response}")
-
-    response = sanitize_command(response)
-    response = sanitize_reference(response)
-    return json.loads(response)
-
-
 def sanitize_reference(response):
     """
     从Claude的响应中提取JSON数据，去除注释和其他非JSON内容。
@@ -187,55 +90,76 @@ class MODEL_GENERATION_OT_generate(Operator):
                 logger.info(json.dumps(scene_description, ensure_ascii=False, indent=2))
 
                 # Save scene description to file
-                with open(
-                    os.path.join(log_dir, "scene_description.json"),
-                    "w",
-                    encoding="utf-8",
-                ) as f:
+                with open(os.path.join(log_dir, "scene_description.json"), "w", encoding="utf-8") as f:
                     json.dump(scene_description, f, ensure_ascii=False, indent=2)
 
-                # Generate 3D models for each object in the scene
-                generated_models = []
+                # Generate and optimize 3D models for each object in the scene
+                models = []
                 for obj in scene_description["objects"]:
                     logger.info(f"Generating model for: {obj['object_type']}")
-                    model_code = self.generate_3d_model(
-                        context, obj, scene_description["scene_context"], log_dir
+                    model = self.generate_and_optimize_model(
+                        context, 
+                        obj, 
+                        scene_description["scene_context"], 
+                        user_input, 
+                        rewritten_input, 
+                        log_dir
                     )
-                    optimized_model = self.evaluate_and_optimize_model(
-                        context,
-                        obj,
-                        scene_description["scene_context"],
-                        model_code,
-                        user_input,
-                        rewritten_input,
-                        log_dir,
-                    )
-                    generated_models.append(optimized_model)
+                    models.append(model)
 
                 # Arrange objects in the scene
-                self.arrange_scene(
-                    context, scene_description, generated_models, log_dir
-                )
+                self.arrange_scene(context, scene_description, models, log_dir)
 
                 # Apply materials to the entire scene
-                self.apply_materials(
-                    context, user_input, rewritten_input, scene_description, log_dir
-                )
+                self.apply_materials(context, user_input, rewritten_input, scene_description, log_dir)
 
                 logger.debug(f"Log directory: {log_dir}")
-                # 保存当前场景的屏幕截图
+                # Save screenshot of the current scene
                 screenshot_path = os.path.join(log_dir, "scene_screenshot.png")
                 bpy.ops.screen.screenshot(filepath=screenshot_path)
                 logger.debug(f"Screenshot saved to {screenshot_path}")
 
-                self.report(
-                    {"INFO"}, f"Scene generated and optimized. Logs saved in {log_dir}"
-                )
+                self.report({"INFO"}, f"Scene generated and optimized. Logs saved in {log_dir}")
             except Exception as e:
                 logger.error(f"An error occurred: {str(e)}")
                 self.report({"ERROR"}, f"An error occurred: {str(e)}")
 
         return {"FINISHED"}
+
+    def generate_and_optimize_model(self, context, obj, scene_context, user_input, rewritten_input, log_dir):
+        """
+        Generate and optimize a 3D model for a given object.
+
+        Args:
+            context (bpy.types.Context): The current Blender context.
+            obj (dict): The object description.
+            scene_context (dict): The overall scene context.
+            user_input (str): The original user input.
+            rewritten_input (str): The rewritten user input.
+            log_dir (str): The directory for saving logs.
+
+        Returns:
+            dict: A dictionary containing the original and optimized model information.
+        """
+        # Generate initial model
+        initial_model_code = self.generate_3d_model(context, obj, scene_context, log_dir)
+
+        # Optimize the model
+        optimized_model_code = self.evaluate_and_optimize_model(
+            context,
+            obj,
+            scene_context,
+            initial_model_code,
+            user_input,
+            rewritten_input,
+            log_dir
+        )
+
+        return {
+            "object_type": obj["object_type"],
+            "initial_model": initial_model_code,
+            "optimized_model": optimized_model_code
+        }
 
     def parse_scene_input(self, user_input, rewritten_input):
         prompt = f"""
