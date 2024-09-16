@@ -1,5 +1,10 @@
 # model_viewer_module.py
 
+"""
+This module provides functionality for viewing and manipulating 3D models in Blender.
+It includes features for camera positioning, object labeling, screenshot capture, and model scaling.
+"""
+
 import bpy
 import os
 import math
@@ -9,8 +14,13 @@ from bpy.props import FloatProperty, StringProperty
 from bpy_extras.object_utils import world_to_camera_view
 import bmesh
 
-
 def ensure_camera():
+    """
+    Ensure that a camera exists in the scene and return it.
+
+    Returns:
+        bpy.types.Object: The camera object.
+    """
     if bpy.context.scene.camera is None:
         existing_camera = bpy.data.objects.get("camera")
         if existing_camera:
@@ -24,8 +34,16 @@ def ensure_camera():
         camera = bpy.context.scene.camera
     return camera
 
-
 def calculate_scene_center_and_size(objects):
+    """
+    Calculate the center and size of the scene based on the given objects.
+
+    Args:
+        objects (list): List of Blender objects.
+
+    Returns:
+        tuple: A tuple containing the scene center (Vector) and size (float).
+    """
     if not objects:
         return mathutils.Vector((0, 0, 0)), 0
 
@@ -34,15 +52,21 @@ def calculate_scene_center_and_size(objects):
     size = max((max_corner[i] - min_corner[i]) for i in range(3))
     return center, size
 
-
 def calculate_combined_bounding_box(objects):
+    """
+    Calculate the combined bounding box of multiple objects.
+
+    Args:
+        objects (list): List of Blender objects.
+
+    Returns:
+        tuple: A tuple containing the minimum and maximum corners of the bounding box.
+    """
     min_x = min_y = min_z = float("inf")
     max_x = max_y = max_z = float("-inf")
 
     for obj in objects:
-        bbox_corners = [
-            obj.matrix_world @ mathutils.Vector(corner) for corner in obj.bound_box
-        ]
+        bbox_corners = [obj.matrix_world @ mathutils.Vector(corner) for corner in obj.bound_box]
         for corner in bbox_corners:
             min_x = min(min_x, corner.x)
             max_x = max(max_x, corner.x)
@@ -53,82 +77,85 @@ def calculate_combined_bounding_box(objects):
 
     return (min_x, min_y, min_z), (max_x, max_y, max_z)
 
-
 def set_camera_position_and_rotation(camera, look_from, look_at):
+    """
+    Set the camera's position and rotation to look at a specific point.
+
+    Args:
+        camera (bpy.types.Object): The camera object.
+        look_from (mathutils.Vector): The position to place the camera.
+        look_at (mathutils.Vector): The point for the camera to look at.
+    """
     direction = look_at - look_from
     rot_quat = direction.to_track_quat("-Z", "Y")
     camera.rotation_euler = rot_quat.to_euler()
     camera.location = look_from
 
-
 def add_label_to_object(obj, camera, scene_size, up_vector):
-    # 检查物体是否在相机视图中可见
+    """
+    Add a label to an object in the scene.
+
+    Args:
+        obj (bpy.types.Object): The object to label.
+        camera (bpy.types.Object): The camera object.
+        scene_size (float): The size of the scene.
+        up_vector (mathutils.Vector): The up vector for orienting the label.
+
+    Returns:
+        bpy.types.Object: The created text object, or None if the object is not visible.
+    """
     is_visible, visible_point = is_object_visible(obj, camera)
     if not is_visible:
         return None
 
-    # 使用可见点而不是物体的实际原点
     center = visible_point
 
-    # 创建新的文本对象
     bpy.ops.object.text_add(enter_editmode=False, location=(0, 0, 0))
     text_obj = bpy.context.active_object
 
-    # 设置文本内容和属性
     text_obj.data.body = obj.name
     text_obj.data.align_x = "CENTER"
     text_obj.data.align_y = "CENTER"
 
-    # 计算摄像机到可见点的方向向量
     direction = center - camera.location
     direction_length = direction.length
     direction.normalize()
 
-    # 计算文本位置（在可见点和摄像机之间的30%处）
     text_position = camera.location + direction * (direction_length * 0.7)
 
-    # 设置文本位置
     text_obj.location = text_position
 
-    # 根据到摄像机的距离调整文本大小
     distance_to_camera = (text_position - camera.location).length
     text_obj.data.size = scene_size * 0.02 * (distance_to_camera / scene_size)
 
-    # 创建新材质并应用
     material = bpy.data.materials.new(name="Text_Material")
     material.use_nodes = True
     nodes = material.node_tree.nodes
     nodes.clear()
 
-    # 设置为发光材质
     node_emission = nodes.new(type="ShaderNodeEmission")
-    node_emission.inputs[0].default_value = (1, 0, 0, 1)  # 红色
-    node_emission.inputs[1].default_value = 2  # 发光强度
+    node_emission.inputs[0].default_value = (1, 0, 0, 1)  # Red color
+    node_emission.inputs[1].default_value = 2  # Emission strength
     node_output = nodes.new(type="ShaderNodeOutputMaterial")
     material.node_tree.links.new(node_emission.outputs[0], node_output.inputs[0])
 
-    # 将材质应用到文本对象
     if text_obj.data.materials:
         text_obj.data.materials[0] = material
     else:
         text_obj.data.materials.append(material)
 
-    # 设置文本对象的原点为其边界框的中心
     bpy.ops.object.origin_set(type="ORIGIN_GEOMETRY", center="BOUNDS")
 
-    # 计算文本的旋转
     forward = camera.location - text_position
     forward.normalize()
     right = forward.cross(up_vector)
     right.normalize()
     up = right.cross(forward)
 
-    # 使用四元数计算旋转
     rot_matrix = mathutils.Matrix((-right, up, forward)).to_3x3()
     quat = rot_matrix.to_quaternion()
     quat.invert()
 
-    # 应用旋转和位置
     text_obj.rotation_mode = "QUATERNION"
     text_obj.rotation_quaternion = quat
     text_obj.location = text_position
@@ -137,8 +164,17 @@ def add_label_to_object(obj, camera, scene_size, up_vector):
 
     return text_obj
 
-
 def is_object_visible(obj, camera):
+    """
+    Check if an object is visible from the camera's perspective.
+
+    Args:
+        obj (bpy.types.Object): The object to check.
+        camera (bpy.types.Object): The camera object.
+
+    Returns:
+        tuple: A tuple containing a boolean (True if visible) and the visible point (or None).
+    """
     def check_point(point):
         co_ndc = world_to_camera_view(bpy.context.scene, camera, point)
         if 0 <= co_ndc.x <= 1 and 0 <= co_ndc.y <= 1 and 0 < co_ndc.z:
@@ -153,32 +189,26 @@ def is_object_visible(obj, camera):
 
             for offset in offsets:
                 ray_origin = camera.location + offset
-                ray_cast_result = bpy.context.scene.ray_cast(
-                    depsgraph, ray_origin, direction.normalized()
-                )
+                ray_cast_result = bpy.context.scene.ray_cast(depsgraph, ray_origin, direction.normalized())
                 if ray_cast_result[0] and ray_cast_result[4] == obj:
                     return True
         return False
 
-    # 首先检查物体的中心
     center = obj.location
     if check_point(center):
         return True, center.copy()
 
-    # 如果中心点不可见，创建一个bmesh来访问物体的实际几何形状
     bm = bmesh.new()
     bm.from_mesh(obj.data)
     bm.transform(obj.matrix_world)
 
     result = False, None
 
-    # 检查所有顶点
     for v in bm.verts:
         if check_point(v.co):
             result = True, v.co.copy()
             break
 
-    # 如果顶点检查失败，检查所有边的中点
     if not result[0]:
         for e in bm.edges:
             mid_point = (e.verts[0].co + e.verts[1].co) / 2
@@ -186,7 +216,6 @@ def is_object_visible(obj, camera):
                 result = True, mid_point.copy()
                 break
 
-    # 如果边检查失败，检查所有面的中心
     if not result[0]:
         for f in bm.faces:
             face_center = f.calc_center_median()
@@ -194,26 +223,33 @@ def is_object_visible(obj, camera):
                 result = True, face_center.copy()
                 break
 
-    bm.free()  # 释放 BMesh
+    bm.free()
     return result
 
-
 def remove_labels():
+    """Remove all text objects (labels) from the scene."""
     for obj in bpy.data.objects:
         if obj.type == "FONT":
             bpy.data.objects.remove(obj, do_unlink=True)
 
-
 def _save_screenshots_common(output_path, distance_factor=2.5):
+    """
+    Common function to save screenshots from multiple angles.
+
+    Args:
+        output_path (str): The directory to save the screenshots.
+        distance_factor (float): Factor to determine camera distance from the scene center.
+
+    Returns:
+        list: A list of paths to the saved screenshots.
+    """
     scene = bpy.context.scene
 
-    # 保存原始设置
     original_resolution_x = scene.render.resolution_x
     original_resolution_y = scene.render.resolution_y
     original_resolution_percentage = scene.render.resolution_percentage
     original_camera = scene.camera
 
-    # 保存原始 3D 视图设置
     original_view_settings = {}
     for area in bpy.context.screen.areas:
         if area.type == "VIEW_3D":
@@ -247,21 +283,20 @@ def _save_screenshots_common(output_path, distance_factor=2.5):
     camera_distance = size * distance_factor
 
     angles = [
-        ((0, 0, 1), "俯视图", (0, 1, 0)),
-        ((0, 0, -1), "底视图", (0, 1, 0)),
-        ((-1, 0, 0), "左视图", (0, 0, 1)),
-        ((1, 0, 0), "右视图", (0, 0, 1)),
-        ((0, 1, 0), "后视图", (0, 0, 1)),
-        ((0, -1, 0), "前视图", (0, 0, 1)),
-        ((1, -1, 1), "右前上视图", (0, 0, 1)),
-        ((1, 1, -1), "右后下视图", (0, 0, 1)),
+        ((0, 0, 1), "Top View", (0, 1, 0)),
+        ((0, 0, -1), "Bottom View", (0, 1, 0)),
+        ((-1, 0, 0), "Left View", (0, 0, 1)),
+        ((1, 0, 0), "Right View", (0, 0, 1)),
+        ((0, 1, 0), "Back View", (0, 0, 1)),
+        ((0, -1, 0), "Front View", (0, 0, 1)),
+        ((1, -1, 1), "Top-Right-Front View", (0, 0, 1)),
+        ((1, 1, -1), "Bottom-Right-Back View", (0, 0, 1)),
     ]
 
     screenshot_paths = []
 
     try:
         for direction, view_name, up_vector in angles:
-            # 取消所有对象的选择
             bpy.ops.object.select_all(action="DESELECT")
             bpy.context.view_layer.objects.active = None
 
@@ -275,11 +310,7 @@ def _save_screenshots_common(output_path, distance_factor=2.5):
             bpy.context.view_layer.objects.active = camera
             scene.camera = camera
 
-            # 添加标签
-            text_objects = [
-                add_label_to_object(obj, camera, size, mathutils.Vector(up_vector))
-                for obj in mesh_objects
-            ]
+            text_objects = [add_label_to_object(obj, camera, size, mathutils.Vector(up_vector)) for obj in mesh_objects]
 
             for area in bpy.context.screen.areas:
                 if area.type == "VIEW_3D":
@@ -287,7 +318,6 @@ def _save_screenshots_common(output_path, distance_factor=2.5):
                     area.spaces[0].region_3d.view_perspective = "CAMERA"
                     break
 
-            # 再次取消所有对象的选择，确保没有对象被选中
             bpy.ops.object.select_all(action="DESELECT")
             bpy.context.view_layer.objects.active = None
 
@@ -298,26 +328,21 @@ def _save_screenshots_common(output_path, distance_factor=2.5):
             bpy.ops.render.opengl(write_still=True)
             screenshot_paths.append(screenshot_path)
 
-            # 移除标签
             remove_labels()
 
     finally:
-        # 恢复原始设置
         scene.render.resolution_x = original_resolution_x
         scene.render.resolution_y = original_resolution_y
         scene.render.resolution_percentage = original_resolution_percentage
         scene.camera = original_camera
 
-        # 恢复原始 3D 视图设置
         for area in bpy.context.screen.areas:
             if area.type == "VIEW_3D":
                 for space in area.spaces:
                     if space.type == "VIEW_3D":
                         if area in original_view_settings:
                             settings = original_view_settings[area]
-                            space.region_3d.view_perspective = settings[
-                                "view_perspective"
-                            ]
+                            space.region_3d.view_perspective = settings["view_perspective"]
                             space.region_3d.view_matrix = settings["view_matrix"]
                             space.lock_camera = settings["lock_camera"]
                             space.shading.type = settings["shading_type"]
@@ -325,17 +350,30 @@ def _save_screenshots_common(output_path, distance_factor=2.5):
 
     return screenshot_paths
 
-
 def save_screenshots():
+    """
+    Save screenshots to a predefined path.
+
+    Returns:
+        list: A list of paths to the saved screenshots.
+    """
     output_path = r"D:\GPT_driven_modeling\resources\screenshots"
     return _save_screenshots_common(output_path)
 
-
 def save_screenshots_to_path(output_path):
+    """
+    Save screenshots to a specified path.
+
+    Args:
+        output_path (str): The directory to save the screenshots.
+
+    Returns:
+        list: A list of paths to the saved screenshots.
+    """
     return _save_screenshots_common(output_path)
 
-
 class ApplyScale(Operator):
+    """Operator to apply scale to selected objects."""
     bl_idname = "model_viewer.apply_scale"
     bl_label = "Apply Scale"
 
@@ -348,14 +386,12 @@ class ApplyScale(Operator):
             bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
         if context.selected_objects:
             dimensions = context.selected_objects[0].dimensions
-            context.scene.model_dimensions = (
-                f"{dimensions.x:.2f} x {dimensions.y:.2f} x {dimensions.z:.2f}"
-            )
+            context.scene.model_dimensions = f"{dimensions.x:.2f} x {dimensions.y:.2f} x {dimensions.z:.2f}"
         context.scene.model_scale_percentage = 100
         return {"FINISHED"}
 
-
 def update_model_dimensions(self, context):
+    """Update the displayed model dimensions based on the scale percentage."""
     scale_percentage = context.scene.model_scale_percentage
     scale_factor = scale_percentage / 100
     for obj in context.selected_objects:
@@ -363,8 +399,8 @@ def update_model_dimensions(self, context):
         scaled_dimensions = dimensions * scale_factor
         context.scene.model_dimensions = f"{scaled_dimensions.x:.2f} x {scaled_dimensions.y:.2f} x {scaled_dimensions.z:.2f}"
 
-
 class SaveScreenshotOperator(Operator):
+    """Operator to save screenshots of the current scene."""
     bl_idname = "model_viewer.save_screenshot"
     bl_label = "Save Screenshot"
 
@@ -372,8 +408,8 @@ class SaveScreenshotOperator(Operator):
         save_screenshots()
         return {"FINISHED"}
 
-
 class ModelViewerPanel(Panel):
+    """Panel for model viewing and manipulation tools."""
     bl_label = "Model Viewer"
     bl_idname = "OBJECT_PT_model_viewer"
     bl_space_type = "VIEW_3D"

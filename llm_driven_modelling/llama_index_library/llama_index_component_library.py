@@ -1,4 +1,10 @@
-# llama_index_component_library
+# llama_index_component_library.py
+
+"""
+This module integrates Llama Index functionality for component library management in Blender.
+It provides capabilities for loading, indexing, and querying component documentation,
+as well as generating Blender commands based on user queries and relevant component information.
+"""
 
 import json
 import openai
@@ -26,23 +32,37 @@ from llm_driven_modelling.llm.claude_module import generate_text_with_claude
 from bpy.types import Operator, Panel, PropertyGroup
 from bpy.props import StringProperty, PointerProperty, EnumProperty
 
-# 设置日志记录
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-)
+# Set up logging
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
-# 加载环境变量
+# Load environment variables
 load_dotenv(dotenv_path="D:/Tencent_Supernova/api/.env")
 api_key = os.getenv("OPENAI_API_KEY")
 openai.api_key = api_key
 
-
 def preprocess_markdown(content):
+    """
+    Preprocess markdown content by extracting the first section.
+
+    Args:
+        content (str): The markdown content to preprocess.
+
+    Returns:
+        str: The preprocessed content.
+    """
     return re.split(r"\n##", content)[0]
 
-
 def load_component_data(directory_path):
+    """
+    Load component data from the specified directory.
+
+    Args:
+        directory_path (str): The path to the directory containing component data.
+
+    Returns:
+        tuple: A tuple containing a list of Document objects and the category structure.
+    """
     documents = []
     category_structure_path = os.path.join(
         directory_path, "component_library", "component_category_structure.json"
@@ -77,8 +97,16 @@ def load_component_data(directory_path):
     logger.info(f"Total component documents loaded: {len(documents)}")
     return documents, category_structure
 
-
 def create_component_index(documents):
+    """
+    Create a vector index for the component documents.
+
+    Args:
+        documents (list): A list of Document objects.
+
+    Returns:
+        VectorStoreIndex: The created vector index.
+    """
     db_path = "./database/chroma_db_components"
     if os.path.exists(db_path):
         shutil.rmtree(db_path)
@@ -93,8 +121,16 @@ def create_component_index(documents):
         documents, storage_context=storage_context, embed_model=embed_model
     )
 
-
 def configure_component_query_engine(index):
+    """
+    Configure the query engine for component retrieval.
+
+    Args:
+        index (VectorStoreIndex): The vector index for components.
+
+    Returns:
+        RetrieverQueryEngine: The configured query engine.
+    """
     retriever = VectorIndexRetriever(index=index, similarity_top_k=3)
     response_synthesizer = get_response_synthesizer(
         response_mode="tree_summarize", use_async=True
@@ -105,8 +141,17 @@ def configure_component_query_engine(index):
         node_postprocessors=[SimilarityPostprocessor(similarity_cutoff=0.65)],
     )
 
-
 def query_component_documentation(query_engine, query):
+    """
+    Query the component documentation using the provided query engine.
+
+    Args:
+        query_engine (RetrieverQueryEngine): The query engine to use.
+        query (str): The query string.
+
+    Returns:
+        list: A list of relevant component documentation.
+    """
     response = query_engine.query(query)
     results = []
     for node in response.source_nodes:
@@ -116,8 +161,8 @@ def query_component_documentation(query_engine, query):
                 results.append(f.read())
     return results if results else ["No relevant component information found."]
 
-
 class ComponentProperties(PropertyGroup):
+    """Properties for the component query panel."""
     input_text: StringProperty(name="Component Query", default="")
     model_choice: EnumProperty(
         name="Model",
@@ -128,8 +173,8 @@ class ComponentProperties(PropertyGroup):
         default="GPT",
     )
 
-
 class COMPONENT_OT_query(Operator):
+    """Operator to query the component database."""
     bl_idname = "component.query"
     bl_label = "Query Component DB"
 
@@ -144,8 +189,8 @@ class COMPONENT_OT_query(Operator):
             logger.info(f"Component Query Result {i+1} Length: {len(result)}")
         return {"FINISHED"}
 
-
 class COMPONENT_OT_generate_component(Operator):
+    """Operator to generate component based on user query."""
     bl_idname = "component.generate_component"
     bl_label = "Generate Component"
 
@@ -155,17 +200,17 @@ class COMPONENT_OT_generate_component(Operator):
             query = props.input_text
             model_choice = props.model_choice
 
-            # 使用LlamaDB查询相关文档
+            # Query relevant documents using LlamaDB
             results = query_component_documentation(
                 context.scene.component_query_engine, query
             )
             combined_results = "\n\n".join(results)
             logger.info(f"Component DB Query Results Length: {len(combined_results)}")
 
-            # 准备提示信息
-            prompt = f"基于以下信息生成Blender命令来创建或修改组件：\n\n用户要求：{query}\n\n相关组件文档：{combined_results}\n\n请生成适当的Blender Python命令来创建或修改组件，注意当前的运行函数允许导入新的库，所以请生成代码时也import相关的库。"
+            # Prepare prompt
+            prompt = f"Based on the following information, generate Blender commands to create or modify components:\n\nUser request: {query}\n\nRelevant component documentation: {combined_results}\n\nPlease generate appropriate Blender Python commands to create or modify components. Note that the current running function allows importing new libraries, so please include necessary import statements in the generated code."
 
-            # 根据选择的模型生成响应
+            # Generate response based on selected model
             conversation_manager = context.scene.conversation_manager
             initialize_conversation(context)
             prompt_with_history = add_history_to_prompt(context, prompt)
@@ -177,13 +222,13 @@ class COMPONENT_OT_generate_component(Operator):
             else:
                 raise ValueError("Invalid model choice")
 
-            # 更新对话历史
+            # Update conversation history
             conversation_manager.add_message("user", prompt)
             conversation_manager.add_message("assistant", response)
 
             logger.info(f"{model_choice} Generated Commands for Component: {response}")
 
-            # 执行生成的Blender命令
+            # Execute generated Blender commands
             execute_blender_command(response)
 
         except Exception as e:
@@ -192,8 +237,8 @@ class COMPONENT_OT_generate_component(Operator):
 
         return {"FINISHED"}
 
-
 class COMPONENT_PT_panel(Panel):
+    """Panel for Llama Index Component Library integration in Blender."""
     bl_label = "Llama Index Component Library"
     bl_idname = "COMPONENT_PT_panel"
     bl_space_type = "VIEW_3D"
@@ -209,8 +254,8 @@ class COMPONENT_PT_panel(Panel):
         layout.operator("component.query")
         layout.operator("component.generate_component")
 
-
 def initialize_component_db():
+    """Initialize the component database and query engine."""
     db_path = "./database/chroma_db_components"
     db = chromadb.PersistentClient(path=db_path)
     chroma_collection = db.get_or_create_collection("component_index")

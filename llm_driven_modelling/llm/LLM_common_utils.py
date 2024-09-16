@@ -1,5 +1,10 @@
 # LLM_common_utils.py
 
+"""
+This module provides common utility functions for LLM-driven modeling in Blender.
+It includes functions for handling conversations, processing commands, and managing scene information.
+"""
+
 import base64
 import os
 import textwrap
@@ -13,7 +18,7 @@ import ast
 from bpy.props import StringProperty
 from bpy.types import PropertyGroup
 
-# 设置日志记录
+# Set up logging
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
@@ -21,40 +26,45 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# 定义全局提示词
+# Define global prompt
 GLOBAL_PROMPT = """
-你将充当一个智能助手，需要根据用户的指令提供相应的回答。在执行任何操作时，请参考对话历史中提到的内容和上下文。请严格遵守以下规则：
+You will act as an intelligent assistant, providing responses based on user instructions. When performing any operation, please refer to the content and context mentioned in the conversation history. Please strictly adhere to the following rules:
 
-1. 所有的回答都应基于对话历史，并尽量参考之前提到过的信息。
+1. All answers should be based on the conversation history and reference previously mentioned information as much as possible.
 
-2. 如果用户明确要求生成 Blender 指令：
-    a. 仅返回可直接执行的 Blender Python 命令。
-    c. 不要包含任何额外的描述性文本或符号。包括类似："根据您的要求，我们需要使用以下的指令。"这种类型的文字也不能出现。
-    d. 确保每个命令都是有效的 Blender Python API 调用。
-    e. 如果必须添加说明，只能以Python单行注释的形式出现（使用#开头）。
-    f. 绝对不要使用三引号形式的多行注释
+2. If the user explicitly requests to generate Blender instructions:
+    a. Only return Blender Python commands that can be directly executed.
+    c. Do not include any additional descriptive text or symbols. This includes text like: "Based on your request, we need to use the following instructions."
+    d. Ensure that each command is a valid Blender Python API call.
+    e. If explanations must be added, they can only appear as Python single-line comments (using # at the beginning).
+    f. Never use triple-quote multi-line comments.
 
-3. 在没有明确要求生成 Blender 指令的情况下：
-    a. 提供详细的回答和解释。
-    b. 确保回答的内容与对话历史和上下文一致。
-    c. 如果需要举例说明 Blender 指令，请使用与规则 2 相同的格式。
+3. In cases where there is no explicit request to generate Blender instructions:
+    a. Provide detailed answers and explanations.
+    b. Ensure that the content of the answer is consistent with the conversation history and context.
+    c. If you need to give examples of Blender instructions, please use the same format as in rule 2.
 
-示例 - 当要求生成 Blender 指令时，你应该只返回如下格式的内容：
+Example - When asked to generate Blender instructions, you should only return content in the following format:
 bpy.ops.object.select_all(action='SELECT')
 bpy.ops.object.delete(use_global=False)
 bpy.ops.mesh.primitive_cylinder_add(location=(0, 0, 0))
 
-4. 在没有明确要求用其他语言回复的情况下，统一用中文回答。
+4. Unless explicitly asked to reply in another language, always answer in Chinese.
 
-以下是一些我自定义的blender API的介绍，你需要在合适的时候使用他们：
+Here are some introductions to my custom Blender APIs that you need to use when appropriate:
 """
 
-
 class LLMToolProperties(PropertyGroup):
+    """Properties for the LLM tool."""
     input_text: StringProperty(name="Input Text", default="")
 
-
 def get_screenshots():
+    """
+    Get a list of screenshot file paths.
+
+    Returns:
+        list: A list of file paths to screenshots.
+    """
     screenshots_path = r"D:\GPT_driven_modeling\resources\screenshots"
     return [
         os.path.join(screenshots_path, f)
@@ -62,46 +72,79 @@ def get_screenshots():
         if f.lower().endswith((".png", ".jpg", ".jpeg", ".webp", ".gif"))
     ]
 
-
 def initialize_conversation(context):
+    """
+    Initialize the conversation with the global prompt if not already present.
+
+    Args:
+        context (bpy.types.Context): The current Blender context.
+    """
     conversation_manager = context.scene.conversation_manager
-    if not any(
-        msg.content == GLOBAL_PROMPT.strip() for msg in conversation_manager.messages
-    ):
+    if not any(msg.content == GLOBAL_PROMPT.strip() for msg in conversation_manager.messages):
         conversation_manager.add_message("system", GLOBAL_PROMPT.strip())
 
-
 def encode_image(image_path):
+    """
+    Encode an image file to base64.
+
+    Args:
+        image_path (str): The path to the image file.
+
+    Returns:
+        str: The base64 encoded image string.
+    """
     with open(image_path, "rb") as image_file:
         return base64.b64encode(image_file.read()).decode("utf-8")
 
-
 def is_valid_python(line):
+    """
+    Check if a line is valid Python code.
+
+    Args:
+        line (str): The line of code to check.
+
+    Returns:
+        bool: True if the line is valid Python, False otherwise.
+    """
     try:
-        # 尝试作为表达式解析
+        # Try parsing as expression
         ast.parse(line, mode="eval")
         return True
     except SyntaxError:
         try:
-            # 尝试作为语句解析
+            # Try parsing as statement
             ast.parse(line, mode="exec")
             return True
         except SyntaxError:
-            # 检查是否是以某些关键字开头的不完整语句
-            if re.match(
-                r"^\s*(def|class|if|for|while|try|with|else|elif|return)", line
-            ):
+            # Check if it's an incomplete statement starting with certain keywords
+            if re.match(r"^\s*(def|class|if|for|while|try|with|else|elif|return)", line):
                 return True
             return False
 
-
 def is_potential_multiline_start(line):
+    """
+    Check if a line potentially starts a multiline statement.
+
+    Args:
+        line (str): The line to check.
+
+    Returns:
+        bool: True if the line potentially starts a multiline statement, False otherwise.
+    """
     return line.strip().endswith(("=", "[", "{", "("))
 
-
 def sanitize_command(command):
+    """
+    Sanitize and format a Blender command string.
+
+    Args:
+        command (str): The command string to sanitize.
+
+    Returns:
+        str: The sanitized command string.
+    """
     try:
-        # 移除代码块标记和语言标识
+        # Remove code block markers and language identifiers
         command = re.sub(
             r'^(```|"""|\'\'\')\s*(?:python)?\s*\n|(```|"""|\'\'\')\s*$',
             "",
@@ -109,7 +152,7 @@ def sanitize_command(command):
             flags=re.MULTILINE | re.IGNORECASE,
         ).strip()
 
-        # 移除可能残留的单独 'python' 行
+        # Remove potential standalone 'python' line
         lines = command.split("\n")
         if lines and lines[0].strip().lower() == "python":
             lines = lines[1:]
@@ -118,12 +161,12 @@ def sanitize_command(command):
         buffer = []
         i = 0
         in_multiline = False
-        open_brackets = 0  # 新增：跟踪开放的括号数量
+        open_brackets = 0  # Track open brackets count
 
         while i < len(lines):
             current_line = lines[i].strip()
 
-            # 替换特殊引号和其他字符
+            # Replace special quotes and other characters
             current_line = (
                 current_line.replace('"', '"')
                 .replace('"', '"')
@@ -133,10 +176,10 @@ def sanitize_command(command):
                 current_line.replace("，", ",").replace("：", ":").replace("；", ";")
             )
 
-            # 保留原始缩进
+            # Preserve original indentation
             indent = len(lines[i]) - len(lines[i].lstrip())
 
-            # 更新括号计数
+            # Update bracket count
             open_brackets += (
                 current_line.count("(")
                 + current_line.count("[")
@@ -148,7 +191,7 @@ def sanitize_command(command):
                 + current_line.count("}")
             )
 
-            if current_line.startswith("#") or not current_line:  # 注释或空行
+            if current_line.startswith("#") or not current_line:  # Comment or empty line
                 if buffer and open_brackets == 0:
                     cleaned_lines.extend(buffer)
                     buffer = []
@@ -160,7 +203,7 @@ def sanitize_command(command):
             if is_potential_multiline_start(current_line) or open_brackets > 0:
                 in_multiline = True
 
-            # 尝试添加新行并验证
+            # Try adding new line and validate
             new_buffer = buffer + [" " * indent + current_line]
             if (
                 is_valid_python("\n".join(new_buffer))
@@ -176,20 +219,20 @@ def sanitize_command(command):
                 ):
                     in_multiline = False
             else:
-                # 如果新行添加后不合法，先保存之前的buffer
+                # If new line addition is invalid, save previous buffer first
                 if buffer and open_brackets == 0:
                     cleaned_lines.extend(buffer)
                     buffer = []
                     in_multiline = False
 
-                # 单独检查当前行
+                # Check current line separately
                 if is_valid_python(current_line):
                     cleaned_lines.append(" " * indent + current_line)
                 else:
                     cleaned_lines.append(f"# {' ' * indent + current_line}")
                 i += 1
 
-        # 处理最后可能剩余的buffer
+        # Handle potentially remaining buffer
         if buffer:
             cleaned_lines.extend(buffer)
 
@@ -198,8 +241,13 @@ def sanitize_command(command):
         print(f"Error sanitizing command: {e}")
         return command
 
-
 def get_scene_info():
+    """
+    Get information about objects in the current Blender scene.
+
+    Returns:
+        list: A list of dictionaries containing object information.
+    """
     scene_info = []
     for obj in bpy.context.scene.objects:
         obj_info = {
@@ -215,7 +263,7 @@ def get_scene_info():
             obj_info["vertex_count"] = len(obj.data.vertices)
             obj_info["face_count"] = len(obj.data.polygons)
 
-            # 获取材质信息
+            # Get material information
             materials = [
                 slot.material.name for slot in obj.material_slots if slot.material
             ]
@@ -224,78 +272,111 @@ def get_scene_info():
         scene_info.append(obj_info)
     return scene_info
 
-
 def format_scene_info(scene_info):
-    formatted_info = "场景信息:\n"
+    """
+    Format scene information into a readable string.
+
+    Args:
+        scene_info (list): A list of dictionaries containing object information.
+
+    Returns:
+        str: A formatted string describing the scene.
+    """
+    formatted_info = "Scene Information:\n"
     for obj in scene_info:
-        formatted_info += f"对象名称: {obj['name']}\n"
-        formatted_info += f"  类型: {obj['type']}\n"
-        formatted_info += f"  位置: {obj['location']}\n"
-        formatted_info += f"  旋转: {obj['rotation']}\n"
-        formatted_info += f"  缩放: {obj['scale']}\n"
-        formatted_info += f"  尺寸:\n"
-        formatted_info += f"    长 (X): {obj['dimensions'][0]:.3f}\n"
-        formatted_info += f"    宽 (Y): {obj['dimensions'][1]:.3f}\n"
-        formatted_info += f"    高 (Z): {obj['dimensions'][2]:.3f}\n"
+        formatted_info += f"Object Name: {obj['name']}\n"
+        formatted_info += f"  Type: {obj['type']}\n"
+        formatted_info += f"  Location: {obj['location']}\n"
+        formatted_info += f"  Rotation: {obj['rotation']}\n"
+        formatted_info += f"  Scale: {obj['scale']}\n"
+        formatted_info += f"  Dimensions:\n"
+        formatted_info += f"    Length (X): {obj['dimensions'][0]:.3f}\n"
+        formatted_info += f"    Width (Y): {obj['dimensions'][1]:.3f}\n"
+        formatted_info += f"    Height (Z): {obj['dimensions'][2]:.3f}\n"
         if obj["type"] == "MESH":
-            formatted_info += f"  顶点数: {obj['vertex_count']}\n"
-            formatted_info += f"  面数: {obj['face_count']}\n"
+            formatted_info += f"  Vertex Count: {obj['vertex_count']}\n"
+            formatted_info += f"  Face Count: {obj['face_count']}\n"
             if obj["materials"]:
-                formatted_info += f"  材质: {', '.join(obj['materials'])}\n"
+                formatted_info += f"  Materials: {', '.join(obj['materials'])}\n"
         formatted_info += "\n"
     return formatted_info
 
-
 def execute_blender_command(command):
+    """
+    Execute a Blender command string.
+
+    Args:
+        command (str): The command string to execute.
+
+    Raises:
+        Exception: If the command execution fails.
+    """
     try:
         sanitized_command = sanitize_command(command)
         logger.info(f"Executing sanitized command: {sanitized_command}")
 
         dedented_command = textwrap.dedent(sanitized_command)
 
-        # 创建一个新的全局命名空间
+        # Create a new global namespace
         exec_globals = {
             "__name__": "__main__",
             "__builtins__": __builtins__,
         }
 
-        # 添加一个自定义的导入函数
+        # Add a custom import function
         def custom_import(name, globals=None, locals=None, fromlist=(), level=0):
             try:
                 if name not in sys.modules:
                     importlib.import_module(name)
                 return sys.modules[name]
             except ImportError as e:
-                logger.error(f"无法导入模块 {name}: {str(e)}")
+                logger.error(f"Unable to import module {name}: {str(e)}")
                 raise e
 
         exec_globals["__import__"] = custom_import
 
-        # 执行代码
+        # Execute the code
         exec(dedented_command, exec_globals)
 
-        logger.info("命令执行成功")
-        return None  # 如果执行成功，返回 None
+        logger.info("Command executed successfully")
+        return None  # Return None if execution is successful
     except Exception as e:
-        error_message = f"命令执行失败: {str(e)}\n"
-        error_message += f"错误类型: {type(e).__name__}\n"
-        error_message += f"完整的错误信息:\n{traceback.format_exc()}"
+        error_message = f"Command execution failed: {str(e)}\n"
+        error_message += f"Error type: {type(e).__name__}\n"
+        error_message += f"Full error message:\n{traceback.format_exc()}"
         logger.error(error_message)
-        raise  # 重新抛出异常，以保持与原有行为一致
-
+        raise  # Re-raise the exception to maintain consistency with original behavior
 
 def execute_blender_command_with_error_handling(command):
+    """
+    Execute a Blender command with error handling.
+
+    Args:
+        command (str): The command string to execute.
+
+    Returns:
+        str or None: Error message if execution fails, None if successful.
+    """
     try:
         execute_blender_command(command)
         return None
     except Exception as e:
-        error_message = f"命令执行失败: {str(e)}\n"
-        error_message += f"错误类型: {type(e).__name__}\n"
-        error_message += f"完整的错误信息:\n{traceback.format_exc()}"
+        error_message = f"Command execution failed: {str(e)}\n"
+        error_message += f"Error type: {type(e).__name__}\n"
+        error_message += f"Full error message:\n{traceback.format_exc()}"
         return error_message
 
-
 def add_history_to_prompt(context, prompt):
+    """
+    Add conversation history to the prompt.
+
+    Args:
+        context (bpy.types.Context): The current Blender context.
+        prompt (str): The original prompt.
+
+    Returns:
+        str: The prompt with added conversation history.
+    """
     conversation_manager = context.scene.conversation_manager
     conversation = "\n".join(
         [
@@ -303,4 +384,4 @@ def add_history_to_prompt(context, prompt):
             for message in conversation_manager.get_conversation_history()
         ]
     )
-    return f"历史对话记录如下：\n{conversation}\n\n在我发给你的信息中,包含了我和你过去的历史对话,请尽量参考之前提到过的信息。\n\n{prompt}"
+    return f"Conversation history:\n{conversation}\n\nIn the information I send you, I have included our past conversation history. Please try to reference previously mentioned information.\n\n{prompt}"

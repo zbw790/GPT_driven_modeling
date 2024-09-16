@@ -1,4 +1,10 @@
-# lllama_index_model_generation.py
+# llama_index_model_generation.py
+
+"""
+This module integrates Llama Index functionality for 3D model generation in Blender.
+It provides capabilities for loading, indexing, and querying generation documentation,
+as well as generating 3D models based on user queries and relevant generation information.
+"""
 
 import json
 import openai
@@ -28,34 +34,47 @@ from llm_driven_modelling.llm.LLM_common_utils import (
 from llm_driven_modelling.llm.gpt_module import generate_text_with_context
 from llm_driven_modelling.llm.claude_module import generate_text_with_claude
 
-# 设置日志记录
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-)
+# Set up logging
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
-# 加载环境变量
+# Load environment variables
 load_dotenv(dotenv_path="D:/Tencent_Supernova/api/.env")
 api_key = os.getenv("OPENAI_API_KEY")
 openai.api_key = api_key
 
-
 def preprocess_markdown(content):
-    # 提取描述部分（假设描述部分在文件的开头，到第一个 ## 标题之前）
+    """
+    Extract the description part from the markdown content.
+
+    Args:
+        content (str): The markdown content to preprocess.
+
+    Returns:
+        str: The extracted description (content before the first ## heading).
+    """
     return re.split(r"\n##", content)[0]
 
-
 def load_generation_data(directory_path):
+    """
+    Load generation data from the specified directory.
+
+    Args:
+        directory_path (str): The path to the directory containing generation data.
+
+    Returns:
+        tuple: A tuple containing a list of Document objects and the category structure.
+    """
     documents = []
     category_structure_path = os.path.join(
         directory_path, "model_generation", "generation_category_structure.json"
     )
 
-    # 加载类别结构
+    # Load category structure
     with open(category_structure_path, "r", encoding="utf-8") as f:
         category_structure = json.load(f)
 
-    # 遍历类别结构并加载对应的 Markdown 文件
+    # Traverse the category structure and load corresponding Markdown files
     for category in category_structure["categories"]:
         for subcategory in category["subcategories"]:
             for item_type in subcategory["types"]:
@@ -69,7 +88,7 @@ def load_generation_data(directory_path):
                 if os.path.exists(file_path):
                     with open(file_path, "r", encoding="utf-8") as f:
                         content = f.read()
-                        # 使用预处理函数提取描述部分
+                        # Use preprocessing function to extract the description part
                         description = preprocess_markdown(content)
                         doc = Document(
                             text=description,
@@ -89,9 +108,16 @@ def load_generation_data(directory_path):
     logger.info(f"Total documents loaded: {len(documents)}")
     return documents, category_structure
 
-
-# 创建向量存储索引
 def create_generation_index(documents):
+    """
+    Create a vector index for the generation documents.
+
+    Args:
+        documents (list): A list of Document objects.
+
+    Returns:
+        VectorStoreIndex: The created vector index.
+    """
     db_path = "./database/chroma_db_generation"
     if os.path.exists(db_path):
         shutil.rmtree(db_path)
@@ -106,9 +132,16 @@ def create_generation_index(documents):
         documents, storage_context=storage_context, embed_model=embed_model
     )
 
-
-# 配置查询引擎
 def configure_generation_query_engine(index):
+    """
+    Configure the query engine for generation retrieval.
+
+    Args:
+        index (VectorStoreIndex): The vector index for generation documents.
+
+    Returns:
+        RetrieverQueryEngine: The configured query engine.
+    """
     retriever = VectorIndexRetriever(index=index, similarity_top_k=1)
     response_synthesizer = get_response_synthesizer(
         response_mode="tree_summarize", use_async=True
@@ -119,9 +152,17 @@ def configure_generation_query_engine(index):
         node_postprocessors=[SimilarityPostprocessor(similarity_cutoff=0.6)],
     )
 
-
-# 查询函数
 def query_generation_documentation(query_engine, query):
+    """
+    Query the generation documentation using the provided query engine.
+
+    Args:
+        query_engine (RetrieverQueryEngine): The query engine to use.
+        query (str): The query string.
+
+    Returns:
+        str: The relevant generation information or a default message if not found.
+    """
     response = query_engine.query(query)
     if response.source_nodes:
         file_path = response.source_nodes[0].node.metadata.get("file_path")
@@ -130,8 +171,8 @@ def query_generation_documentation(query_engine, query):
                 return f.read()
     return "No relevant generation information found."
 
-
 class GenerationProperties(PropertyGroup):
+    """Properties for the generation query panel."""
     input_text: StringProperty(name="Generation Query", default="")
     model_choice: EnumProperty(
         name="Model",
@@ -142,8 +183,8 @@ class GenerationProperties(PropertyGroup):
         default="GPT",
     )
 
-
 class GENERATION_OT_query(Operator):
+    """Operator to query the generation database."""
     bl_idname = "generation.query"
     bl_label = "Query Generation DB"
 
@@ -157,8 +198,8 @@ class GENERATION_OT_query(Operator):
         logger.info(f"Generation Query Result Length: {len(result)}")
         return {"FINISHED"}
 
-
 class GENERATION_OT_generate_model(Operator):
+    """Operator to generate a 3D model based on user query."""
     bl_idname = "generation.generate_model"
     bl_label = "Generate 3D Model"
 
@@ -168,17 +209,17 @@ class GENERATION_OT_generate_model(Operator):
             query = props.input_text
             model_choice = props.model_choice
 
-            # 使用LlamaDB查询相关文档
+            # Query relevant documents using LlamaDB
             result = query_generation_documentation(
                 context.scene.generation_query_engine, query
             )
             logger.info(f"Generation DB Query Result {result}")
             logger.info(f"Generation DB Query Result Length: {len(result)}")
 
-            # 准备提示信息
-            prompt = f"基于以下信息生成Blender命令来创建3D模型：\n\n用户生成要求：{query}\n\n相关生成文档：{result}\n\n请生成适当的Blender Python命令来创建3D模型，注意当前的运行函数允许导入新的库，所以请生成代码时也import相关的库。"
+            # Prepare prompt
+            prompt = f"Based on the following information, generate Blender commands to create a 3D model:\n\nUser generation request: {query}\n\nRelevant generation documentation: {result}\n\nPlease generate appropriate Blender Python commands to create the 3D model. Note that the current running function allows importing new libraries, so please include necessary import statements in the generated code."
 
-            # 根据选择的模型生成响应
+            # Generate response based on selected model
             conversation_manager = context.scene.conversation_manager
             initialize_conversation(context)
             prompt_with_history = add_history_to_prompt(context, prompt)
@@ -190,13 +231,13 @@ class GENERATION_OT_generate_model(Operator):
             else:
                 raise ValueError("Invalid model choice")
 
-            # 更新对话历史
+            # Update conversation history
             conversation_manager.add_message("user", prompt)
             conversation_manager.add_message("assistant", response)
 
             logger.info(f"{model_choice} Generated Commands for 3D Model: {response}")
 
-            # 执行生成的Blender命令
+            # Execute generated Blender commands
             execute_blender_command(response)
 
         except Exception as e:
@@ -205,8 +246,8 @@ class GENERATION_OT_generate_model(Operator):
 
         return {"FINISHED"}
 
-
 class GENERATION_PT_panel(Panel):
+    """Panel for Llama Index Model Generation integration in Blender."""
     bl_label = "Llama Index Model Generation"
     bl_idname = "GENERATION_PT_panel"
     bl_space_type = "VIEW_3D"
@@ -222,8 +263,8 @@ class GENERATION_PT_panel(Panel):
         layout.operator("generation.query")
         layout.operator("generation.generate_model")
 
-
 def initialize_generation_db():
+    """Initialize the generation database and query engine."""
     db_path = "./database/chroma_db_generation"
     db = chromadb.PersistentClient(path=db_path)
     chroma_collection = db.get_or_create_collection("generation_index")

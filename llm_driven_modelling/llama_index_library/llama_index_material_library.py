@@ -1,5 +1,11 @@
 # llama_index_material_library.py
 
+"""
+This module integrates Llama Index functionality for material library management in Blender.
+It provides capabilities for loading, indexing, and querying material documentation,
+as well as generating and applying materials based on user queries and scene information.
+"""
+
 import json
 import openai
 import bpy
@@ -30,29 +36,40 @@ from bpy.props import StringProperty, PointerProperty, EnumProperty
 from llm_driven_modelling.utils.model_viewer_module import save_screenshots, save_screenshots_to_path
 from llm_driven_modelling.utils.logger_module import setup_logger, log_context
 
-
-# 设置日志记录
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-)
+# Set up logging
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
-# 加载环境变量
+# Load environment variables
 load_dotenv(dotenv_path="D:/Tencent_Supernova/api/.env")
 api_key = os.getenv("OPENAI_API_KEY")
 openai.api_key = api_key
 
-
 def preprocess_markdown(content):
+    """
+    Preprocess markdown content by extracting the first section.
+
+    Args:
+        content (str): The markdown content to preprocess.
+
+    Returns:
+        str: The preprocessed content.
+    """
     return re.split(r"\n##", content)[0]
 
-
 def load_material_data(directory_path):
+    """
+    Load material data from the specified directory.
+
+    Args:
+        directory_path (str): The path to the directory containing material data.
+
+    Returns:
+        tuple: A tuple containing a list of Document objects and the material structure.
+    """
     documents = []
     material_library_path = os.path.join(directory_path, "material_library")
-    structure_file_path = os.path.join(
-        material_library_path, "material_library_structure.json"
-    )
+    structure_file_path = os.path.join(material_library_path, "material_library_structure.json")
 
     with open(structure_file_path, "r", encoding="utf-8") as f:
         structure = json.load(f)
@@ -79,8 +96,16 @@ def load_material_data(directory_path):
     logger.info(f"Total material documents loaded: {len(documents)}")
     return documents, structure
 
-
 def create_material_index(documents):
+    """
+    Create a vector index for the material documents.
+
+    Args:
+        documents (list): A list of Document objects.
+
+    Returns:
+        VectorStoreIndex: The created vector index.
+    """
     db_path = "./database/chroma_db_materials"
     if os.path.exists(db_path):
         shutil.rmtree(db_path)
@@ -95,8 +120,16 @@ def create_material_index(documents):
         documents, storage_context=storage_context, embed_model=embed_model
     )
 
-
 def configure_material_query_engine(index):
+    """
+    Configure the query engine for material retrieval.
+
+    Args:
+        index (VectorStoreIndex): The vector index for materials.
+
+    Returns:
+        RetrieverQueryEngine: The configured query engine.
+    """
     retriever = VectorIndexRetriever(index=index, similarity_top_k=3)
     response_synthesizer = get_response_synthesizer(
         response_mode="tree_summarize", use_async=True
@@ -107,8 +140,17 @@ def configure_material_query_engine(index):
         node_postprocessors=[SimilarityPostprocessor(similarity_cutoff=0.65)],
     )
 
-
 def query_material_documentation(query_engine, query):
+    """
+    Query the material documentation using the provided query engine.
+
+    Args:
+        query_engine (RetrieverQueryEngine): The query engine to use.
+        query (str): The query string.
+
+    Returns:
+        list: A list of relevant material documentation.
+    """
     response = query_engine.query(query)
     results = []
     for node in response.source_nodes:
@@ -118,10 +160,15 @@ def query_material_documentation(query_engine, query):
                 results.append(f.read())
     return results if results else ["No relevant material information found."]
 
-
 def sanitize_reference(response):
     """
-    从Claude的响应中提取JSON数据，去除注释和其他非JSON内容。
+    Extract JSON data from Claude's response, removing comments and non-JSON content.
+
+    Args:
+        response (str): The response from Claude.
+
+    Returns:
+        str: The extracted JSON data as a string.
     """
     json_match = re.search(r"\{[\s\S]*\}", response)
     if json_match:
@@ -134,8 +181,8 @@ def sanitize_reference(response):
     else:
         return ""
 
-
 class MaterialProperties(PropertyGroup):
+    """Properties for the material query panel."""
     input_text: StringProperty(name="Material Query", default="")
     model_choice: EnumProperty(
         name="Model",
@@ -146,8 +193,8 @@ class MaterialProperties(PropertyGroup):
         default="GPT",
     )
 
-
 class MATERIAL_OT_query(Operator):
+    """Operator to query the material database."""
     bl_idname = "material.query"
     bl_label = "Query Material DB"
 
@@ -162,8 +209,8 @@ class MATERIAL_OT_query(Operator):
             logger.info(f"Material Query Result {i+1} Length: {len(result)}")
         return {"FINISHED"}
 
-
 class MATERIAL_OT_generate_material(Operator):
+    """Operator to generate and apply materials to the generated model."""
     bl_idname = "material.apply_materials"
     bl_label = "Apply Materials"
     bl_description = "Apply materials to the generated model"
@@ -174,47 +221,51 @@ class MATERIAL_OT_generate_material(Operator):
 
         with log_context(logger, user_input) as log_dir:
             try:
-                # 获取场景信息
+                # Get scene information
                 scene_info = get_scene_info()
                 formatted_scene_info = format_scene_info(scene_info)
 
-                # 步骤1：分析场景信息并确定所需的材质
-                material_requirements = self.analyze_scene_for_materials(
-                    formatted_scene_info
-                )
+                # Step 1: Analyze scene information and determine required materials
+                material_requirements = self.analyze_scene_for_materials(formatted_scene_info)
 
-                # 步骤2：查询相关的材质文档
+                # Step 2: Query relevant material documentation
                 material_docs = self.query_material_docs(material_requirements)
 
-                # 步骤3：生成并应用材质
-                self.generate_and_apply_materials(
-                    context, material_requirements, material_docs, log_dir
-                )
+                # Step 3: Generate and apply materials
+                self.generate_and_apply_materials(context, material_requirements, material_docs, log_dir)
 
-                self.report(
-                    {"INFO"}, f"Materials applied successfully. Logs saved in {log_dir}"
-                )
+                self.report({"INFO"}, f"Materials applied successfully. Logs saved in {log_dir}")
             except Exception as e:
                 logger.error(f"An error occurred while applying materials: {str(e)}")
-                self.report(
-                    {"ERROR"}, f"An error occurred while applying materials: {str(e)}"
-                )
+                self.report({"ERROR"}, f"An error occurred while applying materials: {str(e)}")
 
         return {"FINISHED"}
 
     def analyze_scene_for_materials(self, scene_info):
+        """
+        Analyze the scene and determine required materials for each object.
+
+        Args:
+            scene_info (str): Formatted scene information.
+
+        Returns:
+            dict: A dictionary of object names and their required material types.
+        """
         prompt = f"""
         Context:
-        你是一个专门分析3D场景并确定所需材质的AI助手。根据提供的场景信息和模型描述，确定每个对象需要的材质类型。
+        You are an AI assistant specialized in analyzing 3D scenes and determining required materials.
+        Based on the provided scene information and model description, determine the material type needed for each object.
 
-        场景信息：
+        Scene information:
         {scene_info}
 
         Task:
-        分析场景中的每个对象，并确定它们可能需要的材质类型。考虑对象的名称、形状和可能的用途。
+        Analyze each object in the scene and determine the material type they might need.
+        Consider the object's name, shape, and possible use.
 
         Output:
-        请提供一个JSON对象，其中包含每个对象的名称作为键，以及建议的材质类型作为值,注意一些材质为blender场景自带的，例如摄像机Camera等，该类物品不需要添加材质：
+        Provide a JSON object with object names as keys and suggested material types as values.
+        Note that some materials are built-in for the Blender scene, such as Camera, which do not need additional materials:
         {{
             "Table_Top": "wood",
             "Table_Leg": "metal",
@@ -222,22 +273,31 @@ class MATERIAL_OT_generate_material(Operator):
             "Lamp_Shade": "glass"
         }}
 
-        只需提供JSON对象，不需要其他解释。
+        Provide only the JSON object, without any additional explanation.
         """
         response = generate_text_with_claude(prompt)
         return json.loads(response)
 
     def query_material_docs(self, material_requirements):
+        """
+        Query material documentation based on material requirements.
+
+        Args:
+            material_requirements (dict): A dictionary of object names and their required material types.
+
+        Returns:
+            list: A list of unique material documents.
+        """
         material_docs = {}
-        unique_docs = set()  # 用于存储唯一的文档
+        unique_docs = set()  # To store unique documents
 
         for obj_name, material_type in material_requirements.items():
-            query = f"材质类型：{material_type}"
+            query = f"Material type: {material_type}"
             results = query_material_documentation(
                 bpy.types.Scene.material_query_engine, query
             )
 
-            # 过滤并只添加唯一的文档
+            # Filter and add only unique documents
             unique_results = []
             for result in results:
                 if result not in unique_docs:
@@ -246,37 +306,47 @@ class MATERIAL_OT_generate_material(Operator):
 
             material_docs[obj_name] = unique_results
 
-        # 将所有唯一的文档合并为一个列表
+        # Combine all unique documents into a single list
         all_unique_docs = list(unique_docs)
 
         return all_unique_docs
 
-    def generate_and_apply_materials(
-        self, context, material_requirements, material_docs, log_dir
-    ):
-        logger.info(f"材质需求： {material_requirements}")
-        logger.info(f"材质文档： {material_docs}")
+    def generate_and_apply_materials(self, context, material_requirements, material_docs, log_dir):
+        """
+        Generate and apply materials based on requirements and documentation.
+
+        Args:
+            context (bpy.types.Context): The current Blender context.
+            material_requirements (dict): A dictionary of object names and their required material types.
+            material_docs (list): A list of relevant material documentation.
+            log_dir (str): The directory to save logs and screenshots.
+        """
+        logger.info(f"Material requirements: {material_requirements}")
+        logger.info(f"Material documentation: {material_docs}")
         prompt = f"""
         Context:
-        你是一个专门为3D模型生成材质的AI助手。根据提供的材质需求和相关文档，生成Blender Python代码来创建和应用材质。
+        You are an AI assistant specialized in generating materials for 3D models.
+        Based on the provided material requirements and related documentation, generate Blender Python code to create and apply materials.
 
-        注意：
-        1. 不要使用 "Subsurface", "Sheen", "Emission", "Transmission" 等作为直接输入参数。这些是复合参数，需要通过其他允许的参数来实现效果。
-        2. 对于颜色和向量类型的输入，请始终使用列表格式，而不是单个浮点数。例如：
-        - 对于颜色输入（如Base Color, Specular Tint等），使用4个值的列表：[R, G, B, A]
-        - 对于向量输入（如Normal），使用3个值的列表：[X, Y, Z]
-        - 对于单一数值输入，直接使用浮点数
+        Note:
+        1. Do not use "Subsurface", "Sheen", "Emission", "Transmission" as direct input parameters.
+           These are composite parameters that need to be achieved through other allowed parameters.
+        2. For color and vector type inputs, always use list format instead of single float values. For example:
+           - For color inputs (like Base Color, Specular Tint, etc.), use a list of 4 values: [R, G, B, A]
+           - For vector inputs (like Normal), use a list of 3 values: [X, Y, Z]
+           - For single value inputs, use float directly
 
-        材质需求：
+        Material requirements:
         {json.dumps(material_requirements, ensure_ascii=False, indent=2)}
 
-        材质文档：
+        Material documentation:
         {json.dumps(material_docs, ensure_ascii=False, indent=2)}
 
         Task:
-        为每个对象生成适当的材质，并创建Blender Python代码来应用这些材质。使用Principled BSDF着色器，并仅使用以下允许的输入参数：
+        Generate appropriate materials for each object and create Blender Python code to apply these materials.
+        Use the Principled BSDF shader and only use the following allowed input parameters:
 
-        允许的Principled BSDF输入参数：
+        Allowed Principled BSDF input parameters:
         - Base Color
         - Metallic
         - Roughness
@@ -306,23 +376,21 @@ class MATERIAL_OT_generate_material(Operator):
         - Emission Strength
 
         Output:
-        请提供可以直接在Blender中执行的Python代码。代码应该：
-        1. 为每个对象创建新的材质
-        2. 设置材质的各项参数
-        3. 将材质应用到相应的对象上
-        4. 使用节点来创建更复杂的材质效果（如木纹、金属纹理等）
+        Provide Python code that can be directly executed in Blender. The code should:
+        1. Create new materials for each object
+        2. Set various parameters for the materials
+        3. Apply the materials to the corresponding objects
+        4. Use nodes to create more complex material effects (such as wood grain, metal texture, etc.)
 
-        只需提供Python代码，不需要其他解释。
+        Provide only the Python code, without any additional explanation.
         """
         material_code = generate_text_with_claude(prompt)
 
-        # 保存生成的材质代码到文件
-        with open(
-            os.path.join(log_dir, "material_application_code.py"), "w", encoding="utf-8"
-        ) as f:
+        # Save the generated material code to a file
+        with open(os.path.join(log_dir, "material_application_code.py"), "w", encoding="utf-8") as f:
             f.write(material_code)
 
-        # 执行生成的Blender材质命令
+        # Execute the generated Blender material commands
         try:
             execute_blender_command(material_code)
             logger.debug("Successfully applied materials.")
@@ -330,10 +398,10 @@ class MATERIAL_OT_generate_material(Operator):
             logger.error(f"Error applying materials: {str(e)}")
             self.report({"ERROR"}, f"Error applying materials: {str(e)}")
 
-        # 更新视图
+        # Update the view
         self.update_blender_view(context)
 
-        # 保存应用材质后的截图
+        # Save screenshots after applying materials
         screenshots = save_screenshots()
         screenshot_dir = os.path.join(log_dir, "material_screenshots")
         save_screenshots_to_path(screenshot_dir)
@@ -341,12 +409,18 @@ class MATERIAL_OT_generate_material(Operator):
             logger.debug(f"Material application screenshot saved: {screenshot}")
 
     def update_blender_view(self, context):
-        # 确保更改立即可见
+        """
+        Update the Blender view to reflect changes.
+
+        Args:
+            context (bpy.types.Context): The current Blender context.
+        """
+        # Ensure changes are immediately visible
         bpy.context.view_layer.update()
         logger.debug("Blender view updated.")
 
-
 class MATERIAL_PT_panel(Panel):
+    """Panel for Llama Index Material Library integration in Blender."""
     bl_label = "Llama Index Material Library"
     bl_idname = "MATERIAL_PT_panel"
     bl_space_type = "VIEW_3D"
@@ -362,8 +436,8 @@ class MATERIAL_PT_panel(Panel):
         layout.operator("material.query")
         layout.operator("material.apply_materials")
 
-
 def initialize_material_db():
+    """Initialize the material database and query engine."""
     db_path = "./database/chroma_db_materials"
     db = chromadb.PersistentClient(path=db_path)
     chroma_collection = db.get_or_create_collection("material_index")

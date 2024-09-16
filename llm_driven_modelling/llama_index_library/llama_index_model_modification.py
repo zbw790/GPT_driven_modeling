@@ -1,5 +1,11 @@
 # llama_index_model_modification.py
 
+"""
+This module integrates Llama Index functionality for 3D model modification in Blender.
+It provides capabilities for loading, indexing, and querying modification documentation,
+as well as generating modification commands based on user queries, screenshots, and relevant information.
+"""
+
 import json
 import openai
 import bpy
@@ -36,34 +42,47 @@ from llm_driven_modelling.llm.claude_module import (
     analyze_screenshots_with_claude,
 )
 
-# 设置日志记录
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-)
+# Set up logging
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
-# 加载环境变量
+# Load environment variables
 load_dotenv(dotenv_path="D:/Tencent_Supernova/api/.env")
 api_key = os.getenv("OPENAI_API_KEY")
 openai.api_key = api_key
 
-
 def preprocess_markdown(content):
-    # 提取描述部分（假设描述部分在文件的开头，到第一个 ## 标题之前）
+    """
+    Extract the description part from the markdown content.
+
+    Args:
+        content (str): The markdown content to preprocess.
+
+    Returns:
+        str: The extracted description (content before the first ## heading).
+    """
     return re.split(r"\n##", content)[0]
 
-
 def load_modification_data(directory_path):
+    """
+    Load modification data from the specified directory.
+
+    Args:
+        directory_path (str): The path to the directory containing modification data.
+
+    Returns:
+        tuple: A tuple containing a list of Document objects and the category structure.
+    """
     documents = []
     category_structure_path = os.path.join(
         directory_path, "model_modification", "modification_category_structure.json"
     )
 
-    # 加载类别结构
+    # Load category structure
     with open(category_structure_path, "r", encoding="utf-8") as f:
         category_structure = json.load(f)
 
-    # 遍历类别结构并加载对应的 Markdown 文件
+    # Traverse the category structure and load corresponding Markdown files
     for category in category_structure["categories"]:
         for subcategory in category["subcategories"]:
             for problem in subcategory["problems"]:
@@ -77,7 +96,7 @@ def load_modification_data(directory_path):
                 if os.path.exists(file_path):
                     with open(file_path, "r", encoding="utf-8") as f:
                         content = f.read()
-                        # 使用预处理函数提取描述部分
+                        # Use preprocessing function to extract the description part
                         description = preprocess_markdown(content)
                         doc = Document(
                             text=description,
@@ -97,9 +116,16 @@ def load_modification_data(directory_path):
     logger.info(f"Total documents loaded: {len(documents)}")
     return documents, category_structure
 
-
-# 创建向量存储索引
 def create_modification_index(documents):
+    """
+    Create a vector index for the modification documents.
+
+    Args:
+        documents (list): A list of Document objects.
+
+    Returns:
+        VectorStoreIndex: The created vector index.
+    """
     db_path = "./database/chroma_db_modification"
     if os.path.exists(db_path):
         shutil.rmtree(db_path)
@@ -114,9 +140,16 @@ def create_modification_index(documents):
         documents, storage_context=storage_context, embed_model=embed_model
     )
 
-
-# 配置查询引擎
 def configure_modification_query_engine(index):
+    """
+    Configure the query engine for modification retrieval.
+
+    Args:
+        index (VectorStoreIndex): The vector index for modification documents.
+
+    Returns:
+        RetrieverQueryEngine: The configured query engine.
+    """
     retriever = VectorIndexRetriever(index=index, similarity_top_k=1)
     response_synthesizer = get_response_synthesizer(
         response_mode="tree_summarize", use_async=True
@@ -127,22 +160,28 @@ def configure_modification_query_engine(index):
         node_postprocessors=[SimilarityPostprocessor(similarity_cutoff=0.6)],
     )
 
-
-# 查询函数
 def query_modification_documentation(query_engine, query):
+    """
+    Query the modification documentation using the provided query engine.
+
+    Args:
+        query_engine (RetrieverQueryEngine): The query engine to use.
+        query (str): The query string.
+
+    Returns:
+        list: A list of relevant modification information or a default message if not found.
+    """
     response = query_engine.query(query)
     results = []
     if response.source_nodes:
-        # 获取最相关文档的文件路径
         file_path = response.source_nodes[0].node.metadata.get("file_path")
         if file_path and os.path.exists(file_path):
-            # 直接读取并返回整个文件内容
             with open(file_path, "r", encoding="utf-8") as f:
                 results.append(f.read())
     return results if results else ["No relevant modification information found."]
 
-
 class ModificationProperties(PropertyGroup):
+    """Properties for the modification query panel."""
     input_text: StringProperty(name="Modification Query", default="")
     model_choice: EnumProperty(
         name="Model",
@@ -153,8 +192,8 @@ class ModificationProperties(PropertyGroup):
         default="GPT",
     )
 
-
 class MODIFICATION_OT_query(Operator):
+    """Operator to query the modification database."""
     bl_idname = "modification.query"
     bl_label = "Query Modification DB"
 
@@ -168,8 +207,8 @@ class MODIFICATION_OT_query(Operator):
         logger.info(f"Modification Query Result Length: {len(result)}")
         return {"FINISHED"}
 
-
 class MODIFICATION_OT_query_with_screenshots(Operator):
+    """Operator to query modification database with screenshots."""
     bl_idname = "modification.query_with_screenshots"
     bl_label = "Query Modification with Screenshots"
 
@@ -185,9 +224,7 @@ class MODIFICATION_OT_query_with_screenshots(Operator):
                 if f.lower().endswith((".png", ".jpg", ".jpeg", ".webp", ".gif"))
             ]
 
-            prompt = """
-            请分析下列图片并观察有什么问题
-            """
+            prompt = "Please analyze the following images and observe any issues."
 
             if model_choice == "GPT":
                 description = analyze_screenshots_with_gpt4(prompt, screenshots)
@@ -205,15 +242,13 @@ class MODIFICATION_OT_query_with_screenshots(Operator):
             logger.info(f"Query with Screenshots Result Length: {len(result)}")
 
         except Exception as e:
-            logger.error(
-                f"Error in MODIFICATION_OT_query_with_screenshots.execute: {e}"
-            )
+            logger.error(f"Error in MODIFICATION_OT_query_with_screenshots.execute: {e}")
             print(f"Error: {str(e)}")
 
         return {"FINISHED"}
 
-
 class MODIFICATION_OT_query_and_generate(Operator):
+    """Operator to query modification database and generate modification commands."""
     bl_idname = "modification.query_and_generate"
     bl_label = "Query and Generate Modification Commands"
 
@@ -229,9 +264,7 @@ class MODIFICATION_OT_query_and_generate(Operator):
                 if f.lower().endswith((".png", ".jpg", ".jpeg", ".webp", ".gif"))
             ]
 
-            prompt = """
-            请分析下列图片并观察有什么问题
-            """
+            prompt = "Please analyze the following images and observe any issues."
 
             if model_choice == "GPT":
                 description = analyze_screenshots_with_gpt4(prompt, screenshots)
@@ -251,7 +284,17 @@ class MODIFICATION_OT_query_and_generate(Operator):
             scene_info = get_scene_info()
             formatted_scene_info = format_scene_info(scene_info)
 
-            prompt = f"基于以下信息生成Blender命令：\n\nblender内的场景信息:{formatted_scene_info}\n\n图像分析：{description}\n\可以参考相关问题的解决文档{result}\n\n请生成适当的Blender Python命令来修复或改进模型，注意当前的运行函数允许导入新的库，所以请生成代码时也import相关的库。"
+            prompt = f"""Based on the following information, generate Blender commands:
+
+            Blender scene information: {formatted_scene_info}
+
+            Image analysis: {description}
+
+            Relevant problem-solving documentation: {result}
+
+            Please generate appropriate Blender Python commands to fix or improve the model.
+            Note that the current running function allows importing new libraries,
+            so please include necessary import statements in the generated code."""
 
             conversation_manager = context.scene.conversation_manager
             initialize_conversation(context)
@@ -262,7 +305,7 @@ class MODIFICATION_OT_query_and_generate(Operator):
             elif model_choice == "CLAUDE":
                 response = generate_text_with_claude(prompt_with_history)
 
-            # 更新对话历史
+            # Update conversation history
             conversation_manager.add_message("user", prompt)
             conversation_manager.add_message("assistant", response)
 
@@ -276,8 +319,8 @@ class MODIFICATION_OT_query_and_generate(Operator):
 
         return {"FINISHED"}
 
-
 class MODIFICATION_PT_panel(Panel):
+    """Panel for Llama Index Model Modification integration in Blender."""
     bl_label = "Llama Index Model Modification"
     bl_idname = "MODIFICATION_PT_panel"
     bl_space_type = "VIEW_3D"
@@ -294,14 +337,12 @@ class MODIFICATION_PT_panel(Panel):
         layout.operator("modification.query_with_screenshots")
         layout.operator("modification.query_and_generate")
 
-
 def initialize_modification_db():
+    """Initialize the modification database and query engine."""
     db_path = "./database/chroma_db_modification"
     db = chromadb.PersistentClient(path=db_path)
     chroma_collection = db.get_or_create_collection("modification_index")
     vector_store = ChromaVectorStore(chroma_collection=chroma_collection)
     index = VectorStoreIndex.from_vector_store(vector_store)
-    bpy.types.Scene.modification_query_engine = configure_modification_query_engine(
-        index
-    )
+    bpy.types.Scene.modification_query_engine = configure_modification_query_engine(index)
     logger.info("Modification DB initialized successfully.")
