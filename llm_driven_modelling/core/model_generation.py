@@ -502,8 +502,6 @@ class MODEL_GENERATION_OT_generate(Operator):
                 "model_code": model_code,
                 "obj": obj,
                 "scene_context": scene_context,
-                "user_input": None,
-                "rewritten_input": None,
             }
 
             results = evaluator.evaluate(screenshots, evaluation_context)

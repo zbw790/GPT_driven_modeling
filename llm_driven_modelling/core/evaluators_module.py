@@ -93,9 +93,7 @@ class GPTOverallEvaluator(BaseEvaluator):
         Context:
         你是一个专门用于评估3D模型整体质量的AI助手。你需要分析提供的多角度截图和场景信息，评估模型的整体结构和设计。
 
-        用户原始输入: {context['user_input']}
-        改写后的输入: {context['rewritten_input']}
-        模型描述: {json.dumps(context['model_description'], ensure_ascii=False, indent=2)}
+        模型描述: {json.dumps(context['obj'], ensure_ascii=False, indent=2)}
         场景信息: {context['scene_info']}
 
         Objective:
@@ -156,9 +154,7 @@ class ClaudeOverallEvaluator(BaseEvaluator):
         Context:
         你是一个专门用于评估3D模型整体质量的AI助手。你需要分析提供的多角度截图和场景信息，评估模型的整体结构和设计。
 
-        用户原始输入: {context['user_input']}
-        改写后的输入: {context['rewritten_input']}
-        模型描述: {json.dumps(context['model_description'], ensure_ascii=False, indent=2)}
+        模型描述: {json.dumps(context['obj'], ensure_ascii=False, indent=2)}
         场景信息: {context['scene_info']}
 
         Objective:
@@ -218,9 +214,7 @@ class SizeEvaluator(BaseEvaluator):
         Context:
         你是一个专门评估3D模型尺寸的AI助手。你需要分析提供的多角度截图和场景信息，评估模型各部分的大小是否合适。
 
-        用户原始输入: {context['user_input']}
-        改写后的输入: {context['rewritten_input']}
-        模型描述: {json.dumps(context['model_description'], ensure_ascii=False, indent=2)}
+        模型描述: {json.dumps(context['obj'], ensure_ascii=False, indent=2)}
         场景信息: {context['scene_info']}
 
         Objective:
@@ -277,9 +271,7 @@ class ProportionEvaluator(BaseEvaluator):
         Context:
         你是一个专门评估3D模型比例的AI助手。你需要分析提供的多角度截图和场景信息，评估模型各部分之间的比例关系。
 
-        用户原始输入: {context['user_input']}
-        改写后的输入: {context['rewritten_input']}
-        模型描述: {json.dumps(context['model_description'], ensure_ascii=False, indent=2)}
+        模型描述: {json.dumps(context['obj'], ensure_ascii=False, indent=2)}
         场景信息: {context['scene_info']}
 
         Objective:
@@ -336,9 +328,7 @@ class StructureEvaluator(BaseEvaluator):
         Context:
         你是一个专门评估3D模型结构的AI助手。你需要分析提供的多角度截图和场景信息，评估模型的整体结构和细节处理。
 
-        用户原始输入: {context['user_input']}
-        改写后的输入: {context['rewritten_input']}
-        模型描述: {json.dumps(context['model_description'], ensure_ascii=False, indent=2)}
+        模型描述: {json.dumps(context['obj'], ensure_ascii=False, indent=2)}
         场景信息: {context['scene_info']}
 
         Objective:
@@ -398,9 +388,7 @@ class UsabilityEvaluator(BaseEvaluator):
         Context:
         你是一个专门评估3D模型实用性和功能性的AI助手。你需要分析提供的多角度截图和场景信息，根据常识判断该物品是否可用。
 
-        用户原始输入: {context['user_input']}
-        改写后的输入: {context['rewritten_input']}
-        模型描述: {json.dumps(context['model_description'], ensure_ascii=False, indent=2)}
+        模型描述: {json.dumps(context['obj'], ensure_ascii=False, indent=2)}
         场景信息: {context['scene_info']}
 
         Objective:
@@ -534,9 +522,9 @@ class OBJECT_OT_evaluate_model(Operator):
 
         # 这里需要提供评估所需的上下文信息
         evaluation_context = {
-            "user_input": "用户的原始输入",  # 这里需要从某处获取用户输入
-            "rewritten_input": "重写后的输入",  # 这里需要从某处获取重写后的输入
-            "model_description": {},  # 这里需要从某处获取模型描述
+            "model_code": "模型的代码",  # 这里需要从某处获取用户输入
+            "obj": "obj",  # 这里需要从某处获取重写后的输入
+            "scene_context": {},  # 这里需要从某处获取模型描述
         }
 
         results = evaluator.evaluate(screenshots, evaluation_context)
