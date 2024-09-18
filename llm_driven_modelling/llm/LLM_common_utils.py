@@ -54,9 +54,12 @@ bpy.ops.mesh.primitive_cylinder_add(location=(0, 0, 0))
 Here are some introductions to my custom Blender APIs that you need to use when appropriate:
 """
 
+
 class LLMToolProperties(PropertyGroup):
     """Properties for the LLM tool."""
+
     input_text: StringProperty(name="Input Text", default="")
+
 
 def get_screenshots():
     """
@@ -72,6 +75,7 @@ def get_screenshots():
         if f.lower().endswith((".png", ".jpg", ".jpeg", ".webp", ".gif"))
     ]
 
+
 def initialize_conversation(context):
     """
     Initialize the conversation with the global prompt if not already present.
@@ -80,8 +84,11 @@ def initialize_conversation(context):
         context (bpy.types.Context): The current Blender context.
     """
     conversation_manager = context.scene.conversation_manager
-    if not any(msg.content == GLOBAL_PROMPT.strip() for msg in conversation_manager.messages):
+    if not any(
+        msg.content == GLOBAL_PROMPT.strip() for msg in conversation_manager.messages
+    ):
         conversation_manager.add_message("system", GLOBAL_PROMPT.strip())
+
 
 def encode_image(image_path):
     """
@@ -95,6 +102,7 @@ def encode_image(image_path):
     """
     with open(image_path, "rb") as image_file:
         return base64.b64encode(image_file.read()).decode("utf-8")
+
 
 def is_valid_python(line):
     """
@@ -117,9 +125,12 @@ def is_valid_python(line):
             return True
         except SyntaxError:
             # Check if it's an incomplete statement starting with certain keywords
-            if re.match(r"^\s*(def|class|if|for|while|try|with|else|elif|return)", line):
+            if re.match(
+                r"^\s*(def|class|if|for|while|try|with|else|elif|return)", line
+            ):
                 return True
             return False
+
 
 def is_potential_multiline_start(line):
     """
@@ -132,6 +143,7 @@ def is_potential_multiline_start(line):
         bool: True if the line potentially starts a multiline statement, False otherwise.
     """
     return line.strip().endswith(("=", "[", "{", "("))
+
 
 def sanitize_command(command):
     """
@@ -191,7 +203,9 @@ def sanitize_command(command):
                 + current_line.count("}")
             )
 
-            if current_line.startswith("#") or not current_line:  # Comment or empty line
+            if (
+                current_line.startswith("#") or not current_line
+            ):  # Comment or empty line
                 if buffer and open_brackets == 0:
                     cleaned_lines.extend(buffer)
                     buffer = []
@@ -241,6 +255,7 @@ def sanitize_command(command):
         print(f"Error sanitizing command: {e}")
         return command
 
+
 def get_scene_info():
     """
     Get information about objects in the current Blender scene.
@@ -272,6 +287,7 @@ def get_scene_info():
         scene_info.append(obj_info)
     return scene_info
 
+
 def format_scene_info(scene_info):
     """
     Format scene information into a readable string.
@@ -300,6 +316,7 @@ def format_scene_info(scene_info):
                 formatted_info += f"  Materials: {', '.join(obj['materials'])}\n"
         formatted_info += "\n"
     return formatted_info
+
 
 def execute_blender_command(command):
     """
@@ -347,6 +364,7 @@ def execute_blender_command(command):
         logger.error(error_message)
         raise  # Re-raise the exception to maintain consistency with original behavior
 
+
 def execute_blender_command_with_error_handling(command):
     """
     Execute a Blender command with error handling.
@@ -365,6 +383,7 @@ def execute_blender_command_with_error_handling(command):
         error_message += f"Error type: {type(e).__name__}\n"
         error_message += f"Full error message:\n{traceback.format_exc()}"
         return error_message
+
 
 def add_history_to_prompt(context, prompt):
     """

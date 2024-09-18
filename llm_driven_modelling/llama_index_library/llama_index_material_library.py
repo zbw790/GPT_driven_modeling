@@ -33,17 +33,23 @@ from llm_driven_modelling.llm.gpt_module import generate_text_with_context
 from llm_driven_modelling.llm.claude_module import generate_text_with_claude
 from bpy.types import Operator, Panel, PropertyGroup
 from bpy.props import StringProperty, PointerProperty, EnumProperty
-from llm_driven_modelling.utils.model_viewer_module import save_screenshots, save_screenshots_to_path
+from llm_driven_modelling.utils.model_viewer_module import (
+    save_screenshots,
+    save_screenshots_to_path,
+)
 from llm_driven_modelling.utils.logger_module import setup_logger, log_context
 
 # Set up logging
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
 logger = logging.getLogger(__name__)
 
 # Load environment variables
 load_dotenv(dotenv_path="D:/Tencent_Supernova/api/.env")
 api_key = os.getenv("OPENAI_API_KEY")
 openai.api_key = api_key
+
 
 def preprocess_markdown(content):
     """
@@ -57,6 +63,7 @@ def preprocess_markdown(content):
     """
     return re.split(r"\n##", content)[0]
 
+
 def load_material_data(directory_path):
     """
     Load material data from the specified directory.
@@ -69,7 +76,9 @@ def load_material_data(directory_path):
     """
     documents = []
     material_library_path = os.path.join(directory_path, "material_library")
-    structure_file_path = os.path.join(material_library_path, "material_library_structure.json")
+    structure_file_path = os.path.join(
+        material_library_path, "material_library_structure.json"
+    )
 
     with open(structure_file_path, "r", encoding="utf-8") as f:
         structure = json.load(f)
@@ -96,6 +105,7 @@ def load_material_data(directory_path):
     logger.info(f"Total material documents loaded: {len(documents)}")
     return documents, structure
 
+
 def create_material_index(documents):
     """
     Create a vector index for the material documents.
@@ -120,6 +130,7 @@ def create_material_index(documents):
         documents, storage_context=storage_context, embed_model=embed_model
     )
 
+
 def configure_material_query_engine(index):
     """
     Configure the query engine for material retrieval.
@@ -140,6 +151,7 @@ def configure_material_query_engine(index):
         node_postprocessors=[SimilarityPostprocessor(similarity_cutoff=0.65)],
     )
 
+
 def query_material_documentation(query_engine, query):
     """
     Query the material documentation using the provided query engine.
@@ -159,6 +171,7 @@ def query_material_documentation(query_engine, query):
             with open(file_path, "r", encoding="utf-8") as f:
                 results.append(f.read())
     return results if results else ["No relevant material information found."]
+
 
 def sanitize_reference(response):
     """
@@ -181,8 +194,10 @@ def sanitize_reference(response):
     else:
         return ""
 
+
 class MaterialProperties(PropertyGroup):
     """Properties for the material query panel."""
+
     input_text: StringProperty(name="Material Query", default="")
     model_choice: EnumProperty(
         name="Model",
@@ -193,8 +208,10 @@ class MaterialProperties(PropertyGroup):
         default="GPT",
     )
 
+
 class MATERIAL_OT_query(Operator):
     """Operator to query the material database."""
+
     bl_idname = "material.query"
     bl_label = "Query Material DB"
 
@@ -209,8 +226,10 @@ class MATERIAL_OT_query(Operator):
             logger.info(f"Material Query Result {i+1} Length: {len(result)}")
         return {"FINISHED"}
 
+
 class MATERIAL_OT_generate_material(Operator):
     """Operator to generate and apply materials to the generated model."""
+
     bl_idname = "material.apply_materials"
     bl_label = "Apply Materials"
     bl_description = "Apply materials to the generated model"
@@ -226,18 +245,26 @@ class MATERIAL_OT_generate_material(Operator):
                 formatted_scene_info = format_scene_info(scene_info)
 
                 # Step 1: Analyze scene information and determine required materials
-                material_requirements = self.analyze_scene_for_materials(formatted_scene_info)
+                material_requirements = self.analyze_scene_for_materials(
+                    formatted_scene_info
+                )
 
                 # Step 2: Query relevant material documentation
                 material_docs = self.query_material_docs(material_requirements)
 
                 # Step 3: Generate and apply materials
-                self.generate_and_apply_materials(context, material_requirements, material_docs, log_dir)
+                self.generate_and_apply_materials(
+                    context, material_requirements, material_docs, log_dir
+                )
 
-                self.report({"INFO"}, f"Materials applied successfully. Logs saved in {log_dir}")
+                self.report(
+                    {"INFO"}, f"Materials applied successfully. Logs saved in {log_dir}"
+                )
             except Exception as e:
                 logger.error(f"An error occurred while applying materials: {str(e)}")
-                self.report({"ERROR"}, f"An error occurred while applying materials: {str(e)}")
+                self.report(
+                    {"ERROR"}, f"An error occurred while applying materials: {str(e)}"
+                )
 
         return {"FINISHED"}
 
@@ -311,7 +338,9 @@ class MATERIAL_OT_generate_material(Operator):
 
         return all_unique_docs
 
-    def generate_and_apply_materials(self, context, material_requirements, material_docs, log_dir):
+    def generate_and_apply_materials(
+        self, context, material_requirements, material_docs, log_dir
+    ):
         """
         Generate and apply materials based on requirements and documentation.
 
@@ -387,7 +416,9 @@ class MATERIAL_OT_generate_material(Operator):
         material_code = generate_text_with_claude(prompt)
 
         # Save the generated material code to a file
-        with open(os.path.join(log_dir, "material_application_code.py"), "w", encoding="utf-8") as f:
+        with open(
+            os.path.join(log_dir, "material_application_code.py"), "w", encoding="utf-8"
+        ) as f:
             f.write(material_code)
 
         # Execute the generated Blender material commands
@@ -419,8 +450,10 @@ class MATERIAL_OT_generate_material(Operator):
         bpy.context.view_layer.update()
         logger.debug("Blender view updated.")
 
+
 class MATERIAL_PT_panel(Panel):
     """Panel for Llama Index Material Library integration in Blender."""
+
     bl_label = "Llama Index Material Library"
     bl_idname = "MATERIAL_PT_panel"
     bl_space_type = "VIEW_3D"
@@ -435,6 +468,7 @@ class MATERIAL_PT_panel(Panel):
         layout.prop(props, "model_choice")
         layout.operator("material.query")
         layout.operator("material.apply_materials")
+
 
 def initialize_material_db():
     """Initialize the material database and query engine."""

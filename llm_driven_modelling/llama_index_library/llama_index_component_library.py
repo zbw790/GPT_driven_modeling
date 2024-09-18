@@ -33,13 +33,16 @@ from bpy.types import Operator, Panel, PropertyGroup
 from bpy.props import StringProperty, PointerProperty, EnumProperty
 
 # Set up logging
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
 logger = logging.getLogger(__name__)
 
 # Load environment variables
 load_dotenv(dotenv_path="D:/Tencent_Supernova/api/.env")
 api_key = os.getenv("OPENAI_API_KEY")
 openai.api_key = api_key
+
 
 def preprocess_markdown(content):
     """
@@ -52,6 +55,7 @@ def preprocess_markdown(content):
         str: The preprocessed content.
     """
     return re.split(r"\n##", content)[0]
+
 
 def load_component_data(directory_path):
     """
@@ -97,6 +101,7 @@ def load_component_data(directory_path):
     logger.info(f"Total component documents loaded: {len(documents)}")
     return documents, category_structure
 
+
 def create_component_index(documents):
     """
     Create a vector index for the component documents.
@@ -121,6 +126,7 @@ def create_component_index(documents):
         documents, storage_context=storage_context, embed_model=embed_model
     )
 
+
 def configure_component_query_engine(index):
     """
     Configure the query engine for component retrieval.
@@ -140,6 +146,7 @@ def configure_component_query_engine(index):
         response_synthesizer=response_synthesizer,
         node_postprocessors=[SimilarityPostprocessor(similarity_cutoff=0.65)],
     )
+
 
 def query_component_documentation(query_engine, query):
     """
@@ -161,8 +168,10 @@ def query_component_documentation(query_engine, query):
                 results.append(f.read())
     return results if results else ["No relevant component information found."]
 
+
 class ComponentProperties(PropertyGroup):
     """Properties for the component query panel."""
+
     input_text: StringProperty(name="Component Query", default="")
     model_choice: EnumProperty(
         name="Model",
@@ -173,8 +182,10 @@ class ComponentProperties(PropertyGroup):
         default="GPT",
     )
 
+
 class COMPONENT_OT_query(Operator):
     """Operator to query the component database."""
+
     bl_idname = "component.query"
     bl_label = "Query Component DB"
 
@@ -189,8 +200,10 @@ class COMPONENT_OT_query(Operator):
             logger.info(f"Component Query Result {i+1} Length: {len(result)}")
         return {"FINISHED"}
 
+
 class COMPONENT_OT_generate_component(Operator):
     """Operator to generate component based on user query."""
+
     bl_idname = "component.generate_component"
     bl_label = "Generate Component"
 
@@ -237,8 +250,10 @@ class COMPONENT_OT_generate_component(Operator):
 
         return {"FINISHED"}
 
+
 class COMPONENT_PT_panel(Panel):
     """Panel for Llama Index Component Library integration in Blender."""
+
     bl_label = "Llama Index Component Library"
     bl_idname = "COMPONENT_PT_panel"
     bl_space_type = "VIEW_3D"
@@ -253,6 +268,7 @@ class COMPONENT_PT_panel(Panel):
         layout.prop(props, "model_choice")
         layout.operator("component.query")
         layout.operator("component.generate_component")
+
 
 def initialize_component_db():
     """Initialize the component database and query engine."""

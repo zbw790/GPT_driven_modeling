@@ -37,7 +37,10 @@ from llm_driven_modelling.llama_index_library.llama_index_component_library impo
     query_component_documentation,
 )
 from llm_driven_modelling.core.evaluators_module import ModelEvaluator, EvaluationStatus
-from llm_driven_modelling.utils.model_viewer_module import save_screenshots, save_screenshots_to_path
+from llm_driven_modelling.utils.model_viewer_module import (
+    save_screenshots,
+    save_screenshots_to_path,
+)
 from llm_driven_modelling.llama_index_library.llama_index_material_library import (
     query_material_documentation,
 )
@@ -52,6 +55,7 @@ class ModelGenerationProperties(PropertyGroup):
         description="Describe the model you want to generate",
         default="",
     )
+
 
 def sanitize_reference(response):
     """
@@ -90,7 +94,11 @@ class MODEL_GENERATION_OT_generate(Operator):
                 logger.info(json.dumps(scene_description, ensure_ascii=False, indent=2))
 
                 # Save scene description to file
-                with open(os.path.join(log_dir, "scene_description.json"), "w", encoding="utf-8") as f:
+                with open(
+                    os.path.join(log_dir, "scene_description.json"),
+                    "w",
+                    encoding="utf-8",
+                ) as f:
                     json.dump(scene_description, f, ensure_ascii=False, indent=2)
 
                 # Generate and optimize 3D models for each object in the scene
@@ -98,12 +106,12 @@ class MODEL_GENERATION_OT_generate(Operator):
                 for obj in scene_description["objects"]:
                     logger.info(f"Generating model for: {obj['object_type']}")
                     model = self.generate_and_optimize_model(
-                        context, 
-                        obj, 
-                        scene_description["scene_context"], 
-                        user_input, 
-                        rewritten_input, 
-                        log_dir
+                        context,
+                        obj,
+                        scene_description["scene_context"],
+                        user_input,
+                        rewritten_input,
+                        log_dir,
                     )
                     models.append(model)
 
@@ -111,7 +119,9 @@ class MODEL_GENERATION_OT_generate(Operator):
                 self.arrange_scene(context, scene_description, models, log_dir)
 
                 # Apply materials to the entire scene
-                self.apply_materials(context, user_input, rewritten_input, scene_description, log_dir)
+                self.apply_materials(
+                    context, user_input, rewritten_input, scene_description, log_dir
+                )
 
                 logger.debug(f"Log directory: {log_dir}")
                 # Save screenshot of the current scene
@@ -119,14 +129,18 @@ class MODEL_GENERATION_OT_generate(Operator):
                 bpy.ops.screen.screenshot(filepath=screenshot_path)
                 logger.debug(f"Screenshot saved to {screenshot_path}")
 
-                self.report({"INFO"}, f"Scene generated and optimized. Logs saved in {log_dir}")
+                self.report(
+                    {"INFO"}, f"Scene generated and optimized. Logs saved in {log_dir}"
+                )
             except Exception as e:
                 logger.error(f"An error occurred: {str(e)}")
                 self.report({"ERROR"}, f"An error occurred: {str(e)}")
 
         return {"FINISHED"}
 
-    def generate_and_optimize_model(self, context, obj, scene_context, user_input, rewritten_input, log_dir):
+    def generate_and_optimize_model(
+        self, context, obj, scene_context, user_input, rewritten_input, log_dir
+    ):
         """
         Generate and optimize a 3D model for a given object.
 
@@ -142,7 +156,9 @@ class MODEL_GENERATION_OT_generate(Operator):
             dict: A dictionary containing the original and optimized model information.
         """
         # Generate initial model
-        initial_model_code = self.generate_3d_model(context, obj, scene_context, log_dir)
+        initial_model_code = self.generate_3d_model(
+            context, obj, scene_context, log_dir
+        )
 
         # Optimize the model
         optimized_model_code = self.evaluate_and_optimize_model(
@@ -152,13 +168,13 @@ class MODEL_GENERATION_OT_generate(Operator):
             initial_model_code,
             user_input,
             rewritten_input,
-            log_dir
+            log_dir,
         )
 
         return {
             "object_type": obj["object_type"],
             "initial_model": initial_model_code,
-            "optimized_model": optimized_model_code
+            "optimized_model": optimized_model_code,
         }
 
     def parse_scene_input(self, user_input, rewritten_input):

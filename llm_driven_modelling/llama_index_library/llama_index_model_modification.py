@@ -43,13 +43,16 @@ from llm_driven_modelling.llm.claude_module import (
 )
 
 # Set up logging
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
 logger = logging.getLogger(__name__)
 
 # Load environment variables
 load_dotenv(dotenv_path="D:/Tencent_Supernova/api/.env")
 api_key = os.getenv("OPENAI_API_KEY")
 openai.api_key = api_key
+
 
 def preprocess_markdown(content):
     """
@@ -62,6 +65,7 @@ def preprocess_markdown(content):
         str: The extracted description (content before the first ## heading).
     """
     return re.split(r"\n##", content)[0]
+
 
 def load_modification_data(directory_path):
     """
@@ -116,6 +120,7 @@ def load_modification_data(directory_path):
     logger.info(f"Total documents loaded: {len(documents)}")
     return documents, category_structure
 
+
 def create_modification_index(documents):
     """
     Create a vector index for the modification documents.
@@ -140,6 +145,7 @@ def create_modification_index(documents):
         documents, storage_context=storage_context, embed_model=embed_model
     )
 
+
 def configure_modification_query_engine(index):
     """
     Configure the query engine for modification retrieval.
@@ -159,6 +165,7 @@ def configure_modification_query_engine(index):
         response_synthesizer=response_synthesizer,
         node_postprocessors=[SimilarityPostprocessor(similarity_cutoff=0.6)],
     )
+
 
 def query_modification_documentation(query_engine, query):
     """
@@ -180,8 +187,10 @@ def query_modification_documentation(query_engine, query):
                 results.append(f.read())
     return results if results else ["No relevant modification information found."]
 
+
 class ModificationProperties(PropertyGroup):
     """Properties for the modification query panel."""
+
     input_text: StringProperty(name="Modification Query", default="")
     model_choice: EnumProperty(
         name="Model",
@@ -192,8 +201,10 @@ class ModificationProperties(PropertyGroup):
         default="GPT",
     )
 
+
 class MODIFICATION_OT_query(Operator):
     """Operator to query the modification database."""
+
     bl_idname = "modification.query"
     bl_label = "Query Modification DB"
 
@@ -207,8 +218,10 @@ class MODIFICATION_OT_query(Operator):
         logger.info(f"Modification Query Result Length: {len(result)}")
         return {"FINISHED"}
 
+
 class MODIFICATION_OT_query_with_screenshots(Operator):
     """Operator to query modification database with screenshots."""
+
     bl_idname = "modification.query_with_screenshots"
     bl_label = "Query Modification with Screenshots"
 
@@ -242,13 +255,17 @@ class MODIFICATION_OT_query_with_screenshots(Operator):
             logger.info(f"Query with Screenshots Result Length: {len(result)}")
 
         except Exception as e:
-            logger.error(f"Error in MODIFICATION_OT_query_with_screenshots.execute: {e}")
+            logger.error(
+                f"Error in MODIFICATION_OT_query_with_screenshots.execute: {e}"
+            )
             print(f"Error: {str(e)}")
 
         return {"FINISHED"}
 
+
 class MODIFICATION_OT_query_and_generate(Operator):
     """Operator to query modification database and generate modification commands."""
+
     bl_idname = "modification.query_and_generate"
     bl_label = "Query and Generate Modification Commands"
 
@@ -319,8 +336,10 @@ class MODIFICATION_OT_query_and_generate(Operator):
 
         return {"FINISHED"}
 
+
 class MODIFICATION_PT_panel(Panel):
     """Panel for Llama Index Model Modification integration in Blender."""
+
     bl_label = "Llama Index Model Modification"
     bl_idname = "MODIFICATION_PT_panel"
     bl_space_type = "VIEW_3D"
@@ -337,6 +356,7 @@ class MODIFICATION_PT_panel(Panel):
         layout.operator("modification.query_with_screenshots")
         layout.operator("modification.query_and_generate")
 
+
 def initialize_modification_db():
     """Initialize the modification database and query engine."""
     db_path = "./database/chroma_db_modification"
@@ -344,5 +364,7 @@ def initialize_modification_db():
     chroma_collection = db.get_or_create_collection("modification_index")
     vector_store = ChromaVectorStore(chroma_collection=chroma_collection)
     index = VectorStoreIndex.from_vector_store(vector_store)
-    bpy.types.Scene.modification_query_engine = configure_modification_query_engine(index)
+    bpy.types.Scene.modification_query_engine = configure_modification_query_engine(
+        index
+    )
     logger.info("Modification DB initialized successfully.")

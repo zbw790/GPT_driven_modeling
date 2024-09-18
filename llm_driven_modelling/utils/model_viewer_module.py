@@ -14,6 +14,7 @@ from bpy.props import FloatProperty, StringProperty
 from bpy_extras.object_utils import world_to_camera_view
 import bmesh
 
+
 def ensure_camera():
     """
     Ensure that a camera exists in the scene and return it.
@@ -34,6 +35,7 @@ def ensure_camera():
         camera = bpy.context.scene.camera
     return camera
 
+
 def calculate_scene_center_and_size(objects):
     """
     Calculate the center and size of the scene based on the given objects.
@@ -52,6 +54,7 @@ def calculate_scene_center_and_size(objects):
     size = max((max_corner[i] - min_corner[i]) for i in range(3))
     return center, size
 
+
 def calculate_combined_bounding_box(objects):
     """
     Calculate the combined bounding box of multiple objects.
@@ -66,7 +69,9 @@ def calculate_combined_bounding_box(objects):
     max_x = max_y = max_z = float("-inf")
 
     for obj in objects:
-        bbox_corners = [obj.matrix_world @ mathutils.Vector(corner) for corner in obj.bound_box]
+        bbox_corners = [
+            obj.matrix_world @ mathutils.Vector(corner) for corner in obj.bound_box
+        ]
         for corner in bbox_corners:
             min_x = min(min_x, corner.x)
             max_x = max(max_x, corner.x)
@@ -76,6 +81,7 @@ def calculate_combined_bounding_box(objects):
             max_z = max(max_z, corner.z)
 
     return (min_x, min_y, min_z), (max_x, max_y, max_z)
+
 
 def set_camera_position_and_rotation(camera, look_from, look_at):
     """
@@ -90,6 +96,7 @@ def set_camera_position_and_rotation(camera, look_from, look_at):
     rot_quat = direction.to_track_quat("-Z", "Y")
     camera.rotation_euler = rot_quat.to_euler()
     camera.location = look_from
+
 
 def add_label_to_object(obj, camera, scene_size, up_vector):
     """
@@ -164,6 +171,7 @@ def add_label_to_object(obj, camera, scene_size, up_vector):
 
     return text_obj
 
+
 def is_object_visible(obj, camera):
     """
     Check if an object is visible from the camera's perspective.
@@ -175,6 +183,7 @@ def is_object_visible(obj, camera):
     Returns:
         tuple: A tuple containing a boolean (True if visible) and the visible point (or None).
     """
+
     def check_point(point):
         co_ndc = world_to_camera_view(bpy.context.scene, camera, point)
         if 0 <= co_ndc.x <= 1 and 0 <= co_ndc.y <= 1 and 0 < co_ndc.z:
@@ -189,7 +198,9 @@ def is_object_visible(obj, camera):
 
             for offset in offsets:
                 ray_origin = camera.location + offset
-                ray_cast_result = bpy.context.scene.ray_cast(depsgraph, ray_origin, direction.normalized())
+                ray_cast_result = bpy.context.scene.ray_cast(
+                    depsgraph, ray_origin, direction.normalized()
+                )
                 if ray_cast_result[0] and ray_cast_result[4] == obj:
                     return True
         return False
@@ -226,11 +237,13 @@ def is_object_visible(obj, camera):
     bm.free()
     return result
 
+
 def remove_labels():
     """Remove all text objects (labels) from the scene."""
     for obj in bpy.data.objects:
         if obj.type == "FONT":
             bpy.data.objects.remove(obj, do_unlink=True)
+
 
 def _save_screenshots_common(output_path, distance_factor=2.5):
     """
@@ -310,7 +323,10 @@ def _save_screenshots_common(output_path, distance_factor=2.5):
             bpy.context.view_layer.objects.active = camera
             scene.camera = camera
 
-            text_objects = [add_label_to_object(obj, camera, size, mathutils.Vector(up_vector)) for obj in mesh_objects]
+            text_objects = [
+                add_label_to_object(obj, camera, size, mathutils.Vector(up_vector))
+                for obj in mesh_objects
+            ]
 
             for area in bpy.context.screen.areas:
                 if area.type == "VIEW_3D":
@@ -342,13 +358,16 @@ def _save_screenshots_common(output_path, distance_factor=2.5):
                     if space.type == "VIEW_3D":
                         if area in original_view_settings:
                             settings = original_view_settings[area]
-                            space.region_3d.view_perspective = settings["view_perspective"]
+                            space.region_3d.view_perspective = settings[
+                                "view_perspective"
+                            ]
                             space.region_3d.view_matrix = settings["view_matrix"]
                             space.lock_camera = settings["lock_camera"]
                             space.shading.type = settings["shading_type"]
                         break
 
     return screenshot_paths
+
 
 def save_screenshots():
     """
@@ -359,6 +378,7 @@ def save_screenshots():
     """
     output_path = r"D:\GPT_driven_modeling\resources\screenshots"
     return _save_screenshots_common(output_path)
+
 
 def save_screenshots_to_path(output_path):
     """
@@ -372,8 +392,10 @@ def save_screenshots_to_path(output_path):
     """
     return _save_screenshots_common(output_path)
 
+
 class ApplyScale(Operator):
     """Operator to apply scale to selected objects."""
+
     bl_idname = "model_viewer.apply_scale"
     bl_label = "Apply Scale"
 
@@ -386,9 +408,12 @@ class ApplyScale(Operator):
             bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
         if context.selected_objects:
             dimensions = context.selected_objects[0].dimensions
-            context.scene.model_dimensions = f"{dimensions.x:.2f} x {dimensions.y:.2f} x {dimensions.z:.2f}"
+            context.scene.model_dimensions = (
+                f"{dimensions.x:.2f} x {dimensions.y:.2f} x {dimensions.z:.2f}"
+            )
         context.scene.model_scale_percentage = 100
         return {"FINISHED"}
+
 
 def update_model_dimensions(self, context):
     """Update the displayed model dimensions based on the scale percentage."""
@@ -399,8 +424,10 @@ def update_model_dimensions(self, context):
         scaled_dimensions = dimensions * scale_factor
         context.scene.model_dimensions = f"{scaled_dimensions.x:.2f} x {scaled_dimensions.y:.2f} x {scaled_dimensions.z:.2f}"
 
+
 class SaveScreenshotOperator(Operator):
     """Operator to save screenshots of the current scene."""
+
     bl_idname = "model_viewer.save_screenshot"
     bl_label = "Save Screenshot"
 
@@ -408,8 +435,10 @@ class SaveScreenshotOperator(Operator):
         save_screenshots()
         return {"FINISHED"}
 
+
 class ModelViewerPanel(Panel):
     """Panel for model viewing and manipulation tools."""
+
     bl_label = "Model Viewer"
     bl_idname = "OBJECT_PT_model_viewer"
     bl_space_type = "VIEW_3D"

@@ -7,18 +7,27 @@ import bpy
 from bpy.props import StringProperty, CollectionProperty
 from bpy.types import PropertyGroup, Operator, Panel
 
+
 class Message(PropertyGroup):
     """
     Represents a single message in the conversation.
     """
-    role: StringProperty(name="Role", description="The role of the message sender (e.g., 'user' or 'assistant')")
+
+    role: StringProperty(
+        name="Role",
+        description="The role of the message sender (e.g., 'user' or 'assistant')",
+    )
     content: StringProperty(name="Content", description="The content of the message")
+
 
 class ConversationManager(PropertyGroup):
     """
     Manages the conversation history, including adding, retrieving, and clearing messages.
     """
-    messages: CollectionProperty(type=Message, description="Collection of messages in the conversation")
+
+    messages: CollectionProperty(
+        type=Message, description="Collection of messages in the conversation"
+    )
 
     def add_message(self, role, content):
         """
@@ -47,10 +56,12 @@ class ConversationManager(PropertyGroup):
         """
         self.messages.clear()
 
+
 class CONVERSATION_OT_print_all(Operator):
     """
     Operator to print all messages in the conversation history.
     """
+
     bl_idname = "conversation.print_all"
     bl_label = "Print All Messages"
     bl_description = "Print all messages in the conversation history"
@@ -63,10 +74,12 @@ class CONVERSATION_OT_print_all(Operator):
         self.report({"INFO"}, f"Printed {len(history)} messages")
         return {"FINISHED"}
 
+
 class CONVERSATION_OT_print_latest(Operator):
     """
     Operator to print the latest two messages in the conversation history.
     """
+
     bl_idname = "conversation.print_latest"
     bl_label = "Print Latest Messages"
     bl_description = "Print the latest two messages in the conversation history"
@@ -80,10 +93,12 @@ class CONVERSATION_OT_print_latest(Operator):
         self.report({"INFO"}, f"Printed {len(latest)} messages")
         return {"FINISHED"}
 
+
 class CONVERSATION_PT_panel(Panel):
     """
     Panel for displaying conversation history controls in the Blender UI.
     """
+
     bl_label = "Conversation History"
     bl_idname = "CONVERSATION_PT_panel"
     bl_space_type = "VIEW_3D"

@@ -51,6 +51,7 @@ Example Input 2: I want to generate a table that looks like a pine tree.
 Example Output 2: Generate a table inspired by the shape of a pine tree. The tabletop should be an irregular circle or polygon, mimicking the pine tree's crown. The table legs should be conical, similar to a pine tree trunk, possibly with 3 to 5 legs to imitate tree branches. The overall color scheme should be dark brown or green, reflecting the natural colors of a pine tree. The tabletop may have a textured design, imitating pine tree bark or growth rings. (Note: Specific dimensions and materials are not specified and may need further confirmation)
 """
 
+
 def rewrite_prompt(original_prompt):
     """
     Rewrite the original user prompt using Claude AI for better structure and clarity.

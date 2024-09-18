@@ -96,7 +96,7 @@ from llm_driven_modelling.blender_operations.bevel_corners_module import (
     OBJECT_PT_bevel_panel,
     BevelProperties,
 )
-from llm_driven_modelling.core.model_generation import (
+from llm_driven_modelling.core.model_generation_main import (
     ModelGenerationProperties,
     MODEL_GENERATION_OT_generate,
     MODEL_GENERATION_PT_panel,
@@ -109,7 +109,10 @@ from llm_driven_modelling.llama_index_library.llama_index_component_library impo
     COMPONENT_PT_panel,
     initialize_component_db,
 )
-from llm_driven_modelling.core.evaluators_module import OBJECT_OT_evaluate_model, Evaluator_PT_panel
+from llm_driven_modelling.core.evaluators_module import (
+    OBJECT_OT_evaluate_model,
+    Evaluator_PT_panel,
+)
 from llm_driven_modelling.llama_index_library.llama_index_material_library import (
     MaterialProperties,
     MATERIAL_OT_query,

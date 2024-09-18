@@ -27,11 +27,14 @@ from llm_driven_modelling.llama_index_library.llama_index_material_library impor
 from dotenv import load_dotenv
 
 # Set up logging
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
 logger = logging.getLogger(__name__)
 
 # Load environment variables
 load_dotenv(dotenv_path="D:/Tencent_Supernova/api/.env")
+
 
 def update_modification_database():
     """
@@ -51,6 +54,7 @@ def update_modification_database():
     except Exception as e:
         logger.error(f"Error updating modification database: {str(e)}")
 
+
 def update_generation_database():
     """
     Update the generation database by loading new data and recreating the index.
@@ -68,6 +72,7 @@ def update_generation_database():
         logger.info("Generation database updated successfully.")
     except Exception as e:
         logger.error(f"Error updating generation database: {str(e)}")
+
 
 def update_component_database():
     """
@@ -87,6 +92,7 @@ def update_component_database():
     except Exception as e:
         logger.error(f"Error updating component database: {str(e)}")
 
+
 def update_material_database():
     """
     Update the material database by loading new data and recreating the index.
@@ -105,6 +111,7 @@ def update_material_database():
     except Exception as e:
         logger.error(f"Error updating material database: {str(e)}")
 
+
 def update_all_databases():
     """
     Update all databases: modification, generation, component, and material.
@@ -113,6 +120,7 @@ def update_all_databases():
     update_generation_database()
     update_component_database()
     update_material_database()
+
 
 if __name__ == "__main__":
     update_all_databases()

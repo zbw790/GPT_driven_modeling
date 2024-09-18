@@ -35,13 +35,16 @@ from llm_driven_modelling.llm.gpt_module import generate_text_with_context
 from llm_driven_modelling.llm.claude_module import generate_text_with_claude
 
 # Set up logging
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
 logger = logging.getLogger(__name__)
 
 # Load environment variables
 load_dotenv(dotenv_path="D:/Tencent_Supernova/api/.env")
 api_key = os.getenv("OPENAI_API_KEY")
 openai.api_key = api_key
+
 
 def preprocess_markdown(content):
     """
@@ -54,6 +57,7 @@ def preprocess_markdown(content):
         str: The extracted description (content before the first ## heading).
     """
     return re.split(r"\n##", content)[0]
+
 
 def load_generation_data(directory_path):
     """
@@ -108,6 +112,7 @@ def load_generation_data(directory_path):
     logger.info(f"Total documents loaded: {len(documents)}")
     return documents, category_structure
 
+
 def create_generation_index(documents):
     """
     Create a vector index for the generation documents.
@@ -132,6 +137,7 @@ def create_generation_index(documents):
         documents, storage_context=storage_context, embed_model=embed_model
     )
 
+
 def configure_generation_query_engine(index):
     """
     Configure the query engine for generation retrieval.
@@ -152,6 +158,7 @@ def configure_generation_query_engine(index):
         node_postprocessors=[SimilarityPostprocessor(similarity_cutoff=0.6)],
     )
 
+
 def query_generation_documentation(query_engine, query):
     """
     Query the generation documentation using the provided query engine.
@@ -171,8 +178,10 @@ def query_generation_documentation(query_engine, query):
                 return f.read()
     return "No relevant generation information found."
 
+
 class GenerationProperties(PropertyGroup):
     """Properties for the generation query panel."""
+
     input_text: StringProperty(name="Generation Query", default="")
     model_choice: EnumProperty(
         name="Model",
@@ -183,8 +192,10 @@ class GenerationProperties(PropertyGroup):
         default="GPT",
     )
 
+
 class GENERATION_OT_query(Operator):
     """Operator to query the generation database."""
+
     bl_idname = "generation.query"
     bl_label = "Query Generation DB"
 
@@ -198,8 +209,10 @@ class GENERATION_OT_query(Operator):
         logger.info(f"Generation Query Result Length: {len(result)}")
         return {"FINISHED"}
 
+
 class GENERATION_OT_generate_model(Operator):
     """Operator to generate a 3D model based on user query."""
+
     bl_idname = "generation.generate_model"
     bl_label = "Generate 3D Model"
 
@@ -246,8 +259,10 @@ class GENERATION_OT_generate_model(Operator):
 
         return {"FINISHED"}
 
+
 class GENERATION_PT_panel(Panel):
     """Panel for Llama Index Model Generation integration in Blender."""
+
     bl_label = "Llama Index Model Generation"
     bl_idname = "GENERATION_PT_panel"
     bl_space_type = "VIEW_3D"
@@ -262,6 +277,7 @@ class GENERATION_PT_panel(Panel):
         layout.prop(props, "model_choice")
         layout.operator("generation.query")
         layout.operator("generation.generate_model")
+
 
 def initialize_generation_db():
     """Initialize the generation database and query engine."""

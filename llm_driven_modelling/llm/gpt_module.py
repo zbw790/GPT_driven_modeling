@@ -25,6 +25,7 @@ load_dotenv(dotenv_path="D:/Tencent_Supernova/api/.env")
 api_key = os.getenv("OPENAI_API_KEY")
 client = OpenAI(api_key=api_key)
 
+
 def generate_text_with_context(prompt):
     """
     Generate text using GPT-4 based on the given prompt.
@@ -51,6 +52,7 @@ def generate_text_with_context(prompt):
         logger.error(f"Error generating text from GPT-4 with context: {e}")
         return "Error generating response from GPT-4."
 
+
 def analyze_screenshots_with_gpt4(prompt, screenshots):
     """
     Analyze screenshots using GPT-4 vision capabilities.
@@ -68,16 +70,18 @@ def analyze_screenshots_with_gpt4(prompt, screenshots):
     for screenshot in screenshots:
         base64_image = encode_image(screenshot)
         view_name = os.path.splitext(os.path.basename(screenshot))[0]
-        image_messages.extend([
-            {"type": "text", "text": f"视图角度: {view_name}"},
-            {
-                "type": "image_url",
-                "image_url": {
-                    "url": f"data:image/png;base64,{base64_image}",
-                    "detail": "low",
+        image_messages.extend(
+            [
+                {"type": "text", "text": f"视图角度: {view_name}"},
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:image/png;base64,{base64_image}",
+                        "detail": "low",
+                    },
                 },
-            },
-        ])
+            ]
+        )
 
     text_message = {"type": "text", "text": prompt}
 
@@ -96,8 +100,10 @@ def analyze_screenshots_with_gpt4(prompt, screenshots):
     )
     return response.json().get("choices", [{}])[0].get("message", {}).get("content", "")
 
+
 class OBJECT_OT_send_to_gpt(Operator):
     """Operator to send text input to GPT-4 and process the response."""
+
     bl_idname = "object.send_to_gpt"
     bl_label = "Send to GPT-4"
 
@@ -120,8 +126,10 @@ class OBJECT_OT_send_to_gpt(Operator):
             logger.error(f"Error in OBJECT_OT_send_to_gpt.execute: {e}")
         return {"FINISHED"}
 
+
 class OBJECT_OT_send_screenshots_to_gpt(Operator):
     """Operator to send screenshots to GPT-4 for analysis."""
+
     bl_idname = "object.send_screenshots_to_gpt"
     bl_label = "Send Screenshots to GPT"
 
@@ -140,17 +148,23 @@ class OBJECT_OT_send_screenshots_to_gpt(Operator):
 
             prompt_with_history = add_history_to_prompt(context, prompt)
             screenshots = get_screenshots()
-            output_text = analyze_screenshots_with_gpt4(prompt_with_history, screenshots)
+            output_text = analyze_screenshots_with_gpt4(
+                prompt_with_history, screenshots
+            )
             logger.info(f"GPT-4 Response: {output_text}")
-            conversation_manager.add_message("assistant", f"这是基于多个视角截图得到的场景分析:\n{output_text}")
+            conversation_manager.add_message(
+                "assistant", f"这是基于多个视角截图得到的场景分析:\n{output_text}"
+            )
             execute_blender_command(output_text)
             return {"FINISHED"}
         except Exception as e:
             logger.error(f"Error in OBJECT_OT_send_screenshots_to_gpt.execute: {e}")
             return {"CANCELLED"}
 
+
 class OBJECT_OT_analyze_screenshots(Operator):
     """Operator to analyze screenshots without sending commands to Blender."""
+
     bl_idname = "object.analyze_screenshots"
     bl_label = "Analyze Screenshots"
 
@@ -166,16 +180,22 @@ class OBJECT_OT_analyze_screenshots(Operator):
 
             prompt_with_history = add_history_to_prompt(context, prompt)
             screenshots = get_screenshots()
-            analysis_result = analyze_screenshots_with_gpt4(prompt_with_history, screenshots)
+            analysis_result = analyze_screenshots_with_gpt4(
+                prompt_with_history, screenshots
+            )
             logger.info(f"Screenshot Analysis Result: {analysis_result}")
             conversation_manager = context.scene.conversation_manager
-            conversation_manager.add_message("assistant", f"这是基于多个视角截图得到的场景分析: {analysis_result}")
+            conversation_manager.add_message(
+                "assistant", f"这是基于多个视角截图得到的场景分析: {analysis_result}"
+            )
         except Exception as e:
             logger.error(f"Error in OBJECT_OT_analyze_screenshots.execute: {e}")
         return {"FINISHED"}
 
+
 class GPT_PT_panel(Panel):
     """Panel for GPT-4 integration in Blender."""
+
     bl_label = "GPT-4 Integration with Context"
     bl_idname = "GPT_PT_panel"
     bl_space_type = "VIEW_3D"
@@ -188,4 +208,6 @@ class GPT_PT_panel(Panel):
         layout.prop(scn.llm_tool, "input_text")
         layout.operator("object.send_to_gpt")
         layout.operator("object.analyze_screenshots", text="Analyze Screenshots")
-        layout.operator("object.send_screenshots_to_gpt", text="Send Screenshots to GPT")
+        layout.operator(
+            "object.send_screenshots_to_gpt", text="Send Screenshots to GPT"
+        )
