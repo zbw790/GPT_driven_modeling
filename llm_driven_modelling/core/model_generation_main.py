@@ -1,5 +1,11 @@
 # model_generation_main.py
 
+"""
+This module provides the main functionality for generating 3D models and scenes in Blender
+based on user input. It integrates various components for prompt rewriting, scene parsing,
+model generation, optimization, and material application.
+"""
+
 import bpy
 import json
 import os
@@ -7,7 +13,6 @@ from bpy.types import Operator, PropertyGroup, Panel
 from bpy.props import StringProperty
 from llm_driven_modelling.utils.logger_module import setup_logger, log_context
 from llm_driven_modelling.core.prompt_rewriter import rewrite_prompt
-from bpy.types import Operator
 from llm_driven_modelling.core.model_generation_utils import parse_scene_input
 from llm_driven_modelling.core.model_and_scene_generator import (
     generate_3d_model,
@@ -17,13 +22,14 @@ from llm_driven_modelling.core.model_material_generator import apply_materials
 from llm_driven_modelling.core.model_generation_optimizer import (
     evaluate_and_optimize_model,
 )
-from llm_driven_modelling.utils.logger_module import setup_logger
 
-# 创建专门的日志记录器
+# Create a dedicated logger
 logger = setup_logger("model_generation")
 
 
 class ModelGenerationProperties(PropertyGroup):
+    """Properties for the model generation tool."""
+
     input_text: StringProperty(
         name="Model Description",
         description="Describe the model you want to generate",
@@ -32,6 +38,8 @@ class ModelGenerationProperties(PropertyGroup):
 
 
 class MODEL_GENERATION_OT_generate(Operator):
+    """Operator to generate a 3D scene based on user description."""
+
     bl_idname = "model_generation.generate"
     bl_label = "Generate Scene"
     bl_description = "Generate a 3D scene based on the description"
@@ -52,26 +60,12 @@ class MODEL_GENERATION_OT_generate(Operator):
                 logger.info(json.dumps(scene_description, ensure_ascii=False, indent=2))
 
                 # Save scene description to file
-                with open(
-                    os.path.join(log_dir, "scene_description.json"),
-                    "w",
-                    encoding="utf-8",
-                ) as f:
-                    json.dump(scene_description, f, ensure_ascii=False, indent=2)
+                self.save_scene_description(log_dir, scene_description)
 
                 # Generate and optimize 3D models for each object in the scene
-                models = []
-                for obj in scene_description["objects"]:
-                    logger.info(f"Generating model for: {obj['object_type']}")
-                    model = self.generate_and_optimize_model(
-                        context,
-                        obj,
-                        scene_description["scene_context"],
-                        user_input,
-                        rewritten_input,
-                        log_dir,
-                    )
-                    models.append(model)
+                models = self.generate_and_optimize_models(
+                    context, scene_description, user_input, rewritten_input, log_dir
+                )
 
                 # Arrange objects in the scene
                 arrange_scene(context, scene_description, models, log_dir)
@@ -83,9 +77,7 @@ class MODEL_GENERATION_OT_generate(Operator):
 
                 logger.debug(f"Log directory: {log_dir}")
                 # Save screenshot of the current scene
-                screenshot_path = os.path.join(log_dir, "scene_screenshot.png")
-                bpy.ops.screen.screenshot(filepath=screenshot_path)
-                logger.debug(f"Screenshot saved to {screenshot_path}")
+                self.save_scene_screenshot(log_dir)
 
                 self.report(
                     {"INFO"}, f"Scene generated and optimized. Logs saved in {log_dir}"
@@ -95,6 +87,51 @@ class MODEL_GENERATION_OT_generate(Operator):
                 self.report({"ERROR"}, f"An error occurred: {str(e)}")
 
         return {"FINISHED"}
+
+    def save_scene_description(self, log_dir, scene_description):
+        """
+        Save the scene description to a JSON file.
+
+        Args:
+            log_dir (str): The directory for saving logs.
+            scene_description (dict): The scene description to save.
+        """
+        with open(
+            os.path.join(log_dir, "scene_description.json"),
+            "w",
+            encoding="utf-8",
+        ) as f:
+            json.dump(scene_description, f, ensure_ascii=False, indent=2)
+
+    def generate_and_optimize_models(
+        self, context, scene_description, user_input, rewritten_input, log_dir
+    ):
+        """
+        Generate and optimize 3D models for all objects in the scene.
+
+        Args:
+            context (bpy.types.Context): The current Blender context.
+            scene_description (dict): The parsed scene description.
+            user_input (str): The original user input.
+            rewritten_input (str): The rewritten user input.
+            log_dir (str): The directory for saving logs.
+
+        Returns:
+            list: A list of dictionaries containing the original and optimized model information.
+        """
+        models = []
+        for obj in scene_description["objects"]:
+            logger.info(f"Generating model for: {obj['object_type']}")
+            model = self.generate_and_optimize_model(
+                context,
+                obj,
+                scene_description["scene_context"],
+                user_input,
+                rewritten_input,
+                log_dir,
+            )
+            models.append(model)
+        return models
 
     def generate_and_optimize_model(
         self, context, obj, scene_context, user_input, rewritten_input, log_dir
@@ -133,8 +170,21 @@ class MODEL_GENERATION_OT_generate(Operator):
             "optimized_model": optimized_model_code,
         }
 
+    def save_scene_screenshot(self, log_dir):
+        """
+        Save a screenshot of the current scene.
+
+        Args:
+            log_dir (str): The directory for saving the screenshot.
+        """
+        screenshot_path = os.path.join(log_dir, "scene_screenshot.png")
+        bpy.ops.screen.screenshot(filepath=screenshot_path)
+        logger.debug(f"Screenshot saved to {screenshot_path}")
+
 
 class MODEL_GENERATION_PT_panel(Panel):
+    """Panel for the Model Generation tool in Blender."""
+
     bl_label = "Model Generation"
     bl_idname = "MODEL_GENERATION_PT_panel"
     bl_space_type = "VIEW_3D"

@@ -1,4 +1,9 @@
-# model_material_generator
+# model_material_generator.py
+
+"""
+This module provides functionality for generating and applying materials to 3D models in Blender.
+It uses AI-driven analysis to determine material requirements and generate appropriate Blender Python code.
+"""
 
 import bpy
 import json
@@ -26,14 +31,23 @@ from llm_driven_modelling.llama_index_library.llama_index_material_library impor
 )
 from llm_driven_modelling.core.model_generation_utils import update_blender_view
 
-# 创建专门的日志记录器
+# Set up logger
 logger = setup_logger("model_generation")
 
 
 def query_material_docs(material_requirements):
+    """
+    Query material documentation based on material requirements.
+
+    Args:
+        material_requirements (dict): A dictionary of material types and their requirements.
+
+    Returns:
+        dict: A dictionary of material types and their corresponding documentation.
+    """
     material_docs = {}
     for material_type in material_requirements.keys():
-        query = f"材质类型：{material_type}"
+        query = f"Material type: {material_type}"
         results = query_material_documentation(
             bpy.types.Scene.material_query_engine, query
         )
@@ -42,22 +56,32 @@ def query_material_docs(material_requirements):
 
 
 def apply_materials(context, user_input, rewritten_input, scene_description, log_dir):
+    """
+    Apply materials to objects in the Blender scene based on user input and scene analysis.
+
+    Args:
+        context (bpy.types.Context): The current Blender context.
+        user_input (str): The original user input.
+        rewritten_input (str): The rewritten user input.
+        scene_description (dict): A description of the scene.
+        log_dir (str): The directory to save logs and screenshots.
+    """
     try:
-        # 获取场景信息
+        # Get scene information
         scene_info = get_scene_info()
         formatted_scene_info = format_scene_info(scene_info)
 
-        # 步骤1：分析场景信息并确定所需的材质
+        # Step 1: Analyze scene and determine required materials
         material_requirements = analyze_scene_for_materials(
             user_input, rewritten_input, formatted_scene_info, scene_description
         )
-        logger.info(f"材质需求： {material_requirements}")
+        logger.info(f"Material requirements: {material_requirements}")
 
-        # 步骤2：查询相关的材质文档
+        # Step 2: Query relevant material documentation
         material_docs = query_material_docs(material_requirements)
-        logger.info(f"材质文档： {material_docs}")
+        logger.info(f"Material documentation: {material_docs}")
 
-        # 步骤3：生成并应用材质
+        # Step 3: Generate and apply materials
         generate_and_apply_materials(
             context,
             user_input,
@@ -76,20 +100,32 @@ def apply_materials(context, user_input, rewritten_input, scene_description, log
 def analyze_scene_for_materials(
     user_input, rewritten_input, formatted_scene_info, scene_description
 ):
+    """
+    Analyze the scene and determine required materials based on user input and scene information.
+
+    Args:
+        user_input (str): The original user input.
+        rewritten_input (str): The rewritten user input.
+        formatted_scene_info (str): Formatted scene information.
+        scene_description (dict): A description of the scene.
+
+    Returns:
+        dict: A dictionary of material types and objects requiring those materials.
+    """
     prompt = f"""
         Context:
-        你是一个专门分析3D场景并确定所需材质的AI助手。根据提供的场景信息和模型描述，确定需要的材质类型。
+        You are an AI assistant specialized in analyzing 3D scenes and determining required materials. Based on the provided scene information and model description, identify the needed material types.
 
-        用户原始输入：{user_input}
-        改写后的要求：{rewritten_input}
-        场景信息：{formatted_scene_info}
-        模型描述：{json.dumps(scene_description, ensure_ascii=False, indent=2)}
+        Original user input: {user_input}
+        Rewritten requirements: {rewritten_input}
+        Scene information: {formatted_scene_info}
+        Model description: {json.dumps(scene_description, ensure_ascii=False, indent=2)}
 
         Task:
-        分析场景中的每个对象，并确定所需的材质类型。考虑对象的名称、形状和可能的用途。将相同材质类型的对象分组。
+        Analyze each object in the scene and determine the required material types. Consider the object's name, shape, and possible use. Group objects with the same material type.
 
         Output:
-        请提供一个JSON对象，其中包含材质类型作为键，以及需要该材质的对象列表作为值。注意一些材质为blender场景自带的，例如摄像机Camera等，该类物品不需要添加材质：
+        Provide a JSON object with material types as keys and lists of objects requiring that material as values. Note that some materials are built-in to the Blender scene, such as Camera, and these items do not need materials added:
         {{
             "wood": ["Table_Top", "Chair_Seat"],
             "metal": ["Table_Leg", "Chair_Frame"],
@@ -97,7 +133,7 @@ def analyze_scene_for_materials(
             "glass": ["Lamp_Shade"]
         }}
 
-        只需提供JSON对象，不需要其他解释。
+        Provide only the JSON object, without any additional explanation.
         """
     response = generate_text_with_context(prompt)
     return json.loads(response)
@@ -113,31 +149,44 @@ def generate_and_apply_materials(
     material_docs,
     log_dir,
 ):
-    logger.info(f"材质需求： {material_requirements}")
-    logger.info(f"材质文档： {material_docs}")
+    """
+    Generate and apply materials to objects in the Blender scene.
+
+    Args:
+        context (bpy.types.Context): The current Blender context.
+        user_input (str): The original user input.
+        rewritten_input (str): The rewritten user input.
+        formatted_scene_info (str): Formatted scene information.
+        scene_description (dict): A description of the scene.
+        material_requirements (dict): A dictionary of material types and objects requiring those materials.
+        material_docs (dict): A dictionary of material types and their corresponding documentation.
+        log_dir (str): The directory to save logs and screenshots.
+    """
+    logger.info(f"Material requirements: {material_requirements}")
+    logger.info(f"Material documentation: {material_docs}")
     prompt = f"""
         Context:
-        你是一个专门为3D模型生成材质的AI助手。根据提供的材质需求和相关文档，生成Blender Python代码来创建和应用材质。
-        注意，你应该且只应该生成材质，不应该修改任何场上的模型。
+        You are an AI assistant specialized in generating materials for 3D models. Based on the provided material requirements and related documentation, generate Blender Python code to create and apply materials.
+        Note that you should only generate materials and not modify any models in the scene.
 
-        注意：
-        1. 不要使用 "Subsurface", "Sheen", "Emission", "Transmission", "Specular"等作为直接输入参数。这些是复合参数，需要通过其他允许的参数来实现效果。
-        2. 对于颜色和向量类型的输入，请始终使用列表格式，而不是单个浮点数。例如：
-        - 对于颜色输入（如Base Color, Specular Tint等），使用4个值的列表：[R, G, B, A]
-        - 对于向量输入（如Normal），使用3个值的列表：[X, Y, Z]
-        - 对于单一数值输入，直接使用浮点数
+        Note:
+        1. Do not use "Subsurface", "Sheen", "Emission", "Transmission", "Specular" as direct input parameters. These are composite parameters that need to be achieved through other allowed parameters.
+        2. For color and vector type inputs, always use list format instead of single float numbers. For example:
+        - For color inputs (like Base Color, Specular Tint, etc.), use a list of 4 values: [R, G, B, A]
+        - For vector inputs (like Normal), use a list of 3 values: [X, Y, Z]
+        - For single value inputs, use float numbers directly
 
-        场景内的部件名称等信息：{formatted_scene_info}
-        用户原始输入：{user_input}
-        改写后的要求：{rewritten_input}
-        模型描述：{json.dumps(scene_description, ensure_ascii=False, indent=2)}
-        材质需求：{json.dumps(material_requirements, ensure_ascii=False, indent=2)}
-        材质文档：{json.dumps(material_docs, ensure_ascii=False, indent=2)}
+        Component names and other information in the scene: {formatted_scene_info}
+        Original user input: {user_input}
+        Rewritten requirements: {rewritten_input}
+        Model description: {json.dumps(scene_description, ensure_ascii=False, indent=2)}
+        Material requirements: {json.dumps(material_requirements, ensure_ascii=False, indent=2)}
+        Material documentation: {json.dumps(material_docs, ensure_ascii=False, indent=2)}
 
         Task:
-        为每个对象生成适当的材质，并创建Blender Python代码来应用这些材质。使用Principled BSDF着色器，并仅使用以下允许的输入参数：
+        Generate appropriate materials for each object and create Blender Python code to apply these materials. Use the Principled BSDF shader and only use the following allowed input parameters:
 
-        允许的Principled BSDF输入参数：
+        Allowed Principled BSDF input parameters:
         - Base Color
         - Metallic
         - Roughness
@@ -167,33 +216,33 @@ def generate_and_apply_materials(
         - Emission Strength
 
         Output:
-        请提供可以直接在Blender中执行的Python代码。代码应该：
-        1. 为每个对象创建新的材质
-        2. 设置材质的各项参数
-        3. 将材质应用到相应的对象上
-        4. 使用节点来创建更复杂的材质效果（如木纹、金属纹理等）
+        Provide Python code that can be executed directly in Blender. The code should:
+        1. Create new materials for each object
+        2. Set various parameters for the materials
+        3. Apply the materials to the corresponding objects
+        4. Use nodes to create more complex material effects (such as wood grain, metal texture, etc.)
 
-        只需提供Python代码，不需要其他解释。
+        Provide only the Python code, without any additional explanation.
         """
     material_code = generate_text_with_context(prompt)
 
-    # 保存生成的材质代码到文件
+    # Save the generated material code to a file
     with open(
         os.path.join(log_dir, "material_application_code.py"), "w", encoding="utf-8"
     ) as f:
         f.write(material_code)
 
-    # 执行生成的Blender材质命令
+    # Execute the generated Blender material commands
     try:
         execute_blender_command(material_code)
         logger.debug("Successfully applied materials.")
     except Exception as e:
         logger.error(f"Error applying materials: {str(e)}")
 
-    # 更新视图
+    # Update the view
     update_blender_view(context)
 
-    # 保存应用材质后的截图
+    # Save screenshots after applying materials
     screenshots = save_screenshots()
     screenshot_dir = os.path.join(log_dir, "material_screenshots")
     save_screenshots_to_path(screenshot_dir)

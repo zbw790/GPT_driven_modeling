@@ -1,3 +1,10 @@
+# model_generation_utils.py
+
+"""
+This module provides utility functions for parsing user input and generating 3D scene descriptions.
+It includes functions for sanitizing Claude AI responses, updating Blender views, and parsing scene inputs.
+"""
+
 import json
 import re
 import bpy
@@ -10,7 +17,13 @@ logger = setup_logger("model_generation_utils")
 
 def sanitize_reference(response):
     """
-    从Claude的响应中提取JSON数据，去除注释和其他非JSON内容。
+    Extract JSON data from Claude's response, removing comments and non-JSON content.
+
+    Args:
+        response (str): The raw response from Claude AI.
+
+    Returns:
+        str: Sanitized JSON string or an empty string if no JSON is found.
     """
     json_match = re.search(r"\{[\s\S]*\}", response)
     if json_match:
@@ -25,35 +38,50 @@ def sanitize_reference(response):
 
 
 def update_blender_view(context):
-    # 确保更改立即可见
+    """
+    Update the Blender view to ensure changes are immediately visible.
+
+    Args:
+        context: The current Blender context.
+    """
     bpy.context.view_layer.update()
     logger.debug("Blender view updated.")
 
 
 def parse_scene_input(user_input, rewritten_input):
+    """
+    Parse user input and rewritten input to generate a standardized scene description.
+
+    Args:
+        user_input (str): The original user input describing the scene.
+        rewritten_input (str): The rewritten and processed input.
+
+    Returns:
+        dict: A dictionary containing the parsed scene description in JSON format.
+    """
     prompt = f"""
         Context:
-        你是一个专门用于解析和重构用户输入的AI助手。工作在一个3D建模系统中。你的主要任务是处理用户提供的场景描述，这些描述可能包含多个物品及其位置关系。
+        You are an AI assistant specialized in parsing and restructuring user inputs. You work within a 3D modeling system. Your main task is to process user-provided scene descriptions, which may contain multiple items and their positional relationships.
 
         Objective:
-        将用户的原始描述和重写后的提示词转换为标准化的JSON格式，包含场景中的每个物品及其相对位置，以及整个场景的上下文信息。
+        Convert the user's original description and the rewritten prompt into a standardized JSON format, including each item in the scene, their relative positions, and the overall context information of the scene.
 
-        输入:
-        用户原始输入: {user_input}
-        解析后的提示词：{rewritten_input}
+        Input:
+        Original user input: {user_input}
+        Parsed prompt: {rewritten_input}
 
-        输出格式示例:
+        Output format example:
         {{
-          "scene_name": "书房场景",
-          "scene_context": "这是一个安静的书房，光线柔和，氛围温馨。",
+          "scene_name": "Study Room Scene",
+          "scene_context": "This is a quiet study room with soft lighting and a cozy atmosphere.",
           "objects": [
             {{
-              "object_type": "书桌",
-              "position": "房间中央",
-              "description": "一张宽大的木质书桌，表面光滑",
+              "object_type": "desk",
+              "position": "center of the room",
+              "description": "A large wooden desk with a smooth surface",
               "components": [
                 {{
-                  "name": "桌面",
+                  "name": "desktop",
                   "quantity": 1,
                   "shape": "cuboid",
                   "dimensions": {{
@@ -63,7 +91,7 @@ def parse_scene_input(user_input, rewritten_input):
                   }}
                 }},
                 {{
-                  "name": "桌腿",
+                  "name": "leg",
                   "quantity": 4,
                   "shape": "cylinder",
                   "dimensions": {{
@@ -74,12 +102,12 @@ def parse_scene_input(user_input, rewritten_input):
               ]
             }},
             {{
-              "object_type": "花瓶",
-              "position": "书桌右上角",
-              "description": "一个蓝白相间的陶瓷花瓶，里面插着几支鲜花",
+              "object_type": "vase",
+              "position": "top right corner of the desk",
+              "description": "A blue and white ceramic vase with a few fresh flowers",
               "components": [
                 {{
-                  "name": "瓶身",
+                  "name": "body",
                   "quantity": 1,
                   "shape": "cylinder",
                   "dimensions": {{
@@ -92,13 +120,13 @@ def parse_scene_input(user_input, rewritten_input):
           ]
         }}
 
-        注意事项:
-        1. 识别场景中的所有物品，并为每个物品创建一个对象描述。
-        2. 包含每个物品的相对位置信息和简短描述。
-        3. 对于每个物品，列出其核心组件，类似于之前的单一物品描述。
-        4. 如果某些信息缺失，请根据常识进行合理推断。
-        5. 确保位置描述足够清晰，以便后续正确放置物品。
-        6. 添加一个scene_context字段，描述整个场景的氛围、光线等信息。
+        Notes:
+        1. Identify all items in the scene and create an object description for each.
+        2. Include relative position information and a brief description for each item.
+        3. For each item, list its core components, similar to the previous single item description.
+        4. If some information is missing, make reasonable inferences based on common sense.
+        5. Ensure position descriptions are clear enough for subsequent correct placement of items.
+        6. Add a scene_context field describing the overall atmosphere, lighting, etc. of the scene.
         """
 
     logger.info(f"Sending prompt to Claude: {prompt}")

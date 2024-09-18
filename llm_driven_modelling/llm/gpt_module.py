@@ -12,7 +12,15 @@ from openai import OpenAI
 from dotenv import load_dotenv
 from bpy.types import Operator, Panel, PropertyGroup
 from bpy.props import StringProperty, PointerProperty
-from llm_driven_modelling.llm.LLM_common_utils import *
+from llm_driven_modelling.llm.LLM_common_utils import (
+    encode_image,
+    initialize_conversation,
+    add_history_to_prompt,
+    get_scene_info,
+    format_scene_info,
+    get_screenshots,
+    execute_blender_command,
+)
 
 # Set up logging
 logging.basicConfig(
@@ -72,7 +80,7 @@ def analyze_screenshots_with_gpt4(prompt, screenshots):
         view_name = os.path.splitext(os.path.basename(screenshot))[0]
         image_messages.extend(
             [
-                {"type": "text", "text": f"视图角度: {view_name}"},
+                {"type": "text", "text": f"View angle: {view_name}"},
                 {
                     "type": "image_url",
                     "image_url": {
@@ -140,11 +148,11 @@ class OBJECT_OT_send_screenshots_to_gpt(Operator):
             scene_info = get_scene_info()
             formatted_scene_info = format_scene_info(scene_info)
 
-            prompt = f"""分析这些图片，描述你看到的3D模型。每张图片都标注了对应的视图角度。
-            请在你的分析中引用这些视图名称，以便更清晰地描述模型的不同方面。
-            指出任何可能的问题或需要改进的地方。
-            以下是场景中对象的详细信息：{formatted_scene_info}
-            请提供一个全面的分析，包括模型的整体形状、细节、比例和可能的用途。"""
+            prompt = f"""Analyze these images and describe the 3D model you see. Each image is labeled with its corresponding view angle.
+            Please reference these view names in your analysis to clearly describe different aspects of the model.
+            Point out any potential issues or areas for improvement.
+            Here are the details of objects in the scene: {formatted_scene_info}
+            Please provide a comprehensive analysis, including the model's overall shape, details, proportions, and possible uses."""
 
             prompt_with_history = add_history_to_prompt(context, prompt)
             screenshots = get_screenshots()
@@ -153,7 +161,8 @@ class OBJECT_OT_send_screenshots_to_gpt(Operator):
             )
             logger.info(f"GPT-4 Response: {output_text}")
             conversation_manager.add_message(
-                "assistant", f"这是基于多个视角截图得到的场景分析:\n{output_text}"
+                "assistant",
+                f"Scene analysis based on multiple view screenshots:\n{output_text}",
             )
             execute_blender_command(output_text)
             return {"FINISHED"}
@@ -172,11 +181,11 @@ class OBJECT_OT_analyze_screenshots(Operator):
         try:
             scene_info = get_scene_info()
             formatted_scene_info = format_scene_info(scene_info)
-            prompt = f"""分析这些图片，描述你看到的3D模型。每张图片都标注了对应的视图角度。
-            请在你的分析中引用这些视图名称，以便更清晰地描述模型的不同方面。
-            指出任何可能的问题或需要改进的地方。
-            以下是场景中对象的详细信息：{formatted_scene_info}
-            请提供一个全面的分析，包括模型的整体形状、细节、比例和可能的用途。"""
+            prompt = f"""Analyze these images and describe the 3D model you see. Each image is labeled with its corresponding view angle.
+            Please reference these view names in your analysis to clearly describe different aspects of the model.
+            Point out any potential issues or areas for improvement.
+            Here are the details of objects in the scene: {formatted_scene_info}
+            Please provide a comprehensive analysis, including the model's overall shape, details, proportions, and possible uses."""
 
             prompt_with_history = add_history_to_prompt(context, prompt)
             screenshots = get_screenshots()
@@ -186,7 +195,8 @@ class OBJECT_OT_analyze_screenshots(Operator):
             logger.info(f"Screenshot Analysis Result: {analysis_result}")
             conversation_manager = context.scene.conversation_manager
             conversation_manager.add_message(
-                "assistant", f"这是基于多个视角截图得到的场景分析: {analysis_result}"
+                "assistant",
+                f"Scene analysis based on multiple view screenshots: {analysis_result}",
             )
         except Exception as e:
             logger.error(f"Error in OBJECT_OT_analyze_screenshots.execute: {e}")

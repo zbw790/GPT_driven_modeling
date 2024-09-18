@@ -1,4 +1,9 @@
-# model_and_scene_generator
+# model_and_scene_generator.py
+
+"""
+This module provides functionality for generating 3D models and arranging scenes in Blender.
+It utilizes AI-powered text generation to create Blender Python commands for model creation and scene arrangement.
+"""
 
 import bpy
 import json
@@ -31,6 +36,15 @@ logger = setup_logger("model_generation_utils")
 
 
 def query_component_library(obj):
+    """
+    Query the component library for documentation on specified components.
+
+    Args:
+        obj (dict): Object containing component information.
+
+    Returns:
+        str: Concatenated documentation for all queried components.
+    """
     component_docs = []
     for component in obj.get("components", []):
         component_name = component.get("name", "")
@@ -43,77 +57,81 @@ def query_component_library(obj):
 
 
 def generate_3d_model(context, obj, scene_context, log_dir):
-    # 为每个模型创建单独的目录
+    """
+    Generate a 3D model based on the provided object description and scene context.
+
+    Args:
+        context (bpy.types.Context): The current Blender context.
+        obj (dict): Object description containing model details.
+        scene_context (str): Description of the scene context.
+        log_dir (str): Directory path for saving logs and generated files.
+
+    Returns:
+        str: The generated Blender Python code for creating the 3D model.
+    """
     model_dir = os.path.join(log_dir, f"model_{obj['object_type']}")
     os.makedirs(model_dir, exist_ok=True)
 
-    # 查询必要文件
     logger.info("Querying generation documentation")
     generation_docs = query_generation_documentation(
         bpy.types.Scene.generation_query_engine, obj["object_type"]
     )
     logger.info(f"Generation documentation: {generation_docs}")
 
-    # 查询部件库
     component_docs = query_component_library(obj)
     logger.info(f"Component library documentation: {component_docs}")
 
-    # 准备提示信息
     prompt = f"""
         Context:
-        你是一个专门用于生成Blender Python命令的AI助手，负责创建3D模型。你需要根据用户的描述和相关文档生成适当的Python代码。
+        You are an AI assistant specialized in generating Blender Python commands for creating 3D models. Your task is to generate appropriate Python code based on user descriptions and relevant documentation.
 
-        物体描述：{json.dumps(obj, ensure_ascii=False, indent=2)}
-        场景上下文：{scene_context}
-        相关生成文档：{generation_docs}
-        部件库文档：{component_docs}
+        Object description: {json.dumps(obj, ensure_ascii=False, indent=2)}
+        Scene context: {scene_context}
+        Relevant generation documentation: {generation_docs}
+        Component library documentation: {component_docs}
 
         Objective:
-        生成时请尽可能参照相关生成文档的内容，因为他们提供了一个合理的生成方法，可以在此基础上进行改动
-        生成适当的Blender Python命令来创建指定的3D模型。代码应该准确反映用户的需求，并遵循Blender API的最佳实践。同时，参考部件库文档中的指南来创建各个部件。
-        生成的模型应该只考虑外观，而不考虑可能的内部结构，例如一棵树的树冠以球体构成，则不需要考虑树冠内部的树枝，因为无法正常看到树枝。
+        Generate appropriate Blender Python commands to create the specified 3D model. The code should accurately reflect the user's requirements and follow Blender API best practices. Also, refer to the component library documentation for guidelines on creating individual components.
+        The generated model should only consider the appearance and not potential internal structures. For example, if a tree crown is composed of spheres, there's no need to consider the branches inside the crown as they won't be visible.
 
         Style:
-        - 精确：使用正确的Blender Python语法和函数
-        - 简洁：只包含必要的代码，不添加多余的注释或解释
-        - 结构化：按照逻辑顺序组织代码，使用适当的缩进
+        - Precise: Use correct Blender Python syntax and functions
+        - Concise: Include only necessary code, without extra comments or explanations
+        - Structured: Organize code in a logical order, using appropriate indentation
 
         Tone:
-        - 专业：使用Blender API的专业术语和函数
-        - 直接：直接给出代码，不需要额外的解释
-        - 技术性：专注于技术实现，不需要解释代码的意图
+        - Professional: Use professional terminology and functions from the Blender API
+        - Direct: Provide code directly without additional explanations
+        - Technical: Focus on technical implementation without explaining code intent
 
         Audience:
-        熟悉Blender Python API的3D建模工程师和开发人员
+        3D modeling engineers and developers familiar with the Blender Python API
 
         Response:
-        请提供创建3D模型的Blender Python代码。代码应该：
-        1. 使用bpy库来创建和操作对象
-        2. 为每个组件创建单独的对象，并根据其形状和尺寸进行设置
-        3. 正确放置每个组件，确保它们的相对位置正确
-        4. 使用循环来创建重复的组件（如多个桌腿）
-        5. 为生成的对象设置合适的名称，以便于识别
-        6. 添加简单的材质（如果需要）
-        7. 生成正确的集合以便于模型管理
-        8. 确保所有生成的模型都是3D的，有适当的厚度
-        9. 参考部件库文档中的指南来创建各个部件
+        Please provide Blender Python code to create the 3D model. The code should:
+        1. Use the bpy library to create and manipulate objects
+        2. Create separate objects for each component, setting their shape and dimensions
+        3. Correctly position each component, ensuring their relative positions are accurate
+        4. Use loops to create repetitive components (e.g., multiple table legs)
+        5. Set appropriate names for generated objects for easy identification
+        6. Add simple materials (if needed)
+        7. Generate correct collections for model management
+        8. Ensure all generated models are 3D with appropriate thickness
+        9. Refer to the component library documentation for guidelines on creating individual components
 
-        请直接返回Python代码，不需要其他解释或注释。
+        Please return Python code directly, without additional explanations or comments.
         """
 
-    # 使用 GPT 生成响应
     conversation_manager = context.scene.conversation_manager
     initialize_conversation(context)
     prompt_with_history = add_history_to_prompt(context, prompt)
     response = generate_text_with_context(prompt_with_history)
 
-    # 更新对话历史
     conversation_manager.add_message("user", prompt)
     conversation_manager.add_message("assistant", response)
 
     logger.info(f"GPT Generated Commands for 3D Model:\n```python\n{response}\n```")
 
-    # 保存生成的代码到文件
     with open(
         os.path.join(model_dir, f"{obj['object_type']}_generation_code.py"),
         "w",
@@ -121,33 +139,29 @@ def generate_3d_model(context, obj, scene_context, log_dir):
     ) as f:
         f.write(response)
 
-    # 执行生成的Blender命令
     error_message = execute_blender_command_with_error_handling(response)
     corrected_response = None
     if error_message:
         logger.error(f"Error executing Blender commands: {error_message}")
 
-        # 准备新的提示，包含错误信息
         error_prompt = f"""
-            之前的prompt:{prompt}
-            在执行之前生成的Blender命令时发生了错误。以下是错误信息：
+            Previous prompt: {prompt}
+            An error occurred while executing the previously generated Blender commands. Here's the error message:
 
             {error_message}
 
-            请根据这个错误信息修改之前生成的代码。确保新生成的代码能够正确执行，并避免之前的错误。
+            Please modify the previously generated code based on this error message. Ensure the newly generated code executes correctly and avoids the previous error.
 
-            之前生成的代码：
+            Previously generated code:
             {response}
 
-            请提供修正后的Blender Python代码。
+            Please provide the corrected Blender Python code.
             """
 
-        # 使用 GPT 生成修正后的代码
         corrected_response = generate_text_with_context(error_prompt)
 
         logger.info(f"GPT Generated Corrected Commands:\n{corrected_response}")
 
-        # 保存修正后的代码到文件
         with open(
             os.path.join(
                 model_dir, f"{obj['object_type']}_corrected_generation_code.py"
@@ -157,7 +171,6 @@ def generate_3d_model(context, obj, scene_context, log_dir):
         ) as f:
             f.write(corrected_response)
 
-        # 尝试执行修正后的代码
         error_message = execute_blender_command_with_error_handling(corrected_response)
         if error_message:
             logger.error(f"Error executing corrected Blender commands: {error_message}")
@@ -166,11 +179,9 @@ def generate_3d_model(context, obj, scene_context, log_dir):
     else:
         logger.debug("Successfully executed Blender commands.")
 
-    # 更新视图并等待一小段时间以确保视图已更新
     update_blender_view(context)
     bpy.ops.wm.redraw_timer(type="DRAW_WIN_SWAP", iterations=1)
 
-    # 保存生成模型的截图
     screenshots = save_screenshots()
     screenshot_dir = os.path.join(model_dir, "generation_screenshots")
     save_screenshots_to_path(screenshot_dir)
@@ -179,70 +190,71 @@ def generate_3d_model(context, obj, scene_context, log_dir):
             f"Generation screenshot saved for {obj['object_type']}: {screenshot}"
         )
 
-    if corrected_response is not None:
-        return corrected_response
-    else:
-        return response
+    return corrected_response if corrected_response is not None else response
 
 
 def arrange_scene(context, scene_description, generated_models, log_dir):
+    """
+    Arrange the scene based on the provided scene description and generated models.
+
+    Args:
+        context (bpy.types.Context): The current Blender context.
+        scene_description (dict): Description of the scene layout.
+        generated_models (dict): Dictionary of generated model codes.
+        log_dir (str): Directory path for saving logs and generated files.
+    """
     scene_info = get_scene_info()
     formatted_scene_info = format_scene_info(scene_info)
     prompt = f"""
         Context:
-        你是一个专门负责安排3D场景中物体位置的AI助手。你的任务是根据给定的场景描述和已生成的模型代码，生成Blender Python命令来正确放置场景中的所有物体。、
+        You are an AI assistant specialized in arranging objects in a 3D scene. Your task is to generate Blender Python commands to correctly position all objects in the scene based on the given scene description and generated model code.
 
-        运行之前请先使用以下代码移除场内所有可能干扰的东西：
+        Before running, please use the following code to remove any potential interfering elements in the scene:
 
-        # 删除所有对象
+        # Delete all objects
         bpy.ops.object.select_all(action='SELECT')
         bpy.ops.object.delete()
 
-        # 删除所有集合（除了场景的主集合）
+        # Delete all collections (except the main scene collection)
         for collection in bpy.data.collections:
             bpy.data.collections.remove(collection)
 
+        Scene description: {json.dumps(scene_description, ensure_ascii=False, indent=2)}
 
-        场景描述：{json.dumps(scene_description, ensure_ascii=False, indent=2)}
+        Existing model information in the scene: {formatted_scene_info}
 
-        场景内已有的模型信息：{formatted_scene_info}
-
-        已生成的模型代码：
+        Generated model code:
         {json.dumps(generated_models, ensure_ascii=False, indent=2)}
 
         Task:
-        请根据已生成好的模型代码重新生成所有必要的模型
-        根据场景描述中每个物体的位置信息，生成Blender Python代码来移动和旋转这些物体，使它们在场景中的位置符合描述。
+        Please regenerate all necessary models based on the previously generated model code.
+        Generate Blender Python code to move and rotate these objects based on the position information of each object in the scene description, ensuring their positions in the scene match the description.
 
         Output:
-        请提供可以直接在Blender中执行的Python代码。代码应该：
-        1. 找到场景中的每个物体（它们已经被创建，名称与object_type相同）
-        2. 根据位置描述移动和旋转每个物体
-        3. 确保物体之间不会相互穿透或重叠
-        4. 如果需要，调整物体的大小以适应场景
+        Please provide Python code that can be executed directly in Blender. The code should:
+        1. Find each object in the scene (they have already been created, with names matching their object_type)
+        2. Move and rotate each object according to the position description
+        3. Ensure objects do not intersect or overlap with each other
+        4. Adjust object sizes to fit the scene if necessary
 
-        只需提供Python代码，不需要其他解释。
+        Provide only the Python code, without additional explanations.
         """
 
     arrangement_code = generate_text_with_context(prompt)
 
-    # 保存生成的场景安排代码到文件
     with open(
         os.path.join(log_dir, "scene_arrangement_code.py"), "w", encoding="utf-8"
     ) as f:
         f.write(arrangement_code)
 
-    # 执行生成的Blender场景安排命令
     try:
         execute_blender_command(arrangement_code)
         logger.debug("Successfully arranged scene objects.")
     except Exception as e:
         logger.error(f"Error arranging scene objects: {str(e)}")
 
-    # 更新视图
     update_blender_view(context)
 
-    # 保存场景安排后的截图
     screenshots = save_screenshots()
     screenshot_dir = os.path.join(log_dir, "scene_arrangement_screenshots")
     save_screenshots_to_path(screenshot_dir)

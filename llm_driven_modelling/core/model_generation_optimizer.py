@@ -1,4 +1,9 @@
-# model_generation_optimizer
+# model_generation_optimizer.py
+
+"""
+This module provides functionality for evaluating and optimizing 3D models in Blender.
+It uses AI-powered analysis and generation to improve model quality based on user input and scene context.
+"""
 
 import bpy
 import json
@@ -32,7 +37,7 @@ from llm_driven_modelling.core.model_generation_utils import (
     update_blender_view,
 )
 
-# 创建专门的日志记录器
+# Create a dedicated logger
 logger = setup_logger("model_generation")
 
 
@@ -45,21 +50,33 @@ def evaluate_and_optimize_model(
     rewritten_input,
     log_dir,
 ):
-    max_iterations = 2  # 设置最大迭代次数
+    """
+    Evaluate and optimize a 3D model through multiple iterations.
+
+    Args:
+        context: The Blender context.
+        obj (dict): Object information.
+        scene_context (dict): Scene context information.
+        model_code (str): Initial model generation code.
+        user_input (str): Original user input.
+        rewritten_input (str): Rewritten user input.
+        log_dir (str): Directory for logging.
+
+    Returns:
+        str: Optimized model code.
+    """
+    max_iterations = 2
     iteration = 0
     optimized_model_code = None
 
-    # 为每个模型创建单独的优化目录
     optimization_dir = os.path.join(log_dir, f"optimization_{obj['object_type']}")
     os.makedirs(optimization_dir, exist_ok=True)
 
     while iteration < max_iterations:
-        # 为每次迭代创建一个新的子目录
         iteration_dir = os.path.join(optimization_dir, f"iteration_{iteration + 1}")
         os.makedirs(iteration_dir, exist_ok=True)
 
         screenshots = get_screenshots()
-
         evaluator = ModelEvaluator()
 
         evaluation_context = {
@@ -75,48 +92,33 @@ def evaluate_and_optimize_model(
             average_score,
             suggestions,
         ) = evaluator.aggregate_results(results)
-        # 整合并剔除不必要的建议
+
         filtered_suggestions = filter_and_consolidate_suggestions(
             suggestions, evaluation_context
         )
-        # 提取优先建议
         priority_suggestions = filtered_suggestions.get("priority_suggestions", [])
 
         logger.info(
             f"Iteration {iteration + 1}: Status: {final_status.name}, Score: {average_score:.2f}"
         )
         logger.info(f"Combined Analysis: {combined_analysis}")
-        logger.info("Suggestions:")
-        logger.info(f"- {suggestions}")
+        logger.info(f"Suggestions: {suggestions}")
         logger.info(f"Priority Suggestions: {priority_suggestions}")
 
-        # 保存评估结果到文件
-        with open(
-            os.path.join(
-                iteration_dir, f"{obj['object_type']}_evaluation_results.json"
-            ),
-            "w",
-            encoding="utf-8",
-        ) as f:
-            json.dump(
-                {
-                    "iteration": iteration + 1,
-                    "status": final_status.name,
-                    "score": average_score,
-                    "analysis": combined_analysis,
-                    "suggestions": suggestions,
-                    "priority_suggestions": priority_suggestions,
-                },
-                f,
-                ensure_ascii=False,
-                indent=2,
-            )
+        save_evaluation_results(
+            iteration_dir,
+            obj,
+            iteration,
+            final_status,
+            average_score,
+            combined_analysis,
+            suggestions,
+            priority_suggestions,
+        )
 
-        # 如果模型满意或达到最大迭代次数，退出循环
         if final_status == EvaluationStatus.PASS or iteration == max_iterations - 1:
             break
 
-        # 否则，继续优化模型
         optimized_model_code = optimize_model(
             context,
             priority_suggestions,
@@ -127,79 +129,75 @@ def evaluate_and_optimize_model(
         )
         iteration += 1
 
-    if final_status == EvaluationStatus.PASS:
-        logger.info(
-            f"Model optimization completed successfully after {iteration + 1} iterations."
-        )
-    else:
-        logger.warning(
-            f"Model optimization did not reach satisfactory results after {max_iterations} iterations."
-        )
-
-    # 保存最终模型的截图
-    final_screenshots = save_screenshots()
-    final_screenshot_dir = os.path.join(optimization_dir, "final_model_screenshots")
-    save_screenshots_to_path(final_screenshot_dir)
-    for screenshot in final_screenshots:
-        logger.debug(
-            f"Final model screenshot saved for {obj['object_type']}: {screenshot}"
-        )
+    log_optimization_result(final_status, iteration, max_iterations)
+    save_final_screenshots(optimization_dir, obj)
 
     return optimized_model_code
 
 
 def filter_and_consolidate_suggestions(suggestions, evaluation_context):
+    """
+    Filter and consolidate optimization suggestions using AI analysis.
+
+    Args:
+        suggestions (list): List of initial suggestions.
+        evaluation_context (dict): Context for evaluation.
+
+    Returns:
+        dict: Filtered and consolidated suggestions.
+    """
     screenshots = get_screenshots()
 
     prompt = f"""
         Context:
-        你是一个专门负责整合用于优化3D模型的建议的AI助手，你根据图片和需要分析所有的建议，并从中选出需要保留的建议留下。
+        You are an AI assistant specialized in consolidating suggestions for 3D model optimization. Your task is to analyze all suggestions based on the images and select the ones that need to be retained.
 
-        模型生成时的代码：{evaluation_context['model_code']}
-        模型描述：{json.dumps(evaluation_context['obj'], ensure_ascii=False, indent=2)}
-        优化建议：{suggestions}
+        Model generation code: {evaluation_context['model_code']}
+        Model description: {json.dumps(evaluation_context['obj'], ensure_ascii=False, indent=2)}
+        Optimization suggestions: {suggestions}
 
         Objective:
-        该模型生成任务只需要生成模型的草模即可，换句话说就是模型只要长得像就算达到目标，不需要去追求更细节的改变。
-        生成的模型应该只考虑外观，而不考虑可能的内部结构，例如一棵树的树冠以球体构成，则不需要考虑树冠内部的树枝，因为无法正常看到树枝。
-        例如一个桌子的桌面浮在空中且并未与桌腿相连，建议提出需要链接这两部分。这种类型的建议是必要的，否则桌子将不像是桌子
-        反之在桌腿之间增加横梁支撑结构，提高整体稳定性这种类型的建议并不是特别重要，因为增加横梁不会让一个桌子更像桌子。
-        该模型将用在虚拟场景中替换对应的物品，因此现实世界中的真实性和合理性不那么重要。
-        任何和材质纹理相关的建议都可忽略，这个任务不考虑针对物品材质的升级，灰模即可。
-        将同类型的问题合并，例如增加厚度和增加直径可以同时完成
-        将重复的问题移除
+        This model generation task only requires creating a rough model. In other words, the model is considered to have reached the goal as long as it looks similar to the target. There's no need to pursue more detailed changes.
+        The generated model should only consider appearance, not possible internal structures. For example, if a tree's crown is composed of a sphere, there's no need to consider the branches inside the crown as they cannot be seen normally.
+        For instance, if a table's top is floating in the air and not connected to the legs, a suggestion to connect these two parts is necessary. This type of suggestion is essential, otherwise, the table won't look like a table.
+        On the contrary, suggestions like adding cross beams between table legs to improve overall stability are not particularly important, as adding cross beams won't make a table look more like a table.
+        This model will be used to replace corresponding items in a virtual scene, so realism and rationality in the real world are not that important.
+        Any suggestions related to materials and textures can be ignored, as this task does not consider upgrading the item's material. A gray model is sufficient.
+        Merge similar types of problems, for example, increasing thickness and increasing diameter can be done simultaneously.
+        Remove duplicate issues.
 
         Style:
-        - 简洁：提供清晰、直接的建议
-        - 重点：专注于影响模型外观的关键改变
-        - 实用：确保建议可以直接应用于3D建模
+        - Concise: Provide clear, direct suggestions
+        - Focused: Concentrate on key changes that affect the model's appearance
+        - Practical: Ensure suggestions can be directly applied to 3D modeling
 
         Tone:
-        - 专业：使用3D建模相关的专业术语
-        - 直接：明确指出需要改变的地方
-        - 客观：基于模型的实际需求给出建议
+        - Professional: Use professional terminology related to 3D modeling
+        - Direct: Clearly point out areas that need change
+        - Objective: Provide suggestions based on the actual needs of the model
 
         Audience:
-        3D模型设计师和开发人员
+        3D model designers and developers
 
         Response:
-        请提供一个JSON对象，包含以下元素，且必须是严格的示例形式，请参考example：
-        1. priority_suggestions: 优先级最高的建议列表，这些建议对模型的外观和识别度有重大影响
-        2. secondary_suggestions: 次要建议列表，这些建议可以改善模型但不是必须的
+        Please provide a JSON object containing the following elements, and it must be in the strict example format, please refer to the example:
+        1. priority_suggestions: A list of highest priority suggestions that have a significant impact on the model's appearance and recognizability
+        2. secondary_suggestions: A list of secondary suggestions that can improve the model but are not mandatory
 
         Example:
-        输出必须是以下形式
+        The output must be in the following format
         {{
             "priority_suggestions": [
-                "建议1",
+                "Suggestion 1",
             ],
             "secondary_suggestions": [
-                "建议1",
-                "建议2",
-                "建议3"
+                "Suggestion 1",
+                "Suggestion 2",
+                "Suggestion 3"
             ],
         }}
         """
+
     response = analyze_screenshots_with_claude(prompt, screenshots)
     response = sanitize_command(response)
     response = sanitize_reference(response)
@@ -214,20 +212,30 @@ def optimize_model(
     iteration_dir,
     iteration,
 ):
-    all_optimization_responses = []
+    """
+    Optimize the 3D model based on priority suggestions.
 
-    # 获取场景信息
+    Args:
+        context: The Blender context.
+        priority_suggestions (list): List of priority optimization suggestions.
+        evaluation_context (dict): Context for evaluation.
+        screenshots (list): List of screenshot paths.
+        iteration_dir (str): Directory for the current iteration.
+        iteration (int): Current iteration number.
+
+    Returns:
+        str: Optimized model code.
+    """
+    all_optimization_responses = []
     scene_info = get_scene_info()
     formatted_scene_info = format_scene_info(scene_info)
-    logger.info(f"场景内的模型信息: {formatted_scene_info}")
+    logger.info(f"Scene model information: {formatted_scene_info}")
 
-    # 为每个建议生成单独的优化代码
     for suggestion in priority_suggestions:
-        # 获取相关优化文档
         modification_doc = query_modification_documentation(
             bpy.types.Scene.modification_query_engine, suggestion
         )
-        logger.info(f"相关优化文档: {modification_doc}")
+        logger.info(f"Relevant optimization documentation: {modification_doc}")
 
         optimization_response = generate_optimization_code_for_suggestion(
             context,
@@ -237,9 +245,10 @@ def optimize_model(
             modification_doc,
         )
         all_optimization_responses.append(optimization_response)
-        logger.info(f"生成的优化代码 for '{suggestion}': {optimization_response}")
+        logger.info(
+            f"Generated optimization code for '{suggestion}': {optimization_response}"
+        )
 
-    # 综合所有响应，生成最终的优化代码
     final_optimization_code = generate_final_optimization_code(
         context,
         all_optimization_responses,
@@ -247,78 +256,24 @@ def optimize_model(
         formatted_scene_info,
     )
 
-    logger.info(f"最终生成的优化代码:\n{final_optimization_code}")
+    logger.info(f"Final generated optimization code:\n{final_optimization_code}")
+    save_optimization_code(iteration_dir, final_optimization_code)
 
-    # 保存生成的优化代码到文件
-    with open(
-        os.path.join(iteration_dir, "optimization_code.py"), "w", encoding="utf-8"
-    ) as f:
-        f.write(final_optimization_code)
-
-    # 执行生成的Blender优化命令
     error_message = execute_blender_command_with_error_handling(final_optimization_code)
-    corrected_response = None
     if error_message:
         logger.error(f"Error executing optimization commands: {error_message}")
-
-        # 准备新的提示，包含错误信息
-        error_prompt = f"""
-            在执行之前生成的Blender优化命令时发生了错误。以下是错误信息：
-
-            {error_message}
-
-            请根据这个错误信息修改之前生成的代码。确保新生成的代码能够正确执行，并避免之前的错误。
-
-            之前生成的代码：
-            {final_optimization_code}
-
-            请提供修正后的Blender Python代码。
-            请直接返回Python代码，不需要其他解释或注释。
-            """
-
-        # 使用 Claude 生成修正后的代码
-        corrected_response = generate_text_with_context(error_prompt)
-
-        logger.info(
-            f"GPT Generated Corrected Optimization Commands:\n{corrected_response}"
+        corrected_response = handle_optimization_error(
+            error_message, final_optimization_code, iteration_dir
         )
+        if corrected_response:
+            final_optimization_code = corrected_response
 
-        # 保存修正后的代码到文件
-        with open(
-            os.path.join(iteration_dir, "corrected_optimization_code.py"),
-            "w",
-            encoding="utf-8",
-        ) as f:
-            f.write(corrected_response)
-
-        # 尝试执行修正后的代码
-        error_message = execute_blender_command_with_error_handling(corrected_response)
-        if error_message:
-            logger.error(
-                f"Error executing corrected optimization commands: {error_message}"
-            )
-        else:
-            logger.debug("Successfully executed corrected optimization commands.")
-    else:
-        logger.debug("Successfully executed optimization commands.")
-
-    # 更新视图并等待一小段时间以确保视图已更新
     update_blender_view(context)
     bpy.ops.wm.redraw_timer(type="DRAW_WIN_SWAP", iterations=1)
 
-    # 保存当前迭代的截图
-    screenshots = save_screenshots()
-    screenshot_dir = os.path.join(iteration_dir, "evaluation_screenshots")
-    save_screenshots_to_path(screenshot_dir)
-    for screenshot in screenshots:
-        logger.debug(
-            f"Iteration {iteration + 1} evaluation screenshot saved: {screenshot}"
-        )
+    save_iteration_screenshots(iteration_dir, iteration)
 
-    if corrected_response is not None:
-        return corrected_response
-    else:
-        return final_optimization_code
+    return final_optimization_code
 
 
 def generate_optimization_code_for_suggestion(
@@ -328,37 +283,48 @@ def generate_optimization_code_for_suggestion(
     formatted_scene_info,
     modification_doc,
 ):
+    """
+    Generate optimization code for a single suggestion.
+
+    Args:
+        context: The Blender context.
+        suggestion (str): The optimization suggestion.
+        evaluation_context (dict): Context for evaluation.
+        formatted_scene_info (str): Formatted scene information.
+        modification_doc (str): Relevant modification documentation.
+
+    Returns:
+        str: Generated optimization code.
+    """
     prompt = f"""
         Context:
-        你是一个专门负责优化3D模型的AI助手。你的任务是根据给定的单个建议，生成Blender Python命令来优化现有的3D模型。
-        生成的模型应该只考虑外观，而不考虑可能的内部结构，例如一棵树的树冠以球体构成，则不需要考虑树冠内部的树枝，因为无法正常看到树枝。
+        You are an AI assistant specialized in optimizing 3D models. Your task is to generate Blender Python commands to optimize an existing 3D model based on a given single suggestion.
+        The generated model should only consider appearance, not possible internal structures. For example, if a tree's crown is composed of a sphere, there's no need to consider the branches inside the crown as they cannot be seen normally.
 
-        模型生成时的代码：{evaluation_context['model_code']}
-        模型描述：{json.dumps(evaluation_context['obj'], ensure_ascii=False, indent=2)}
-        场景信息：{formatted_scene_info}
-        优化建议：{suggestion}
-        相关优化指示文档：{modification_doc}
+        Model generation code: {evaluation_context['model_code']}
+        Model description: {json.dumps(evaluation_context['obj'], ensure_ascii=False, indent=2)}
+        Scene information: {formatted_scene_info}
+        Optimization suggestion: {suggestion}
+        Relevant optimization instruction document: {modification_doc}
 
         Objective:
-        生成Blender Python命令来实现这个特定的优化建议，同时保持模型的其他部分不变。
+        Generate Blender Python commands to implement this specific optimization suggestion while keeping other parts of the model unchanged.
 
         Style:
-        - 精确：使用准确的Blender Python命令
-        - 简洁：只包含必要的代码，不添加多余的注释或解释
-        - 专注：只针对给定的建议进行优化
+        - Precise: Use accurate Blender Python commands
+        - Concise: Include only necessary code, without adding extra comments or explanations
+        - Focused: Optimize only based on the given suggestion
 
         Tone:
-        - 专业：使用Blender API的专业术语和函数
-        - 直接：直接给出代码，不需要额外的解释
-        - 技术性：专注于技术实现，不需要解释代码的意图
+        - Professional: Use professional terms and functions of the Blender API
+        - Direct: Provide code directly, without additional explanations
+        - Technical: Focus on technical implementation, no need to explain the intention of the code
 
         Response:
-        请提供实现这个特定优化建议的Blender Python代码。
-        请直接返回Python代码，不需要其他解释或注释。
+        Please provide Blender Python code that implements this specific optimization suggestion.
+        Please return Python code directly, without other explanations or comments.
         """
-
-    response = generate_text_with_context(prompt)
-    return response
+    return generate_text_with_context(prompt)
 
 
 def generate_final_optimization_code(
@@ -367,44 +333,162 @@ def generate_final_optimization_code(
     evaluation_context,
     formatted_scene_info,
 ):
-    combined_responses = "\n\n".join(all_optimization_responses)
+    """
+    Generate final optimization code by combining all optimization responses.
 
+    Args:
+        context: The Blender context.
+        all_optimization_responses (list): List of all optimization responses.
+        evaluation_context (dict): Context for evaluation.
+        formatted_scene_info (str): Formatted scene information.
+
+    Returns:
+        str: Final combined optimization code.
+    """
+    combined_responses = "\n\n".join(all_optimization_responses)
     prompt = f"""
         Context:
-        你是一个专门负责优化3D模型的AI助手。你的任务是将多个优化步骤的代码合并成一个连贯的优化脚本。
-        生成的模型应该只考虑外观，而不考虑可能的内部结构，例如一棵树的树冠以球体构成，则不需要考虑树冠内部的树枝，因为无法正常看到树枝。
+        You are an AI assistant specialized in optimizing 3D models. Your task is to merge multiple optimization step codes into a coherent optimization script.
+        The generated model should only consider appearance, not possible internal structures. For example, if a tree's crown is composed of a sphere, there's no need to consider the branches inside the crown as they cannot be seen normally.
 
-        模型生成时的代码：{evaluation_context['model_code']}
-        模型描述：{json.dumps(evaluation_context['obj'], ensure_ascii=False, indent=2)}
-        场景信息：{formatted_scene_info}
+        Model generation code: {evaluation_context['model_code']}
+        Model description: {json.dumps(evaluation_context['obj'], ensure_ascii=False, indent=2)}
+        Scene information: {formatted_scene_info}
 
-        以下是各个优化步骤的代码：
+        Here are the codes for each optimization step:
 
         {combined_responses}
 
         Objective:
-        将这些代码片段合并成一个连贯的、高效的优化脚本。确保各个优化步骤之间不会相互冲突，并尽可能优化代码结构。
+        Merge these code snippets into a coherent, efficient optimization script. Ensure that the various optimization steps do not conflict with each other, and optimize the code structure as much as possible.
 
         Style:
-        - 精确：使用准确的Blender Python命令
-        - 高效：避免重复操作，优化代码结构
-        - 连贯：确保各个优化步骤顺利衔接
+        - Precise: Use accurate Blender Python commands
+        - Efficient: Avoid repetitive operations, optimize code structure
+        - Coherent: Ensure smooth connection between optimization steps
 
         Tone:
-        - 专业：使用Blender API的专业术语和函数
-        - 直接：直接给出代码，不需要额外的解释
-        - 技术性：专注于技术实现，不需要解释代码的意图
+        - Professional: Use professional terms and functions of the Blender API
+        - Direct: Provide code directly, without additional explanations
+        - Technical: Focus on technical implementation, no need to explain the intention of the code
 
         Response:
-        请提供合并后的Blender Python代码。代码应该：
-        1. 使用bpy库来修改现有对象
-        2. 只修改需要优化的部分，保留其他部分不变
-        3. 确保优化后的模型符合原始描述和要求
-        4. 如果需要添加新组件，确保它们与现有组件协调
-        5. 除非绝对必要，不要删除现有模型并生成全新模型
+        Please provide the merged Blender Python code. The code should:
+        1. Use the bpy library to modify existing objects
+        2. Only modify parts that need optimization, keeping other parts unchanged
+        3. Ensure the optimized model meets the original description and requirements
+        4. If new components need to be added, ensure they coordinate with existing components
+        5. Do not delete the existing model and generate a completely new one unless absolutely necessary
 
-        请直接返回Python代码，不需要其他解释或注释。
+        Please return Python code directly, without other explanations or comments.
         """
+    return generate_text_with_context(prompt)
 
-    response = generate_text_with_context(prompt)
-    return response
+
+def save_evaluation_results(
+    iteration_dir,
+    obj,
+    iteration,
+    final_status,
+    average_score,
+    combined_analysis,
+    suggestions,
+    priority_suggestions,
+):
+    """Save evaluation results to a JSON file."""
+    with open(
+        os.path.join(iteration_dir, f"{obj['object_type']}_evaluation_results.json"),
+        "w",
+        encoding="utf-8",
+    ) as f:
+        json.dump(
+            {
+                "iteration": iteration + 1,
+                "status": final_status.name,
+                "score": average_score,
+                "analysis": combined_analysis,
+                "suggestions": suggestions,
+                "priority_suggestions": priority_suggestions,
+            },
+            f,
+            ensure_ascii=False,
+            indent=2,
+        )
+
+
+def log_optimization_result(final_status, iteration, max_iterations):
+    """Log the final result of the optimization process."""
+    if final_status == EvaluationStatus.PASS:
+        logger.info(
+            f"Model optimization completed successfully after {iteration + 1} iterations."
+        )
+    else:
+        logger.warning(
+            f"Model optimization did not reach satisfactory results after {max_iterations} iterations."
+        )
+
+
+def save_final_screenshots(optimization_dir, obj):
+    """Save screenshots of the final optimized model."""
+    final_screenshots = save_screenshots()
+    final_screenshot_dir = os.path.join(optimization_dir, "final_model_screenshots")
+    save_screenshots_to_path(final_screenshot_dir)
+    for screenshot in final_screenshots:
+        logger.debug(
+            f"Final model screenshot saved for {obj['object_type']}: {screenshot}"
+        )
+
+
+def save_optimization_code(iteration_dir, optimization_code):
+    """Save the generated optimization code to a file."""
+    with open(
+        os.path.join(iteration_dir, "optimization_code.py"), "w", encoding="utf-8"
+    ) as f:
+        f.write(optimization_code)
+
+
+def handle_optimization_error(error_message, optimization_code, iteration_dir):
+    """Handle errors in optimization code execution."""
+    error_prompt = f"""
+        An error occurred while executing the previously generated Blender optimization commands. Here is the error message:
+
+        {error_message}
+
+        Please modify the previously generated code based on this error message. Ensure that the newly generated code can be executed correctly and avoid the previous error.
+
+        Previously generated code:
+        {optimization_code}
+
+        Please provide the corrected Blender Python code.
+        Please return Python code directly, without other explanations or comments.
+        """
+    corrected_response = generate_text_with_context(error_prompt)
+    logger.info(f"GPT Generated Corrected Optimization Commands:\n{corrected_response}")
+
+    with open(
+        os.path.join(iteration_dir, "corrected_optimization_code.py"),
+        "w",
+        encoding="utf-8",
+    ) as f:
+        f.write(corrected_response)
+
+    new_error_message = execute_blender_command_with_error_handling(corrected_response)
+    if new_error_message:
+        logger.error(
+            f"Error executing corrected optimization commands: {new_error_message}"
+        )
+        return None
+    else:
+        logger.debug("Successfully executed corrected optimization commands.")
+        return corrected_response
+
+
+def save_iteration_screenshots(iteration_dir, iteration):
+    """Save screenshots for the current iteration."""
+    screenshots = save_screenshots()
+    screenshot_dir = os.path.join(iteration_dir, "evaluation_screenshots")
+    save_screenshots_to_path(screenshot_dir)
+    for screenshot in screenshots:
+        logger.debug(
+            f"Iteration {iteration + 1} evaluation screenshot saved: {screenshot}"
+        )
