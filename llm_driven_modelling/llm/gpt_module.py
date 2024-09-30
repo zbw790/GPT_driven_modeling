@@ -55,6 +55,16 @@ def generate_text_with_context(prompt):
             # frequency_penalty=0,
             # presence_penalty=0
         )
+        # response = client.chat.completions.create(
+        #     model="gpt-4o",
+        #     messages=[{"role": "user", "content": prompt}],
+        #     # Additional parameters can be uncommented and adjusted as needed
+        #     max_tokens=4096,
+        #     temperature=0.8,
+        #     top_p=1,
+        #     frequency_penalty=0,
+        #     presence_penalty=0
+        # )
         return response.choices[0].message.content
     except Exception as e:
         logger.error(f"Error generating text from GPT-4 with context: {e}")

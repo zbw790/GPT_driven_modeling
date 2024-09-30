@@ -413,7 +413,7 @@ class MATERIAL_OT_generate_material(Operator):
 
         Provide only the Python code, without any additional explanation.
         """
-        material_code = generate_text_with_claude(prompt)
+        material_code = generate_text_with_context(prompt)
 
         # Save the generated material code to a file
         with open(

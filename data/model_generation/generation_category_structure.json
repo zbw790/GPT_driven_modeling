@@ -31,8 +31,31 @@
           {
             "name": "chair",
             "types": [
-              {"name": "办公椅", "file": "office_chair.md"},
-              {"name": "休闲椅", "file": "lounge_chair.md"}
+              {"name": "普通的椅子", "file": "classic_chair.md"},
+              {"name": "吧凳", "file": "bar_stool.md"}
+            ]
+          }
+        ]
+      },
+      {
+        "name": "electrical_applicance",
+        "subcategories": [
+          {
+            "name": "TV",
+            "types": [
+              {"name": "电视", "file": "TV.md"}
+            ]
+          }
+        ]
+      },
+      {
+        "name": "plant",
+        "subcategories": [
+          {
+            "name": "tree",
+            "types": [
+              {"name": "树", "file": "tree.md"},
+              {"name": "松树", "file": "pine_tree.md"}
             ]
           }
         ]

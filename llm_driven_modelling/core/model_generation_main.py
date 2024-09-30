@@ -67,7 +67,7 @@ class MODEL_GENERATION_OT_generate(Operator):
                     context, scene_description, user_input, rewritten_input, log_dir
                 )
 
-                # Arrange objects in the scene
+                # # Arrange objects in the scene
                 arrange_scene(context, scene_description, models, log_dir)
 
                 # Apply materials to the entire scene
@@ -124,6 +124,7 @@ class MODEL_GENERATION_OT_generate(Operator):
             logger.info(f"Generating model for: {obj['object_type']}")
             model = self.generate_and_optimize_model(
                 context,
+                models,
                 obj,
                 scene_description["scene_context"],
                 user_input,
@@ -134,7 +135,7 @@ class MODEL_GENERATION_OT_generate(Operator):
         return models
 
     def generate_and_optimize_model(
-        self, context, obj, scene_context, user_input, rewritten_input, log_dir
+        self, context, models, obj, scene_context, user_input, rewritten_input, log_dir
     ):
         """
         Generate and optimize a 3D model for a given object.
@@ -151,7 +152,9 @@ class MODEL_GENERATION_OT_generate(Operator):
             dict: A dictionary containing the original and optimized model information.
         """
         # Generate initial model
-        initial_model_code = generate_3d_model(context, obj, scene_context, log_dir)
+        initial_model_code = generate_3d_model(
+            context, models, obj, scene_context, log_dir
+        )
 
         # Optimize the model
         optimized_model_code = evaluate_and_optimize_model(

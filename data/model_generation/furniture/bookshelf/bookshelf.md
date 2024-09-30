@@ -15,7 +15,6 @@ bpy.ops.object.delete()
 ## 基本结构
 
 一个基础的书架由以下部分组成:
-- 1个框架 (生成时,标注为 `Frame`)
 - 2个侧板 (生成时,分别标注为 `SidePanelLeft`, `SidePanelRight`)
 - 1个背板 (生成时,标注为 `BackPanel`)
 - 1个顶板 (生成时,标注为 `TopPanel`)
@@ -36,7 +35,6 @@ bpy.ops.object.delete()
 ## 生成步骤
 
 1. 清空场景中的所有现有对象
-2. 创建框架 (`Frame`)
 3. 创建左右侧板 (`SidePanelLeft`, `SidePanelRight`)
 4. 创建背板 (`BackPanel`)
 5. 创建顶板和底板 (`TopPanel`, `BottomPanel`)

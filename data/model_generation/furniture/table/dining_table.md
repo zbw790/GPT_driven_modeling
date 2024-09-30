@@ -240,3 +240,153 @@ bpy.context.view_layer.update()
 - 可以创建更复杂的桌子结构，如添加抽屉或装饰性元素。
 
 
+以下为临时代码储存
+
+import bpy
+import bmesh
+import random
+import math
+
+def create_low_poly_table_top(width=1.5, depth=0.9, height=0.05):
+    mesh = bpy.data.meshes.new(name="Table Top Mesh")
+    table_top = bpy.data.objects.new("Low Poly Table Top", mesh)
+    
+    bm = bmesh.new()
+    bmesh.ops.create_cube(bm, size=1)
+    bmesh.ops.scale(bm, vec=(width, depth, height), verts=bm.verts)
+    
+    # 确定长边和短边
+    long_side = max(width, depth)
+    short_side = min(width, depth)
+    
+    # 对长边进行更多的细分
+    long_cuts = 6  # 长边的细分次数
+    short_cuts = 2  # 短边的细分次数
+    
+    if width > depth:
+        bmesh.ops.subdivide_edges(bm, edges=[e for e in bm.edges if e.verts[0].co.x != e.verts[1].co.x], cuts=long_cuts)
+        bmesh.ops.subdivide_edges(bm, edges=[e for e in bm.edges if e.verts[0].co.y != e.verts[1].co.y], cuts=short_cuts)
+    else:
+        bmesh.ops.subdivide_edges(bm, edges=[e for e in bm.edges if e.verts[0].co.y != e.verts[1].co.y], cuts=long_cuts)
+        bmesh.ops.subdivide_edges(bm, edges=[e for e in bm.edges if e.verts[0].co.x != e.verts[1].co.x], cuts=short_cuts)
+
+    # 获取顶面的顶点
+    top_verts = [v for v in bm.verts if v.co.z > 0]
+
+    # 对顶面顶点进行排序，以便我们可以按行处理它们
+    sorted_verts = sorted(top_verts, key=lambda v: (v.co.y, v.co.x))
+
+    # 计算每行的顶点数
+    verts_per_row = long_cuts + 2
+
+    # 处理每一行的顶点
+    for i in range(0, len(sorted_verts), verts_per_row):
+        row = sorted_verts[i:i+verts_per_row]
+        prev_offset_x = 0
+        prev_offset_y = 0
+        for j, v in enumerate(row):
+            # 根据是长边还是短边来决定波动的大小
+            if width > depth:
+                max_offset = 0.03 if j > 0 and j < len(row) - 1 else 0.01
+            else:
+                max_offset = 0.03 if i > 0 and i < len(sorted_verts) - verts_per_row else 0.01
+            
+            # 基于前一个点的偏移来计算新的偏移
+            offset_x = prev_offset_x + random.uniform(-max_offset, max_offset)
+            offset_y = prev_offset_y + random.uniform(-max_offset, max_offset)
+            offset_z = random.uniform(-0.01, 0.01)
+            
+            v.co.x += offset_x
+            v.co.y += offset_y
+            v.co.z += offset_z
+            
+            prev_offset_x = offset_x
+            prev_offset_y = offset_y
+
+    # 添加一些控制的切割来模拟木板
+    cuts = [
+        (0, 1, 0),  # 垂直切割
+        (1, 0, 0),  # 水平切割
+        (1, 1, 0),  # 对角线切割
+    ]
+
+    for cut in cuts:
+        bmesh.ops.bisect_plane(bm, geom=bm.verts[:]+bm.edges[:]+bm.faces[:], 
+                               plane_co=(0, 0, height/2), 
+                               plane_no=cut)
+
+    # 添加一些轻微的随机切割
+    for _ in range(3):
+        bmesh.ops.bisect_plane(bm, geom=bm.verts[:]+bm.edges[:]+bm.faces[:], 
+                               plane_co=(random.uniform(-width/2, width/2), 
+                                         random.uniform(-depth/2, depth/2), 
+                                         height/2), 
+                               plane_no=(random.uniform(-1, 1), 
+                                         random.uniform(-1, 1), 
+                                         0))
+
+    bm.to_mesh(mesh)
+    bm.free()
+    
+    table_top.location = (0, 0, 0.75)
+    return table_top
+
+def create_table_leg(radius=0.05, height=0.75, location=(0, 0, 0)):
+    mesh = bpy.data.meshes.new(name="Table Leg Mesh")
+    leg = bpy.data.objects.new("Table Leg", mesh)
+    
+    bm = bmesh.new()
+    bmesh.ops.create_cone(bm, cap_ends=True, cap_tris=False, segments=6, radius1=radius, radius2=radius, depth=height)
+    
+    # 添加一些随机变形
+    for v in bm.verts:
+        v.co.x += random.uniform(-0.01, 0.01)
+        v.co.y += random.uniform(-0.01, 0.01)
+        v.co.z += random.uniform(-0.01, 0.01)
+    
+    bm.to_mesh(mesh)
+    bm.free()
+    
+    leg.location = location
+    return leg
+
+def create_low_poly_table():
+    # 删除所有现有对象
+    for obj in bpy.data.objects:
+        bpy.data.objects.remove(obj, do_unlink=True)
+
+    # 删除所有集合（除了场景的主集合）
+    for collection in bpy.data.collections:
+        bpy.data.collections.remove(collection)
+
+    table_collection = bpy.data.collections.new("Low Poly Table")
+    bpy.context.scene.collection.children.link(table_collection)
+    
+    # 创建低多边形桌面
+    table_width, table_depth, table_height = 1.5, 0.9, 0.05
+    table_top = create_low_poly_table_top(table_width, table_depth, table_height)
+    table_collection.objects.link(table_top)
+
+    # 创建桌腿
+    leg_height = 0.75
+    leg_radius = 0.05
+    leg_positions = [
+        (0.7, 0.4, 0.375),
+        (-0.7, 0.4, 0.375),
+        (0.7, -0.4, 0.375),
+        (-0.7, -0.4, 0.375)
+    ]
+    
+    for i, pos in enumerate(leg_positions):
+        leg = create_table_leg(leg_radius, leg_height, pos)
+        leg.name = f"leg{i+1}"
+        table_collection.objects.link(leg)
+    
+    return table_collection
+
+# 创建低多边形桌子
+create_low_poly_table()
+
+# 更新视图
+bpy.context.view_layer.update()
+

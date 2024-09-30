@@ -2,7 +2,7 @@
 
 """
 This module provides functionality to update various databases used in the LLM-driven modeling system.
-It includes functions to update modification, generation, component, and material databases.
+It includes functions to update modification, generation, component, material, and style databases.
 """
 
 import os
@@ -23,6 +23,10 @@ from llm_driven_modelling.llama_index_library.llama_index_component_library impo
 from llm_driven_modelling.llama_index_library.llama_index_material_library import (
     load_material_data,
     create_material_index,
+)
+from llm_driven_modelling.llama_index_library.llama_index_style_library import (
+    load_style_data,
+    create_style_index,
 )
 from dotenv import load_dotenv
 
@@ -112,14 +116,34 @@ def update_material_database():
         logger.error(f"Error updating material database: {str(e)}")
 
 
+def update_style_database():
+    """
+    Update the style database by loading new data and recreating the index.
+    """
+    try:
+        data_directory = "./data"
+        documents, _ = load_style_data(data_directory)
+
+        db_path = "./database/chroma_db_styles"
+        if os.path.exists(db_path):
+            shutil.rmtree(db_path)
+            logger.info("Existing style database deleted.")
+
+        create_style_index(documents)
+        logger.info("Style database updated successfully.")
+    except Exception as e:
+        logger.error(f"Error updating style database: {str(e)}")
+
+
 def update_all_databases():
     """
-    Update all databases: modification, generation, component, and material.
+    Update all databases: modification, generation, component, material, and style.
     """
     update_modification_database()
     update_generation_database()
     update_component_database()
     update_material_database()
+    update_style_database()
 
 
 if __name__ == "__main__":

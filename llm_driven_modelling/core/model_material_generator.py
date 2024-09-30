@@ -125,12 +125,25 @@ def analyze_scene_for_materials(
         Analyze each object in the scene and determine the required material types. Consider the object's name, shape, and possible use. Group objects with the same material type.
 
         Output:
-        Provide a JSON object with material types as keys and lists of objects requiring that material as values. Note that some materials are built-in to the Blender scene, such as Camera, and these items do not need materials added:
+        Provide a JSON object with material types as keys and objects requiring that material as values. 
+        Include a suggested color for each material type. Use RGB values (0-255) for colors. For example:
         {{
-            "wood": ["Table_Top", "Chair_Seat"],
-            "metal": ["Table_Leg", "Chair_Frame"],
-            "fabric": ["Chair_Cushion"],
-            "glass": ["Lamp_Shade"]
+            "wood": {{
+                "objects": ["Table_Top", "Chair_Seat"],
+                "color": [120, 81, 45]
+            }},
+            "metal": {{
+                "objects": ["Table_Leg", "Chair_Frame"],
+                "color": [192, 192, 192]
+            }},
+            "fabric": {{
+                "objects": ["Chair_Cushion"],
+                "color": [200, 162, 200]
+            }},
+            "glass": {{
+                "objects": ["Lamp_Shade"],
+                "color": [240, 255, 255]
+            }}
         }}
 
         Provide only the JSON object, without any additional explanation.
@@ -184,7 +197,9 @@ def generate_and_apply_materials(
         Material documentation: {json.dumps(material_docs, ensure_ascii=False, indent=2)}
 
         Task:
-        Generate appropriate materials for each object and create Blender Python code to apply these materials. Use the Principled BSDF shader and only use the following allowed input parameters:
+        Generate appropriate materials for each object and create Blender Python code to apply these materials. 
+        Use the Principled BSDF shader and only use the allowed input parameters. 
+        Use the suggested colors provided in the material requirements, converting the RGB values (0-255) to float values (0-1).
 
         Allowed Principled BSDF input parameters:
         - Base Color
@@ -218,7 +233,7 @@ def generate_and_apply_materials(
         Output:
         Provide Python code that can be executed directly in Blender. The code should:
         1. Create new materials for each object
-        2. Set various parameters for the materials
+        2. Set various parameters for the materials, including the Base Color using the suggested colors
         3. Apply the materials to the corresponding objects
         4. Use nodes to create more complex material effects (such as wood grain, metal texture, etc.)
 

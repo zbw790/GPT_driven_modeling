@@ -6,7 +6,6 @@ import bpy
 import logging
 from bpy.props import StringProperty, PointerProperty, FloatProperty, IntProperty
 
-# 确保项目根目录在Python的模块搜索路径中
 project_path = os.path.abspath(os.path.dirname(__file__))
 if project_path not in sys.path:
     sys.path.append(project_path)
@@ -120,8 +119,14 @@ from llm_driven_modelling.llama_index_library.llama_index_material_library impor
     MATERIAL_PT_panel,
     initialize_material_db,
 )
+from llm_driven_modelling.llama_index_library.llama_index_style_library import (
+    StyleProperties,
+    STYLE_OT_query,
+    STYLE_OT_apply_style,
+    STYLE_PT_panel,
+    initialize_style_db,
+)
 
-# 设置日志记录
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(message)s")
 logger = logging.getLogger(__name__)
 
@@ -157,6 +162,10 @@ classes = (
     MATERIAL_OT_query,
     MATERIAL_OT_generate_material,
     MATERIAL_PT_panel,
+    StyleProperties,
+    STYLE_OT_query,
+    STYLE_OT_apply_style,
+    STYLE_PT_panel,
     ModelGenerationProperties,
     MODEL_GENERATION_OT_generate,
     MODEL_GENERATION_PT_panel,
@@ -232,11 +241,13 @@ def register():
         bpy.types.Scene.llm_tool = PointerProperty(type=LLMToolProperties)
         bpy.types.Scene.component_tool = PointerProperty(type=ComponentProperties)
         bpy.types.Scene.material_tool = PointerProperty(type=MaterialProperties)
+        bpy.types.Scene.style_tool = PointerProperty(type=StyleProperties)
 
         initialize_modification_db()
         initialize_generation_db()
         initialize_component_db()
         initialize_material_db()
+        initialize_style_db()
 
         logger.info("Registered all classes successfully.")
     except Exception as e:
@@ -249,7 +260,6 @@ def unregister():
             if hasattr(bpy.types, cls.__name__):
                 bpy.utils.unregister_class(cls)
 
-        # 检查属性是否存在before删除
         if hasattr(bpy.types.Scene, "conversation_manager"):
             del bpy.types.Scene.conversation_manager
         if hasattr(bpy.types.Scene, "model_scale_percentage"):
@@ -280,6 +290,8 @@ def unregister():
             del bpy.types.Scene.component_tool
         if hasattr(bpy.types.Scene, "material_tool"):
             del bpy.types.Scene.material_tool
+        if hasattr(bpy.types.Scene, "style_tool"):
+            del bpy.types.Scene.style_tool
 
         logger.info("Unregistered all classes successfully.")
     except Exception as e:
