@@ -10,6 +10,14 @@
           {
             "name": "surface",
             "file": "furniture_surface.md"
+          },
+          {
+            "name": "hollow_structure",
+            "file": "hollow_structure.md"
+          },
+          {
+            "name": "outside_frame",
+            "file": "outside_frame.md"
           }
         ]
       }

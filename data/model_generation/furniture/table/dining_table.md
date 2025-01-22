@@ -44,8 +44,6 @@ bpy.ops.object.delete()
 
 ## 生成步骤
 1. 清空场景中的所有现有对象
-2. 创建主集合 "Dining Table"
-3. 创建子集合 "Legs"，并将其链接到主集合
 4. 创建桌板 (`table_top`)
 5. 将桌板添加到主集合 "Dining Table"
 6. 创建四条桌腿 (`leg1`, `leg2`, `leg3`, `leg4`)
@@ -63,14 +61,8 @@ bpy.ops.object.delete()
 - 可以根据需要调整尺寸，但要保持合理的比例
 - 生成的模型应尽可能位于场景的中心点附近 (0, 0, 0)
 - 保持各个部件独立，不要合并成一个整体模型
-- 正确管理集合，确保部件被添加到适当的集合中
-- 主集合应命名为物品名称（例如 "Dining Table"）
-- 创建子集合来组织相似的部件（例如 "Legs" 子集合）
-- 确保所有对象都从场景集合中移除，只存在于自定义集合中
-- 在创建新对象后，始终检查并更新其所属的集合
 - 在脚本结束时更新场景视图，以确保所有更改都被正确应用
 - 考虑为不同类型的部件（如桌面、桌腿）创建单独的函数，以提高代码的可重用性和可读性
-- 在添加或移除对象到/从集合时，始终检查对象是否已经在该集合中，以避免错误
 
 ## Blender操作提示
 - 使用 `bpy.ops.object.select_all(action='SELECT')` 和 `bpy.ops.object.delete()` 清空场景
@@ -79,20 +71,11 @@ bpy.ops.object.delete()
 - 使用 `bpy.ops.transform.translate()` 移动物体
 - 使用 `obj.location = (0, 0, 0)` 将物体移动到中心点
 - 使用 `obj.name = "部件名"` 为物体命名
-- 使用 `bpy.data.collections.new("集合名")` 创建新集合
-- 使用 `bpy.context.scene.collection.children.link(collection)` 将集合链接到场景
-- 使用 `collection.objects.link(object)` 将对象添加到集合
-- 使用 `bpy.context.scene.collection.objects.unlink(object)` 从场景集合中移除对象
 - 使用 `bpy.context.view_layer.objects.active = object` 设置活动对象
 - 使用 `bpy.context.active_object` 获取当前活动对象
-- 使用 `if object.name in collection.objects:` 检查对象是否在集合中
-- 使用 `parent_collection.children.link(child_collection)` 创建集合层级
 - 使用 `bpy.context.view_layer.update()` 更新场景视图
 - 使用 `bpy.ops.object.select_all(action='DESELECT')` 取消选择所有对象
 - 使用 `object.select_set(True)` 选择特定对象
-- 使用 `bpy.context.collection` 获取当前活动集合
-- 使用 `for obj in collection.objects:` 遍历集合中的所有对象
-- 使用 `bpy.data.objects.remove(object, do_unlink=True)` 完全删除对象（包括从所有集合中移除）
 
 ## 示例代码
 
@@ -103,49 +86,22 @@ import bpy
 bpy.ops.object.select_all(action='SELECT')
 bpy.ops.object.delete()
 
-# 删除所有多余的集合
+# 删除所有集合（除了场景的主集合）
 for collection in bpy.data.collections:
     bpy.data.collections.remove(collection)
-    
-# 创建主集合
-main_collection = bpy.data.collections.new("Dining Table")
-bpy.context.scene.collection.children.link(main_collection)
-
-# 创建子集合
-legs_collection = bpy.data.collections.new("Legs")
-main_collection.children.link(legs_collection)
-
-# 设置主集合为活动集合
-layer_collection = bpy.context.view_layer.layer_collection.children[main_collection.name]
-bpy.context.view_layer.active_layer_collection = layer_collection
 
 # 创建桌板
 bpy.ops.mesh.primitive_cube_add(size=1, location=(0, 0, 0.75))
 tabletop = bpy.context.active_object
+tabletop.scale = (1.5, 0.9, 0.03)  # 调整尺寸：长1.5m，宽0.9m，厚0.03m
 tabletop.name = "table_top"
-
-# 确保桌板只在主集合中
-for coll in tabletop.users_collection:
-    if coll != main_collection:
-        coll.objects.unlink(tabletop)
 
 # 创建桌腿
 def create_leg(name, location):
-    # 临时将活动集合设置为legs_collection
-    bpy.context.view_layer.active_layer_collection = bpy.context.view_layer.layer_collection.children[main_collection.name].children[legs_collection.name]
-    
     bpy.ops.mesh.primitive_cube_add(size=1, location=location)
     leg = bpy.context.active_object
+    leg.scale = (0.05, 0.05, 0.75)  # 调整尺寸：宽0.05m，厚0.05m，高0.75m
     leg.name = name
-    
-    # 确保桌腿只在legs集合中
-    for coll in leg.users_collection:
-        if coll != legs_collection:
-            coll.objects.unlink(leg)
-    
-    # 恢复主集合为活动集合
-    bpy.context.view_layer.active_layer_collection = layer_collection
-    
     return leg
 
 # 创建四条桌腿
@@ -157,6 +113,280 @@ leg4 = create_leg("leg4", (-0.7, -0.4, 0.375))
 # 更新场景
 bpy.context.view_layer.update()
 ```
-注意该代码仅为示例使用，实际的物品名称可能有所变化，请根据物品名称进行适当的改动，实际的餐桌生成需要最大程度的参考用户提供的要求
+## 生成多边形的桌子
 
+```python
+import bpy
+import bmesh
+import math
+
+def create_2d_pentagon(name, side_length, z_offset):
+    """
+    创建一个2D五边形
+    
+    参数:
+    name (str): 对象的名称
+    side_length (float): 五边形的边长
+    z_offset (float): 对象在z轴上的偏移量
+    
+    返回:
+    bpy.types.Object: 创建的2D五边形对象
+    """
+    mesh = bpy.data.meshes.new(name)
+    obj = bpy.data.objects.new(name, mesh)
+    bpy.context.collection.objects.link(obj)
+    bm = bmesh.new()
+    
+    # 创建五边形底面
+    bmesh.ops.create_circle(
+        bm,
+        cap_ends=True,
+        cap_tris=False,
+        segments=5,
+        radius=side_length/(2*math.sin(math.pi/5))
+    )
+    
+    bm.to_mesh(mesh)
+    bm.free()
+    obj.location = (0, 0, z_offset)
+    return obj
+
+def extrude_2d_shape(obj, thickness):
+    """
+    将2D形状挤出为3D对象
+    
+    参数:
+    obj (bpy.types.Object): 要挤出的2D对象
+    thickness (float): 挤出的厚度
+    """
+    mesh = obj.data
+    bm = bmesh.new()
+    bm.from_mesh(mesh)
+    
+    bm.faces.ensure_lookup_table()
+    top_face = bm.faces[0]
+    
+    ret = bmesh.ops.extrude_face_region(bm, geom=[top_face])
+    extruded_geom = ret['geom']
+    
+    extruded_verts = [v for v in extruded_geom if isinstance(v, bmesh.types.BMVert)]
+    bmesh.ops.translate(bm, vec=(0, 0, thickness), verts=extruded_verts)
+    
+    bm.to_mesh(mesh)
+    bm.free()
+    mesh.update()
+
+def create_cylinder(name, radius, height, z_offset):
+    """
+    创建一个圆柱体
+    
+    参数:
+    name (str): 对象的名称
+    radius (float): 圆柱体的半径
+    height (float): 圆柱体的高度
+    z_offset (float): 对象在z轴上的偏移量
+    
+    返回:
+    bpy.types.Object: 创建的圆柱体对象
+    """
+    bpy.ops.mesh.primitive_cylinder_add(
+        radius=radius,
+        depth=height,
+        location=(0, 0, z_offset + height/2)
+    )
+    obj = bpy.context.active_object
+    obj.name = name
+    return obj
+
+# 清空场景
+bpy.ops.object.select_all(action='SELECT')
+bpy.ops.object.delete()
+
+# 创建2D五边形（桌面）
+table_top_2d = create_2d_pentagon("table_top", 0.8, 0.72)
+
+# 将2D五边形挤出为3D对象
+extrude_2d_shape(table_top_2d, 0.03)
+
+# 创建中央支撑柱
+central_support = create_cylinder("central_support", 0.1, 0.72, 0)
+
+# 创建2D五边形（底座）
+base_2d = create_2d_pentagon("base", 0.5, 0)
+
+# 将底座挤出为3D对象
+extrude_2d_shape(base_2d, 0.02)
+
+# 更新场景
+bpy.context.view_layer.update()
+```
+
+## 使用说明
+
+1. 将此脚本复制到Blender的文本编辑器中。
+2. 运行脚本以创建一个五边形桌面、圆柱形支撑柱和五边形底座。
+3. 可以通过修改函数参数来调整桌面和底座的大小、厚度，以及支撑柱的尺寸。
+
+## 注意事项
+
+- 运行脚本前，请确保已保存当前场景，因为脚本会清空现有场景中的所有对象。
+- 这个脚本创建的是一个简单的桌子模型。根据需要，您可能需要添加更多细节或组件。
+- `extrude_2d_shape` 函数可以用于任何2D形状，不仅限于五边形。
+
+## 扩展思路
+
+- 可以修改 `create_2d_pentagon` 函数以创建其他多边形，如六边形或八边形。
+- 可以添加材质和纹理来增强模型的视觉效果。
+- 可以创建更复杂的桌子结构，如添加抽屉或装饰性元素。
+
+
+以下为临时代码储存
+
+import bpy
+import bmesh
+import random
+import math
+
+def create_low_poly_table_top(width=1.5, depth=0.9, height=0.05):
+    mesh = bpy.data.meshes.new(name="Table Top Mesh")
+    table_top = bpy.data.objects.new("Low Poly Table Top", mesh)
+    
+    bm = bmesh.new()
+    bmesh.ops.create_cube(bm, size=1)
+    bmesh.ops.scale(bm, vec=(width, depth, height), verts=bm.verts)
+    
+    # 确定长边和短边
+    long_side = max(width, depth)
+    short_side = min(width, depth)
+    
+    # 对长边进行更多的细分
+    long_cuts = 6  # 长边的细分次数
+    short_cuts = 2  # 短边的细分次数
+    
+    if width > depth:
+        bmesh.ops.subdivide_edges(bm, edges=[e for e in bm.edges if e.verts[0].co.x != e.verts[1].co.x], cuts=long_cuts)
+        bmesh.ops.subdivide_edges(bm, edges=[e for e in bm.edges if e.verts[0].co.y != e.verts[1].co.y], cuts=short_cuts)
+    else:
+        bmesh.ops.subdivide_edges(bm, edges=[e for e in bm.edges if e.verts[0].co.y != e.verts[1].co.y], cuts=long_cuts)
+        bmesh.ops.subdivide_edges(bm, edges=[e for e in bm.edges if e.verts[0].co.x != e.verts[1].co.x], cuts=short_cuts)
+
+    # 获取顶面的顶点
+    top_verts = [v for v in bm.verts if v.co.z > 0]
+
+    # 对顶面顶点进行排序，以便我们可以按行处理它们
+    sorted_verts = sorted(top_verts, key=lambda v: (v.co.y, v.co.x))
+
+    # 计算每行的顶点数
+    verts_per_row = long_cuts + 2
+
+    # 处理每一行的顶点
+    for i in range(0, len(sorted_verts), verts_per_row):
+        row = sorted_verts[i:i+verts_per_row]
+        prev_offset_x = 0
+        prev_offset_y = 0
+        for j, v in enumerate(row):
+            # 根据是长边还是短边来决定波动的大小
+            if width > depth:
+                max_offset = 0.03 if j > 0 and j < len(row) - 1 else 0.01
+            else:
+                max_offset = 0.03 if i > 0 and i < len(sorted_verts) - verts_per_row else 0.01
+            
+            # 基于前一个点的偏移来计算新的偏移
+            offset_x = prev_offset_x + random.uniform(-max_offset, max_offset)
+            offset_y = prev_offset_y + random.uniform(-max_offset, max_offset)
+            offset_z = random.uniform(-0.01, 0.01)
+            
+            v.co.x += offset_x
+            v.co.y += offset_y
+            v.co.z += offset_z
+            
+            prev_offset_x = offset_x
+            prev_offset_y = offset_y
+
+    # 添加一些控制的切割来模拟木板
+    cuts = [
+        (0, 1, 0),  # 垂直切割
+        (1, 0, 0),  # 水平切割
+        (1, 1, 0),  # 对角线切割
+    ]
+
+    for cut in cuts:
+        bmesh.ops.bisect_plane(bm, geom=bm.verts[:]+bm.edges[:]+bm.faces[:], 
+                               plane_co=(0, 0, height/2), 
+                               plane_no=cut)
+
+    # 添加一些轻微的随机切割
+    for _ in range(3):
+        bmesh.ops.bisect_plane(bm, geom=bm.verts[:]+bm.edges[:]+bm.faces[:], 
+                               plane_co=(random.uniform(-width/2, width/2), 
+                                         random.uniform(-depth/2, depth/2), 
+                                         height/2), 
+                               plane_no=(random.uniform(-1, 1), 
+                                         random.uniform(-1, 1), 
+                                         0))
+
+    bm.to_mesh(mesh)
+    bm.free()
+    
+    table_top.location = (0, 0, 0.75)
+    return table_top
+
+def create_table_leg(radius=0.05, height=0.75, location=(0, 0, 0)):
+    mesh = bpy.data.meshes.new(name="Table Leg Mesh")
+    leg = bpy.data.objects.new("Table Leg", mesh)
+    
+    bm = bmesh.new()
+    bmesh.ops.create_cone(bm, cap_ends=True, cap_tris=False, segments=6, radius1=radius, radius2=radius, depth=height)
+    
+    # 添加一些随机变形
+    for v in bm.verts:
+        v.co.x += random.uniform(-0.01, 0.01)
+        v.co.y += random.uniform(-0.01, 0.01)
+        v.co.z += random.uniform(-0.01, 0.01)
+    
+    bm.to_mesh(mesh)
+    bm.free()
+    
+    leg.location = location
+    return leg
+
+def create_low_poly_table():
+    # 删除所有现有对象
+    for obj in bpy.data.objects:
+        bpy.data.objects.remove(obj, do_unlink=True)
+
+    # 删除所有集合（除了场景的主集合）
+    for collection in bpy.data.collections:
+        bpy.data.collections.remove(collection)
+
+    table_collection = bpy.data.collections.new("Low Poly Table")
+    bpy.context.scene.collection.children.link(table_collection)
+    
+    # 创建低多边形桌面
+    table_width, table_depth, table_height = 1.5, 0.9, 0.05
+    table_top = create_low_poly_table_top(table_width, table_depth, table_height)
+    table_collection.objects.link(table_top)
+
+    # 创建桌腿
+    leg_height = 0.75
+    leg_radius = 0.05
+    leg_positions = [
+        (0.7, 0.4, 0.375),
+        (-0.7, 0.4, 0.375),
+        (0.7, -0.4, 0.375),
+        (-0.7, -0.4, 0.375)
+    ]
+    
+    for i, pos in enumerate(leg_positions):
+        leg = create_table_leg(leg_radius, leg_height, pos)
+        leg.name = f"leg{i+1}"
+        table_collection.objects.link(leg)
+    
+    return table_collection
+
+# 创建低多边形桌子
+create_low_poly_table()
+
+# 更新视图
+bpy.context.view_layer.update()
 
